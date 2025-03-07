@@ -124,10 +124,10 @@
 
 			if (isDarkMode) {
 				const darkImage = new Image();
-				darkImage.src = '/static/favicon-dark.png';
+				darkImage.src = tester || '';
 
 				darkImage.onload = () => {
-					logo.src = '/static/favicon-dark.png';
+					logo.src = tester || '';
 					logo.style.filter = ''; // Ensure no inversion is applied if favicon-dark.png exists
 				};
 
@@ -153,6 +153,12 @@
 			onboarding = $config?.onboarding ?? false;
 		}
 	});
+
+  // const TESTER = process.env.ENVIRONMENT;
+  // console.log('-- TESTER:', TESTER);
+  const tester = $config?.tester;
+  console.log('-- tester:', $config?.tester);
+  console.log('-- CUSTOM_SPLASH_IMAGE:', $config?.custom_splash_image);
 </script>
 
 <svelte:head>
@@ -181,7 +187,7 @@
 					<img
 						id="logo"
 						crossorigin="anonymous"
-						src="{WEBUI_BASE_URL}/static/splash.png"
+						src="{tester}"
 						class=" w-6 rounded-full"
 						alt="logo"
 					/>

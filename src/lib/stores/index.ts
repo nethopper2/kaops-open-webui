@@ -194,6 +194,8 @@ type Config = {
 	status: boolean;
 	name: string;
 	version: string;
+  // tester: string;
+  custom_splash_image: string
 	default_locale: string;
 	default_models: string;
 	default_prompt_suggestions: PromptSuggestion[];

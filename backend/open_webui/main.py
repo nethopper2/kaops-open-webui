@@ -235,6 +235,7 @@ from open_webui.config import (
     # WebUI
     WEBUI_AUTH,
     WEBUI_NAME,
+    TESTER,
     WEBUI_BANNERS,
     WEBHOOK_URL,
     ADMIN_EMAIL,
@@ -421,6 +422,7 @@ oauth_manager = OAuthManager(app)
 app.state.config = AppConfig()
 
 app.state.WEBUI_NAME = WEBUI_NAME
+app.state.TESTER = TESTER
 app.state.LICENSE_METADATA = None
 
 ########################################
@@ -1154,6 +1156,7 @@ async def get_app_config(request: Request):
         **({"onboarding": True} if onboarding else {}),
         "status": True,
         "name": app.state.WEBUI_NAME,
+        "tester": app.state.TESTER,
         "version": VERSION,
         "default_locale": str(DEFAULT_LOCALE),
         "oauth": {

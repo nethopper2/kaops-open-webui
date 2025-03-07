@@ -23,6 +23,7 @@ from open_webui.env import (
     WEBUI_AUTH,
     WEBUI_FAVICON_URL,
     WEBUI_NAME,
+    TESTER,
     log,
 )
 from open_webui.internal.db import Base, get_db
@@ -661,6 +662,7 @@ if CUSTOM_NAME:
                         shutil.copyfileobj(r.raw, f)
 
             WEBUI_NAME = data["name"]
+            TESTER = data["tester"]
     except Exception as e:
         log.exception(e)
         pass

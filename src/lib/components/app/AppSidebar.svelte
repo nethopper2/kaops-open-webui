@@ -1,8 +1,10 @@
 <script lang="ts">
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
+	import { config } from '$lib/stores';
 
 	let selected = '';
+  const tester = $config?.tester;
 </script>
 
 <div class="min-w-[4.5rem] bg-gray-50 dark:bg-gray-950 flex gap-2.5 flex-col pt-8">
@@ -25,7 +27,7 @@
 				}}
 			>
 				<img
-					src="/static/splash.png"
+					src="{ tester }"
 					class="size-11 dark:invert p-0.5"
 					alt="logo"
 					draggable="false"

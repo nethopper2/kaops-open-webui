@@ -7,10 +7,12 @@
 	import Marquee from './common/Marquee.svelte';
 	import SlideShow from './common/SlideShow.svelte';
 	import ArrowRightCircle from './icons/ArrowRightCircle.svelte';
+	import { config } from '$lib/stores';
 
 	export let show = true;
 	export let getStartedHandler = () => {};
 
+  const tester = $config?.tester;
 	function setLogoImage() {
 		const logo = document.getElementById('logo');
 
@@ -19,10 +21,10 @@
 
 			if (isDarkMode) {
 				const darkImage = new Image();
-				darkImage.src = '/static/favicon-dark.png';
+				darkImage.src = tester || '';
 
 				darkImage.onload = () => {
-					logo.src = '/static/favicon-dark.png';
+					logo.src = tester;
 					logo.style.filter = ''; // Ensure no inversion is applied if splash-dark.png exists
 				};
 

@@ -107,8 +107,10 @@ log.setLevel(SRC_LOG_LEVELS["CONFIG"])
 
 
 WEBUI_NAME = os.environ.get("WEBUI_NAME", "Open WebUI")
-if WEBUI_NAME != "Open WebUI":
-    WEBUI_NAME += " (Open WebUI)"
+# if WEBUI_NAME != "Open WebUI":
+#     WEBUI_NAME += " (Open WebUI)"
+TESTER = os.environ.get("TESTER","qwerty")
+CUSTOM_SPLASH_IMAGE = os.environ.get("CUSTOM_SPLASH_IMAGE", "static/splash.png!!")
 
 WEBUI_FAVICON_URL = "https://openwebui.com/favicon.png"
 
@@ -246,6 +248,7 @@ if FROM_INIT_PY:
 
 
 STATIC_DIR = Path(os.getenv("STATIC_DIR", OPEN_WEBUI_DIR / "static"))
+CUSTOM_SPLASH_IMAGE = Path(os.getenv("CUSTOM_SPLASH_IMAGE", "?????"))
 
 FONTS_DIR = Path(os.getenv("FONTS_DIR", OPEN_WEBUI_DIR / "static" / "fonts"))
 
@@ -442,3 +445,16 @@ AUDIT_EXCLUDED_PATHS = os.getenv("AUDIT_EXCLUDED_PATHS", "/chats,/chat,/folders"
 )
 AUDIT_EXCLUDED_PATHS = [path.strip() for path in AUDIT_EXCLUDED_PATHS]
 AUDIT_EXCLUDED_PATHS = [path.lstrip("/") for path in AUDIT_EXCLUDED_PATHS]
+
+####################################
+# BRANDING AND CUSTOMIZATION
+####################################
+# TODO do we have to configure this in config.py ??
+CUSTOM_SPLASH_IMAGE = os.getenv("CUSTOM_SPLASH_IMAGE", "static/splash.png")
+# CUSTOM_SPLASH_IMAGE = os.environ.get("CUSTOM_SPLASH_IMAGE", "/static/splash.png")
+# CUSTOM_SPLASH_IMAGE = [path.lstrip("/") for path in CUSTOM_SPLASH_IMAGE]
+WEBUI_SPLASH = os.environ.get("WEBUI_SPLASH", "static/splash.png")
+
+# Print all environment variables
+# for key, value in os.environ.items():
+#     print(f"{key}: {value}")
