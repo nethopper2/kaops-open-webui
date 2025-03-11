@@ -102,6 +102,35 @@ if os.path.exists(f"{DATA_DIR}/config.json"):
     save_to_db(data)
     os.rename(f"{DATA_DIR}/config.json", f"{DATA_DIR}/old_config.json")
 
+# ############################################################################################################
+# TODO keeping this here for now.  Plan to implement a UX that displays a list of prompts under the main suggestion
+# TODO: Would like to store the button-based prompts separate from the rest of the config
+# ############################################################################################################
+# Data Analysis and Insights:
+#      Analyze our quarterly sales data and provide key insights on revenue trends, top-performing products, and areas for improvement”
+#      Generate a financial forecast for the next quarter based on our historical data and current market conditions”
+# Market Research:
+#      Identify emerging trends in our industry that could impact our business strategy over the next 12-18 months”
+#      Compare our product offerings to our top three competitors and highlight our unique selling points”
+# Process Optimization:
+#      Suggest ways to streamline our customer onboarding process to improve efficiency and reduce time-to-value”
+#      Analyze our current supply chain and recommend optimizations to reduce costs and improve delivery times”
+# Content Creation:
+#      Draft a compelling email campaign to promote our new product launch to existing customers”
+#      Create an outline for a white paper on the benefits of our enterprise software solution for large corporations”
+# Customer Insights:
+#      Analyze customer feedback from the past quarter and identify the top 5 areas for improvement in our product”
+#      Generate a list of potential questions for a customer satisfaction survey focused on our recent service upgrades”
+# Risk Assessment:
+#      Evaluate potential risks in our upcoming merger and acquisition, considering financial, legal, and operational factors”
+#      Assess the cybersecurity vulnerabilities in our current IT infrastructure and suggest mitigation strategies”
+# Strategy Development:
+#      Propose a market entry strategy for our product in the Asia-Pacific region, considering cultural and regulatory factors”
+#      Develop a 5-year roadmap for integrating AI and machine learning capabilities into our core product offerings”
+# Compliance & Legal:
+#      Summarize the key points of the new industry regulations and their potential impact on our business operations”
+#      Draft a template for updating our privacy policy to comply with recent data protection laws”
+
 DEFAULT_CONFIG = {
     "version": 0,
     "ui": {
@@ -109,47 +138,62 @@ DEFAULT_CONFIG = {
         "prompt_suggestions": [
             {
                 "title": [
-                    "Help me study",
-                    "vocabulary for a college entrance exam",
+                    "Data Insights",
+                    "",
                 ],
-                "content": "Help me study vocabulary: write a sentence for me to fill in the blank, and I'll try to pick the correct option.",
+                "content": "Analyze our quarterly sales data and provide key insights on revenue trends, top-performing products, and areas for improvement.",
+                "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(118, 208, 235)' fill='none'><path d='M6.08938 14.9992C5.71097 14.1486 5.5 13.2023 5.5 12.2051C5.5 8.50154 8.41015 5.49921 12 5.49921C15.5899 5.49921 18.5 8.50154 18.5 12.2051C18.5 13.2023 18.289 14.1486 17.9106 14.9992' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /><path d='M12 1.99921V2.99921' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M22 11.9992H21' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M3 11.9992H2' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M19.0704 4.92792L18.3633 5.63503' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M5.6368 5.636L4.92969 4.92889' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M14.517 19.3056C15.5274 18.9788 15.9326 18.054 16.0466 17.1238C16.0806 16.8459 15.852 16.6154 15.572 16.6154L8.47685 16.6156C8.18725 16.6156 7.95467 16.8614 7.98925 17.1489C8.1009 18.0773 8.3827 18.7555 9.45345 19.3056M14.517 19.3056C14.517 19.3056 9.62971 19.3056 9.45345 19.3056M14.517 19.3056C14.3955 21.2506 13.8338 22.0209 12.0068 21.9993C10.0526 22.0354 9.60303 21.0833 9.45345 19.3056' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
             },
             {
                 "title": [
-                    "Give me ideas",
-                    "for what to do with my kids' art",
+                    "Market Research",
+                    "",
                 ],
-                "content": "What are 5 creative things I could do with my kids' art? I don't want to throw them away, but it's also so much clutter.",
+                "content": "Identify emerging trends in our industry that could impact our business strategy over the next 12-18 months",
+                "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(108, 113, 255)' fill='none'><path d='M17.5619 9.22239L17.0356 10.15C16.5405 11.0225 16.293 11.4588 15.7539 11.4969C15.2147 11.535 14.9862 11.2231 14.5291 10.5994C14.019 9.90316 13.6959 9.08502 13.5814 8.22954C13.4744 7.43025 13.4209 7.03061 13.2914 6.83438C13.0847 6.52117 12.6695 6.34887 12.3591 6.16651C11.5417 5.68624 11.1329 5.4461 11.0256 5.03847C10.9183 4.63085 11.1542 4.21492 11.6262 3.38306C12.0982 2.5512 12.3342 2.13527 12.7347 2.02604C13.1353 1.91682 13.5441 2.15696 14.3615 2.63723C14.6719 2.81959 15.0262 3.09935 15.3961 3.12486C15.6278 3.14085 15.9947 2.98817 16.7284 2.68281C17.5137 2.35598 18.3715 2.23165 19.2191 2.33314C19.9785 2.42406 20.3582 2.46953 20.5953 2.96369C20.8325 3.45785 20.585 3.89411 20.0899 4.76664L19.5643 5.69311M17.5619 9.22239L17.9961 9.47749C18.9538 10.0402 20.1784 9.70625 20.7314 8.73166C21.2843 7.75708 20.9562 6.51088 19.9985 5.94821L19.5643 5.69311M17.5619 9.22239L19.5643 5.69311' stroke='currentColor' stroke-width='1.5' /><path d='M7 13C7 14.1046 6.10457 15 5 15C3.89543 15 3 14.1046 3 13C3 11.8954 3.89543 11 5 11C6.10457 11 7 11.8954 7 13Z' stroke='currentColor' stroke-width='1.5' /><path d='M6 12L13 7' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round' /><path d='M7 22H14' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M6 15L11 22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
             },
             {
-                "title": ["Tell me a fun fact", "about the Roman Empire"],
-                "content": "Tell me a random fun fact about the Roman Empire",
+                "title": ["Process Optimization", ""],
+                "content": "Suggest ways to streamline our customer onboarding process to improve efficiency and reduce time-to-value",
+                "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(226, 197, 65)' fill='none'><path d='M2 21H22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 18L4 15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 14L8 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M12 11L12 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M16 11L16 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M20 5L20 3' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
             },
             {
                 "title": [
-                    "Show me a code snippet",
-                    "of a website's sticky header",
+                    "Content Creation",
+                    "",
                 ],
-                "content": "Show me a code snippet of a website's sticky header in CSS and JavaScript.",
+                "content": "Draft a compelling email campaign to promote our new product launch to existing customers",
+                "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(203, 139, 208)' fill='none'><path d='M11 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V10C2 6.22876 2 4.34315 3.17157 3.17157C4.34315 2 6.22876 2 10 2H12C15.7712 2 17.6569 2 18.8284 3.17157C20 4.34315 20 6.22876 20 10V10.5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M17.4069 14.4036C17.6192 13.8655 18.3808 13.8655 18.5931 14.4036L18.6298 14.4969C19.1482 15.8113 20.1887 16.8518 21.5031 17.3702L21.5964 17.4069C22.1345 17.6192 22.1345 18.3808 21.5964 18.5931L21.5031 18.6298C20.1887 19.1482 19.1482 20.1887 18.6298 21.5031L18.5931 21.5964C18.3808 22.1345 17.6192 22.1345 17.4069 21.5964L17.3702 21.5031C16.8518 20.1887 15.8113 19.1482 14.4969 18.6298L14.4036 18.5931C13.8655 18.3808 13.8655 17.6192 14.4036 17.4069L14.4969 17.3702C15.8113 16.8518 16.8518 15.8113 17.3702 14.4969L17.4069 14.4036Z' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M7 7H15M7 11.5H15M7 16H11' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
             },
             {
                 "title": [
-                    "Explain options trading",
-                    "if I'm familiar with buying and selling stocks",
+                    "Customer Insights",
+                    "",
                 ],
-                "content": "Explain options trading in simple terms if I'm familiar with buying and selling stocks.",
+                "content": "Analyze customer feedback from the past quarter and identify the top 5 areas for improvement in our product",
+                "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(157,0,255)' fill='none'><path d='M17 10.8045C17 10.4588 17 10.286 17.052 10.132C17.2032 9.68444 17.6018 9.51076 18.0011 9.32888C18.45 9.12442 18.6744 9.02219 18.8968 9.0042C19.1493 8.98378 19.4022 9.03818 19.618 9.15929C19.9041 9.31984 20.1036 9.62493 20.3079 9.87302C21.2513 11.0188 21.7229 11.5918 21.8955 12.2236C22.0348 12.7334 22.0348 13.2666 21.8955 13.7764C21.6438 14.6979 20.8485 15.4704 20.2598 16.1854C19.9587 16.5511 19.8081 16.734 19.618 16.8407C19.4022 16.9618 19.1493 17.0162 18.8968 16.9958C18.6744 16.9778 18.45 16.8756 18.0011 16.6711C17.6018 16.4892 17.2032 16.3156 17.052 15.868C17 15.714 17 15.5412 17 15.1955V10.8045Z' stroke='currentColor' stroke-width='1.5' /><path d='M7 10.8046C7 10.3694 6.98778 9.97821 6.63591 9.6722C6.50793 9.5609 6.33825 9.48361 5.99891 9.32905C5.55001 9.12458 5.32556 9.02235 5.10316 9.00436C4.43591 8.9504 4.07692 9.40581 3.69213 9.87318C2.74875 11.019 2.27706 11.5919 2.10446 12.2237C1.96518 12.7336 1.96518 13.2668 2.10446 13.7766C2.3562 14.6981 3.15152 15.4705 3.74021 16.1856C4.11129 16.6363 4.46577 17.0475 5.10316 16.996C5.32556 16.978 5.55001 16.8757 5.99891 16.6713C6.33825 16.5167 6.50793 16.4394 6.63591 16.3281C6.98778 16.0221 7 15.631 7 15.1957V10.8046Z' stroke='currentColor' stroke-width='1.5' /><path d='M5 9C5 5.68629 8.13401 3 12 3C15.866 3 19 5.68629 19 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='square' stroke-linejoin='round' /><path d='M19 17V17.8C19 19.5673 17.2091 21 15 21H13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
             },
             {
-                "title": ["Overcome procrastination", "give me tips"],
-                "content": "Could you start by asking me about instances when I procrastinate the most and then give me some suggestions to overcome it?",
+                "title": ["Risk Assessment", ""],
+                "content": "Evaluate potential risks in our upcoming merger and acquisition, considering financial, legal, and operational factors",
+                "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(234, 132, 68)' fill='none'><path d='M17.5619 9.22239L17.0356 10.15C16.5405 11.0225 16.293 11.4588 15.7539 11.4969C15.2147 11.535 14.9862 11.2231 14.5291 10.5994C14.019 9.90316 13.6959 9.08502 13.5814 8.22954C13.4744 7.43025 13.4209 7.03061 13.2914 6.83438C13.0847 6.52117 12.6695 6.34887 12.3591 6.16651C11.5417 5.68624 11.1329 5.4461 11.0256 5.03847C10.9183 4.63085 11.1542 4.21492 11.6262 3.38306C12.0982 2.5512 12.3342 2.13527 12.7347 2.02604C13.1353 1.91682 13.5441 2.15696 14.3615 2.63723C14.6719 2.81959 15.0262 3.09935 15.3961 3.12486C15.6278 3.14085 15.9947 2.98817 16.7284 2.68281C17.5137 2.35598 18.3715 2.23165 19.2191 2.33314C19.9785 2.42406 20.3582 2.46953 20.5953 2.96369C20.8325 3.45785 20.585 3.89411 20.0899 4.76664L19.5643 5.69311M17.5619 9.22239L17.9961 9.47749C18.9538 10.0402 20.1784 9.70625 20.7314 8.73166C21.2843 7.75708 20.9562 6.51088 19.9985 5.94821L19.5643 5.69311M17.5619 9.22239L19.5643 5.69311' stroke='currentColor' stroke-width='1.5' /><path d='M7 13C7 14.1046 6.10457 15 5 15C3.89543 15 3 14.1046 3 13C3 11.8954 3.89543 11 5 11C6.10457 11 7 11.8954 7 13Z' stroke='currentColor' stroke-width='1.5' /><path d='M6 12L13 7' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round' /><path d='M7 22H14' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M6 15L11 22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
             },
             {
                 "title": [
-                    "Grammar check",
-                    "rewrite it for better readability ",
+                    "Strategy Development",
+                    "",
                 ],
-                "content": 'Check the following sentence for grammar and clarity: "[sentence]". Rewrite it for better readability while maintaining its original meaning.',
+                "content": "Propose a market entry strategy for our product in the Asia-Pacific region, considering cultural and regulatory factors",
+                "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(11,218,81)' fill='none'><path d='M18 11L20.3458 8.84853C20.7819 8.44853 21 8.24853 21 8M18 5L20.3458 7.15147C20.7819 7.55147 21 7.75147 21 8M21 8C3 8 3 21 3 21' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><circle cx='5.5' cy='5.5' r='2.5' stroke='currentColor' stroke-width='1.5' /><path d='M13 21L18 16M18 21L13 16' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /></svg>"
             },
+            {
+                "title": [
+                    "Compliance & Legal",
+                    "",
+                ],
+                "content": "Summarize the key points of the new industry regulations and their potential impact on our business operations",
+                "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(234, 132, 68)' fill='none'><path d='M12 5V22M12 22H9M12 22H15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M21 13L18.5 8L16 13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 13L5.5 8L3 13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 8H5.0482C6.31166 8 7.5375 7.471 8.5241 6.5C10.5562 4.5 13.4438 4.5 15.4759 6.5C16.4625 7.471 17.6883 8 18.9518 8H20' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M18.5 17C19.8547 17 21.0344 16.1663 21.6473 14.9349C21.978 14.2702 22.1434 13.9379 21.8415 13.469C21.5396 13 21.04 13 20.0407 13H16.9593C15.96 13 15.4604 13 15.1585 13.469C14.8566 13.9379 15.022 14.2702 15.3527 14.9349C15.9656 16.1663 17.1453 17 18.5 17Z' stroke='currentColor' stroke-width='1.5' /><path d='M5.5 17C6.85471 17 8.03442 16.1663 8.64726 14.9349C8.97802 14.2702 9.14339 13.9379 8.84151 13.469C8.53962 13 8.04 13 7.04075 13H3.95925C2.96 13 2.46038 13 2.15849 13.469C1.85661 13.9379 2.02198 14.2702 2.35273 14.9349C2.96558 16.1663 4.14528 17 5.5 17Z' stroke='currentColor' stroke-width='1.5' /><path d='M13.5 3.5C13.5 4.32843 12.8284 5 12 5C11.1716 5 10.5 4.32843 10.5 3.5C10.5 2.67157 11.1716 2 12 2C12.8284 2 13.5 2.67157 13.5 3.5Z' stroke='currentColor' stroke-width='1.5' /></svg>"
+            }
         ],
     },
 }
@@ -882,33 +926,64 @@ DEFAULT_PROMPT_SUGGESTIONS = PersistentConfig(
     "DEFAULT_PROMPT_SUGGESTIONS",
     "ui.prompt_suggestions",
     [
-        {
-            "title": ["Help me study", "vocabulary for a college entrance exam"],
-            "content": "Help me study vocabulary: write a sentence for me to fill in the blank, and I'll try to pick the correct option.",
-        },
-        {
-            "title": ["Give me ideas", "for what to do with my kids' art"],
-            "content": "What are 5 creative things I could do with my kids' art? I don't want to throw them away, but it's also so much clutter.",
-        },
-        {
-            "title": ["Tell me a fun fact", "about the Roman Empire"],
-            "content": "Tell me a random fun fact about the Roman Empire",
-        },
-        {
-            "title": ["Show me a code snippet", "of a website's sticky header"],
-            "content": "Show me a code snippet of a website's sticky header in CSS and JavaScript.",
-        },
-        {
-            "title": [
-                "Explain options trading",
-                "if I'm familiar with buying and selling stocks",
-            ],
-            "content": "Explain options trading in simple terms if I'm familiar with buying and selling stocks.",
-        },
-        {
-            "title": ["Overcome procrastination", "give me tips"],
-            "content": "Could you start by asking me about instances when I procrastinate the most and then give me some suggestions to overcome it?",
-        },
+      {
+          "title": [
+              "Data Insights",
+              "",
+          ],
+          "content": "Analyze our quarterly sales data and provide key insights on revenue trends, top-performing products, and areas for improvement.",
+          "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(118, 208, 235)' fill='none'><path d='M6.08938 14.9992C5.71097 14.1486 5.5 13.2023 5.5 12.2051C5.5 8.50154 8.41015 5.49921 12 5.49921C15.5899 5.49921 18.5 8.50154 18.5 12.2051C18.5 13.2023 18.289 14.1486 17.9106 14.9992' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /><path d='M12 1.99921V2.99921' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M22 11.9992H21' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M3 11.9992H2' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M19.0704 4.92792L18.3633 5.63503' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M5.6368 5.636L4.92969 4.92889' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M14.517 19.3056C15.5274 18.9788 15.9326 18.054 16.0466 17.1238C16.0806 16.8459 15.852 16.6154 15.572 16.6154L8.47685 16.6156C8.18725 16.6156 7.95467 16.8614 7.98925 17.1489C8.1009 18.0773 8.3827 18.7555 9.45345 19.3056M14.517 19.3056C14.517 19.3056 9.62971 19.3056 9.45345 19.3056M14.517 19.3056C14.3955 21.2506 13.8338 22.0209 12.0068 21.9993C10.0526 22.0354 9.60303 21.0833 9.45345 19.3056' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
+      },
+      {
+          "title": [
+              "Market Research",
+              "",
+          ],
+          "content": "Identify emerging trends in our industry that could impact our business strategy over the next 12-18 months",
+          "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(108, 113, 255)' fill='none'><path d='M17.5619 9.22239L17.0356 10.15C16.5405 11.0225 16.293 11.4588 15.7539 11.4969C15.2147 11.535 14.9862 11.2231 14.5291 10.5994C14.019 9.90316 13.6959 9.08502 13.5814 8.22954C13.4744 7.43025 13.4209 7.03061 13.2914 6.83438C13.0847 6.52117 12.6695 6.34887 12.3591 6.16651C11.5417 5.68624 11.1329 5.4461 11.0256 5.03847C10.9183 4.63085 11.1542 4.21492 11.6262 3.38306C12.0982 2.5512 12.3342 2.13527 12.7347 2.02604C13.1353 1.91682 13.5441 2.15696 14.3615 2.63723C14.6719 2.81959 15.0262 3.09935 15.3961 3.12486C15.6278 3.14085 15.9947 2.98817 16.7284 2.68281C17.5137 2.35598 18.3715 2.23165 19.2191 2.33314C19.9785 2.42406 20.3582 2.46953 20.5953 2.96369C20.8325 3.45785 20.585 3.89411 20.0899 4.76664L19.5643 5.69311M17.5619 9.22239L17.9961 9.47749C18.9538 10.0402 20.1784 9.70625 20.7314 8.73166C21.2843 7.75708 20.9562 6.51088 19.9985 5.94821L19.5643 5.69311M17.5619 9.22239L19.5643 5.69311' stroke='currentColor' stroke-width='1.5' /><path d='M7 13C7 14.1046 6.10457 15 5 15C3.89543 15 3 14.1046 3 13C3 11.8954 3.89543 11 5 11C6.10457 11 7 11.8954 7 13Z' stroke='currentColor' stroke-width='1.5' /><path d='M6 12L13 7' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round' /><path d='M7 22H14' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M6 15L11 22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
+      },
+      {
+          "title": ["Process Optimization", ""],
+          "content": "Suggest ways to streamline our customer onboarding process to improve efficiency and reduce time-to-value",
+          "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(226, 197, 65)' fill='none'><path d='M2 21H22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 18L4 15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 14L8 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M12 11L12 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M16 11L16 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M20 5L20 3' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
+      },
+      {
+          "title": [
+              "Content Creation",
+              "",
+          ],
+          "content": "Draft a compelling email campaign to promote our new product launch to existing customers",
+          "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(203, 139, 208)' fill='none'><path d='M11 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V10C2 6.22876 2 4.34315 3.17157 3.17157C4.34315 2 6.22876 2 10 2H12C15.7712 2 17.6569 2 18.8284 3.17157C20 4.34315 20 6.22876 20 10V10.5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M17.4069 14.4036C17.6192 13.8655 18.3808 13.8655 18.5931 14.4036L18.6298 14.4969C19.1482 15.8113 20.1887 16.8518 21.5031 17.3702L21.5964 17.4069C22.1345 17.6192 22.1345 18.3808 21.5964 18.5931L21.5031 18.6298C20.1887 19.1482 19.1482 20.1887 18.6298 21.5031L18.5931 21.5964C18.3808 22.1345 17.6192 22.1345 17.4069 21.5964L17.3702 21.5031C16.8518 20.1887 15.8113 19.1482 14.4969 18.6298L14.4036 18.5931C13.8655 18.3808 13.8655 17.6192 14.4036 17.4069L14.4969 17.3702C15.8113 16.8518 16.8518 15.8113 17.3702 14.4969L17.4069 14.4036Z' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M7 7H15M7 11.5H15M7 16H11' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
+      },
+      {
+          "title": [
+              "Customer Insights",
+              "",
+          ],
+          "content": "Analyze customer feedback from the past quarter and identify the top 5 areas for improvement in our product",
+          "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(157,0,255)' fill='none'><path d='M17 10.8045C17 10.4588 17 10.286 17.052 10.132C17.2032 9.68444 17.6018 9.51076 18.0011 9.32888C18.45 9.12442 18.6744 9.02219 18.8968 9.0042C19.1493 8.98378 19.4022 9.03818 19.618 9.15929C19.9041 9.31984 20.1036 9.62493 20.3079 9.87302C21.2513 11.0188 21.7229 11.5918 21.8955 12.2236C22.0348 12.7334 22.0348 13.2666 21.8955 13.7764C21.6438 14.6979 20.8485 15.4704 20.2598 16.1854C19.9587 16.5511 19.8081 16.734 19.618 16.8407C19.4022 16.9618 19.1493 17.0162 18.8968 16.9958C18.6744 16.9778 18.45 16.8756 18.0011 16.6711C17.6018 16.4892 17.2032 16.3156 17.052 15.868C17 15.714 17 15.5412 17 15.1955V10.8045Z' stroke='currentColor' stroke-width='1.5' /><path d='M7 10.8046C7 10.3694 6.98778 9.97821 6.63591 9.6722C6.50793 9.5609 6.33825 9.48361 5.99891 9.32905C5.55001 9.12458 5.32556 9.02235 5.10316 9.00436C4.43591 8.9504 4.07692 9.40581 3.69213 9.87318C2.74875 11.019 2.27706 11.5919 2.10446 12.2237C1.96518 12.7336 1.96518 13.2668 2.10446 13.7766C2.3562 14.6981 3.15152 15.4705 3.74021 16.1856C4.11129 16.6363 4.46577 17.0475 5.10316 16.996C5.32556 16.978 5.55001 16.8757 5.99891 16.6713C6.33825 16.5167 6.50793 16.4394 6.63591 16.3281C6.98778 16.0221 7 15.631 7 15.1957V10.8046Z' stroke='currentColor' stroke-width='1.5' /><path d='M5 9C5 5.68629 8.13401 3 12 3C15.866 3 19 5.68629 19 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='square' stroke-linejoin='round' /><path d='M19 17V17.8C19 19.5673 17.2091 21 15 21H13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
+      },
+      {
+          "title": ["Risk Assessment", ""],
+          "content": "Evaluate potential risks in our upcoming merger and acquisition, considering financial, legal, and operational factors",
+          "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(234, 132, 68)' fill='none'><path d='M17.5619 9.22239L17.0356 10.15C16.5405 11.0225 16.293 11.4588 15.7539 11.4969C15.2147 11.535 14.9862 11.2231 14.5291 10.5994C14.019 9.90316 13.6959 9.08502 13.5814 8.22954C13.4744 7.43025 13.4209 7.03061 13.2914 6.83438C13.0847 6.52117 12.6695 6.34887 12.3591 6.16651C11.5417 5.68624 11.1329 5.4461 11.0256 5.03847C10.9183 4.63085 11.1542 4.21492 11.6262 3.38306C12.0982 2.5512 12.3342 2.13527 12.7347 2.02604C13.1353 1.91682 13.5441 2.15696 14.3615 2.63723C14.6719 2.81959 15.0262 3.09935 15.3961 3.12486C15.6278 3.14085 15.9947 2.98817 16.7284 2.68281C17.5137 2.35598 18.3715 2.23165 19.2191 2.33314C19.9785 2.42406 20.3582 2.46953 20.5953 2.96369C20.8325 3.45785 20.585 3.89411 20.0899 4.76664L19.5643 5.69311M17.5619 9.22239L17.9961 9.47749C18.9538 10.0402 20.1784 9.70625 20.7314 8.73166C21.2843 7.75708 20.9562 6.51088 19.9985 5.94821L19.5643 5.69311M17.5619 9.22239L19.5643 5.69311' stroke='currentColor' stroke-width='1.5' /><path d='M7 13C7 14.1046 6.10457 15 5 15C3.89543 15 3 14.1046 3 13C3 11.8954 3.89543 11 5 11C6.10457 11 7 11.8954 7 13Z' stroke='currentColor' stroke-width='1.5' /><path d='M6 12L13 7' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round' /><path d='M7 22H14' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M6 15L11 22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>"
+      },
+      {
+          "title": [
+              "Strategy Development",
+              "",
+          ],
+          "content": "Propose a market entry strategy for our product in the Asia-Pacific region, considering cultural and regulatory factors",
+          "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(11,218,81)' fill='none'><path d='M18 11L20.3458 8.84853C20.7819 8.44853 21 8.24853 21 8M18 5L20.3458 7.15147C20.7819 7.55147 21 7.75147 21 8M21 8C3 8 3 21 3 21' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><circle cx='5.5' cy='5.5' r='2.5' stroke='currentColor' stroke-width='1.5' /><path d='M13 21L18 16M18 21L13 16' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /></svg>"
+      },
+      {
+          "title": [
+              "Compliance & Legal",
+              "",
+          ],
+          "content": "Summarize the key points of the new industry regulations and their potential impact on our business operations",
+          "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(234, 132, 68)' fill='none'><path d='M12 5V22M12 22H9M12 22H15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M21 13L18.5 8L16 13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 13L5.5 8L3 13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 8H5.0482C6.31166 8 7.5375 7.471 8.5241 6.5C10.5562 4.5 13.4438 4.5 15.4759 6.5C16.4625 7.471 17.6883 8 18.9518 8H20' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M18.5 17C19.8547 17 21.0344 16.1663 21.6473 14.9349C21.978 14.2702 22.1434 13.9379 21.8415 13.469C21.5396 13 21.04 13 20.0407 13H16.9593C15.96 13 15.4604 13 15.1585 13.469C14.8566 13.9379 15.022 14.2702 15.3527 14.9349C15.9656 16.1663 17.1453 17 18.5 17Z' stroke='currentColor' stroke-width='1.5' /><path d='M5.5 17C6.85471 17 8.03442 16.1663 8.64726 14.9349C8.97802 14.2702 9.14339 13.9379 8.84151 13.469C8.53962 13 8.04 13 7.04075 13H3.95925C2.96 13 2.46038 13 2.15849 13.469C1.85661 13.9379 2.02198 14.2702 2.35273 14.9349C2.96558 16.1663 4.14528 17 5.5 17Z' stroke='currentColor' stroke-width='1.5' /><path d='M13.5 3.5C13.5 4.32843 12.8284 5 12 5C11.1716 5 10.5 4.32843 10.5 3.5C10.5 2.67157 11.1716 2 12 2C12.8284 2 13.5 2.67157 13.5 3.5Z' stroke='currentColor' stroke-width='1.5' /></svg>"
+      }
     ],
 )
 
