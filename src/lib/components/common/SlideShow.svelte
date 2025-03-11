@@ -5,6 +5,7 @@
 		'/assets/images/bridge.jpg',
 		'/assets/images/lock.jpg',
 		'/assets/images/climber.jpg',
+    '/assets/images/chess.jpg',
 		// '/assets/images/adam.jpg',
 		// '/assets/images/galaxy.jpg',
 		// '/assets/images/earth.jpg',
