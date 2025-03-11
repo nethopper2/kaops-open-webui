@@ -11,7 +11,10 @@
 	import { sanitizeResponseContent, findWordIndices } from '$lib/utils';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 
-	import Suggestions from './Suggestions.svelte';
+  // NOTE: Keeping the original import for Suggestions.svelte for reference
+  //       May allow users to switch between the two components in the future
+	// import Suggestions from './Suggestions.svelte';
+	import SuggestionButtons from './SuggestionButtons.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import MessageInput from './MessageInput.svelte';
@@ -125,7 +128,7 @@
 										src={model?.info?.meta?.profile_image_url ??
 											($i18n.language === 'dg-DG'
 												? `/doge.png`
-												: `${WEBUI_BASE_URL}/static/favicon.png`)}
+												: '/static/favicon.png')}
 										class=" size-9 @sm:size-10 rounded-full border-[1px] border-gray-100 dark:border-none"
 										alt="logo"
 										draggable="false"
@@ -136,14 +139,21 @@
 					</div>
 				</div>
 
-				<div class=" text-3xl @sm:text-4xl line-clamp-1" in:fade={{ duration: 100 }}>
+				<div class="text-2xl @sm:text-3xl line-clamp-1" in:fade={{ duration: 100 }}>
 					{#if models[selectedModelIdx]?.name}
 						{models[selectedModelIdx]?.name}
 					{:else}
-						{$i18n.t('Hello, {{name}}', { name: $user.name })}
+						{$i18n.t("Hi, I'm your Private AI", { name: $user.name })}
 					{/if}
 				</div>
-			</div>
+      </div>
+      <div class="text-sm mt-2 line-clamp-1 text-neutral-500">
+        {#if models[selectedModelIdx]?.name}
+          {models[selectedModelIdx]?.name}
+        {:else}
+          No model selected
+        {/if}
+      </div>
 
 			<div class="flex mt-1 mb-2">
 				<div in:fade={{ duration: 100, delay: 50 }}>
@@ -211,7 +221,7 @@
 		</div>
 	</div>
 	<div class="mx-auto max-w-2xl font-primary" in:fade={{ duration: 200, delay: 200 }}>
-		<div class="mx-5">
+		<!-- <div class="mx-5">
 			<Suggestions
 				suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
 					models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
@@ -222,6 +232,19 @@
 					selectSuggestionPrompt(e.detail);
 				}}
 			/>
-		</div>
+		</div> -->
+
+		<div class="mx-0">
+			<SuggestionButtons
+				suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
+					models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
+					$config?.default_prompt_suggestions ??
+					[]}
+				inputValue={prompt}
+				on:select={(e) => {
+					selectSuggestionPrompt(e.detail);
+				}}
+			/>
+		</div>    
 	</div>
 </div>
