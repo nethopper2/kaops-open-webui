@@ -140,11 +140,7 @@
 				</div>
 
 				<div class="text-2xl @sm:text-3xl line-clamp-1" in:fade={{ duration: 100 }}>
-					{#if models[selectedModelIdx]?.name}
-						{models[selectedModelIdx]?.name}
-					{:else}
-						{$i18n.t("Hi, I'm your Private AI", { name: $user.name })}
-					{/if}
+          {$i18n.t("Hi, I'm your Private AI", { name: $user.name })}
 				</div>
       </div>
       <div class="text-sm mt-2 line-clamp-1 text-neutral-500">
