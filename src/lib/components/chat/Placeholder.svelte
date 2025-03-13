@@ -88,6 +88,18 @@
 
 	$: models = selectedModels.map((id) => $_models.find((m) => m.id === id));
 
+  // Listen for input events from SuggestionButtons.svelte
+  // Can set it to any text, but initially only used when clearing the input field
+  async function setInputPrompt(event) {
+    prompt = event.detail.value;
+    const chatInputElement = document.getElementById('chat-input');
+		await tick();
+		if (chatInputElement) {
+			chatInputElement.focus();
+			chatInputElement.dispatchEvent(new Event('input'));
+		}
+  }
+
 	onMount(() => {});
 </script>
 
@@ -240,6 +252,7 @@
 				on:select={(e) => {
 					selectSuggestionPrompt(e.detail);
 				}}
+        on:setInput={setInputPrompt}
 			/>
 		</div>    
 	</div>

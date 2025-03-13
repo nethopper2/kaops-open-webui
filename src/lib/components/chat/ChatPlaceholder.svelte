@@ -3,7 +3,7 @@
 	import { marked } from 'marked';
 
 	import { config, user, models as _models, temporaryChatEnabled } from '$lib/stores';
-	import { onMount, getContext } from 'svelte';
+	import { onMount, getContext, tick } from 'svelte';
 
 	import { blur, fade } from 'svelte/transition';
 
@@ -31,6 +31,18 @@
 	}
 
 	$: models = modelIds.map((id) => $_models.find((m) => m.id === id));
+
+  // Listen for input events from SuggestionButtons.svelte
+  // Can set it to any text, but initially only used when clearing the input field
+  async function setInputPrompt(event) {
+    submitPrompt = event.detail.value;
+    const chatInputElement = document.getElementById('chat-input');
+		await tick();
+		if (chatInputElement) {
+			chatInputElement.focus();
+			chatInputElement.dispatchEvent(new Event('input'));
+		}
+  }
 
 	onMount(() => {
 		mounted = true;
@@ -154,6 +166,7 @@
 				on:select={(e) => {
 					submitPrompt(e.detail);
 				}}
+        on:setInput={setInputPrompt}
 			/>
 		</div>     
 	</div>
