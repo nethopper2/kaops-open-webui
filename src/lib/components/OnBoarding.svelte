@@ -81,7 +81,7 @@
 						]}
 					/>
 
-					<div class="mt-0.5 text-4xl">{$i18n.t(`with your data private and secure`)}</div>
+					<div class="mt-0.5 text-4xl">{$i18n.t(`Your data. Private and secure.`)}</div>
 				</div>
 
 				<div class="flex justify-center mt-8">
