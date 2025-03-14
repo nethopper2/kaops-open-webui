@@ -166,7 +166,8 @@ DEFAULT_CONFIG = {
                 "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(226, 197, 65)' fill='none'><path d='M2 21H22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 18L4 15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 14L8 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M12 11L12 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M16 11L16 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M20 5L20 3' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
                 "prompts": [
                   "Suggest ways to streamline our customer onboarding process to improve efficiency and reduce time-to-value",
-                  "Analyze our current supply chain and recommend optimizations to reduce costs and improve delivery times"
+                  "Analyze our current supply chain and recommend optimizations to reduce costs and improve delivery times",
+                  "Analyze a specific corporate process to identify bottlenecks and propose solutions to improve efficiency"
                 ]
             },
             {
@@ -988,7 +989,8 @@ DEFAULT_PROMPT_SUGGESTIONS = PersistentConfig(
           "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(226, 197, 65)' fill='none'><path d='M2 21H22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 18L4 15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 14L8 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M12 11L12 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M16 11L16 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M20 5L20 3' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
           "prompts": [
             "Suggest ways to streamline our customer onboarding process to improve efficiency and reduce time-to-value",
-            "Analyze our current supply chain and recommend optimizations to reduce costs and improve delivery times"
+            "Analyze our current supply chain and recommend optimizations to reduce costs and improve delivery times",
+            "Analyze a specific corporate process to identify bottlenecks and propose solutions to improve efficiency"
           ]
       },
       {
