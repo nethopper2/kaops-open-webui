@@ -29,6 +29,7 @@
 	import Switch from '$lib/components/common/Switch.svelte';
 	import ChatBubbleOval from '$lib/components/icons/ChatBubbleOval.svelte';
 	import { goto } from '$app/navigation';
+	import { WEBUI_BASE_URL } from '$lib/constants';
 
 	const i18n = getContext('i18n');
 	const dispatch = createEventDispatcher();
@@ -536,12 +537,19 @@
 						placement="top-start"
 					>
 						<button
-							class="flex w-full font-medium line-clamp-1 select-none items-center rounded-button py-2 pl-3 pr-1.5 text-sm text-gray-700 dark:text-gray-100 outline-hidden transition-all duration-75 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg cursor-pointer data-highlighted:bg-muted"
+							class="flex w-full font-medium line-clamp-1 select-none items-center rounded-button py-2 pl-3 pr-1.5 text-sm text-gray-700 dark:text-gray-100 outline-hidden transition-all duration-75 rounded-lg cursor-pointer data-highlighted:bg-muted hover:bg-red-100/50 dark:hover:bg-red-800/20"
 							on:click={() => {
 								pullModelHandler();
 							}}
 						>
-							<div class=" truncate">
+							<div class="flex items-center truncate ">
+                <img
+                  crossorigin="anonymous"
+                  src="{WEBUI_BASE_URL}/static/ollama.png"
+                  class="rounded-full size-5 flex items-center mr-2"
+                  alt="Ollama"
+                />              
+
 								{$i18n.t(`Pull "{{searchValue}}" from Ollama.com`, { searchValue: searchValue })}
 							</div>
 						</button>
