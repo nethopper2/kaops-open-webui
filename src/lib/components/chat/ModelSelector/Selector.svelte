@@ -530,6 +530,7 @@
 				{/each}
 
 				{#if !(searchValue.trim() in $MODEL_DOWNLOAD_POOL) && searchValue && ollamaVersion && $user.role === 'admin'}
+          <div class="absolute left-0 w-full border-t-[0.5px] mb-8 border-neutral-300 dark:border-neutral-700" />
 					<Tooltip
 						content={$i18n.t(`Pull "{{searchValue}}" from Ollama.com`, {
 							searchValue: searchValue
