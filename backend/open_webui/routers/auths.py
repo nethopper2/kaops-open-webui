@@ -25,6 +25,7 @@ from open_webui.env import (
     WEBUI_AUTH,
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
     WEBUI_AUTH_TRUSTED_NAME_HEADER,
+    WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
     SRC_LOG_LEVELS,
@@ -333,16 +334,22 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
 
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
         trusted_name = trusted_email
+        trusted_profile_image_url = "/user.png"
         if WEBUI_AUTH_TRUSTED_NAME_HEADER:
             trusted_name = request.headers.get(
                 WEBUI_AUTH_TRUSTED_NAME_HEADER, trusted_email
+            )
+
+        if WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL:
+            trusted_profile_image_url = request.headers.get(
+                WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL, trusted_profile_image_url
             )
         if not Users.get_user_by_email(trusted_email.lower()):
             await signup(
                 request,
                 response,
                 SignupForm(
-                    email=trusted_email, password=str(uuid.uuid4()), name=trusted_name
+                    email=trusted_email, password=str(uuid.uuid4()), name=trusted_name, profile_image_url=trusted_profile_image_url
                 ),
             )
         user = Auths.authenticate_user_by_trusted_header(trusted_email)
