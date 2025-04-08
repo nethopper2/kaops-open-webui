@@ -25,14 +25,15 @@ from open_webui.env import (
     WEBUI_AUTH,
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
     WEBUI_AUTH_TRUSTED_NAME_HEADER,
-    WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL,
+    WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER,
+    WEBUI_AUTH_TRUSTED_GROUPS_HEADER,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
     SRC_LOG_LEVELS,
 )
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response
-from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP
+from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP, DEFAULT_USER_PERMISSIONS
 from pydantic import BaseModel
 from open_webui.utils.misc import parse_duration, validate_email_format
 from open_webui.utils.auth import (
@@ -340,9 +341,9 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                 WEBUI_AUTH_TRUSTED_NAME_HEADER, trusted_email
             )
 
-        if WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL:
+        if WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER:
             trusted_profile_image_url = request.headers.get(
-                WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL, trusted_profile_image_url
+                WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER, trusted_profile_image_url
             )
         if not Users.get_user_by_email(trusted_email.lower()):
             await signup(
@@ -353,6 +354,15 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                 ),
             )
         user = Auths.authenticate_user_by_trusted_header(trusted_email)
+
+        if WEBUI_AUTH_TRUSTED_GROUPS_HEADER:
+            trusted_groups = request.headers.get(
+                WEBUI_AUTH_TRUSTED_GROUPS_HEADER, ''
+            )
+
+            log.info(f"User {user.name}, in groups: {trusted_groups}")
+
+            Users.update_user_groups_from_string(user, trusted_groups, DEFAULT_USER_PERMISSIONS)
     elif WEBUI_AUTH == False:
         admin_email = "admin@localhost"
         admin_password = "admin"
