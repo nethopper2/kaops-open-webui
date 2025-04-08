@@ -7,7 +7,7 @@ from open_webui.internal.db import Base, JSONField, get_db
 
 
 from open_webui.models.chats import Chats
-from open_webui.models.groups import Groups, GroupModel, GroupUpdateForm
+from open_webui.models.groups import Groups, GroupModel, GroupUpdateForm, GroupForm
 
 
 from pydantic import BaseModel, ConfigDict
@@ -281,13 +281,17 @@ class UsersTable:
             if not group_model:
                 # Create new group
                 log.info(f"Creating new group '{group_display_name}' with default permissions")
-                new_group = Groups.create_group(
+                form_data = GroupForm(
                     name=group_display_name,
                     description=f"Auto-created group for {group_display_name}",
                     permissions=default_permissions,
                     user_ids=[user.id],
                 )
-                continue
+                group_model = Groups.insert_new_group(user_id=user.id, form_data=form_data)
+
+                if not group_model:
+                    log.warning(f"Failed to create group: {group_display_name}")
+                    continue
 
             # Group exists, but check if user is already in it
             if group_name_lc not in current_group_map:
