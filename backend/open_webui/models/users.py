@@ -1,15 +1,22 @@
 import time
+import logging
+import sys
 from typing import Optional
 
 from open_webui.internal.db import Base, JSONField, get_db
 
 
 from open_webui.models.chats import Chats
-from open_webui.models.groups import Groups
+from open_webui.models.groups import Groups, GroupModel, GroupUpdateForm, GroupForm
 
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import BigInteger, Column, String, Text
+
+from open_webui.env import SRC_LOG_LEVELS
+
+log = logging.getLogger(__name__)
+log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
 ####################
 # User DB Schema
@@ -232,7 +239,74 @@ class UsersTable:
                 return UserModel.model_validate(user)
         except Exception:
             return None
+    
+    def update_user_groups_from_string(self, user, group_string, default_permissions):
+        log.info("Running enhanced group sync using comma-separated string")
 
+        # Step 1: Parse comma-separated string into a list of cleaned, lower-cased group names
+        user_header_groups_raw = [g.strip() for g in group_string.split(",") if g.strip()]
+        user_header_groups = [g.lower() for g in user_header_groups_raw]
+
+        user_current_groups: list[GroupModel] = Groups.get_groups_by_member_id(user.id)
+        all_available_groups: list[GroupModel] = Groups.get_groups()
+
+        # Map of lowercased group name to actual GroupModel
+        available_group_map = {g.name.lower(): g for g in all_available_groups}
+        current_group_map = {g.name.lower(): g for g in user_current_groups}
+
+        log.info(f"User header groups (parsed from string): {user_header_groups_raw}")
+        log.info(f"User's current groups: {[g.name for g in user_current_groups]}")
+        log.info(f"All groups available: {[g.name for g in all_available_groups]}")
+
+        # Step 2: Remove user from groups they no longer belong to
+        for group_name_lc, group_model in current_group_map.items():
+            if group_name_lc not in user_header_groups:
+                log.info(f"Removing user from group {group_model.name}")
+                user_ids = [uid for uid in group_model.user_ids if uid != user.id]
+                group_permissions = group_model.permissions or default_permissions
+
+                update_form = GroupUpdateForm(
+                    name=group_model.name,
+                    description=group_model.description,
+                    permissions=group_permissions,
+                    user_ids=user_ids,
+                )
+                Groups.update_group_by_id(id=group_model.id, form_data=update_form, overwrite=False)
+
+        # Step 3: Ensure all user_header_groups exist, create if needed, and add user
+        for i, group_name_lc in enumerate(user_header_groups):
+            group_display_name = user_header_groups_raw[i]
+            group_model = available_group_map.get(group_name_lc)
+
+            if not group_model:
+                # Create new group
+                log.info(f"Creating new group '{group_display_name}' with default permissions")
+                form_data = GroupForm(
+                    name=group_display_name,
+                    description=f"Auto-created group for {group_display_name}",
+                    permissions=default_permissions,
+                    user_ids=[user.id],
+                )
+                group_model = Groups.insert_new_group(user_id=user.id, form_data=form_data)
+
+                if not group_model:
+                    log.warning(f"Failed to create group: {group_display_name}")
+                    continue
+
+            # Group exists, but check if user is already in it
+            if group_name_lc not in current_group_map:
+                log.info(f"Adding user to existing group {group_model.name}")
+                user_ids = group_model.user_ids + [user.id]
+                group_permissions = group_model.permissions or default_permissions
+
+                update_form = GroupUpdateForm(
+                    name=group_model.name,
+                    description=group_model.description,
+                    permissions=group_permissions,
+                    user_ids=user_ids,
+                )
+                Groups.update_group_by_id(id=group_model.id, form_data=update_form, overwrite=False)
+    
     def update_user_last_active_by_id(self, id: str) -> Optional[UserModel]:
         try:
             with get_db() as db:
