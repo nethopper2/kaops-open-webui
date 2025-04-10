@@ -83,12 +83,12 @@
 
 		{#if $temporaryChatEnabled}
 			<Tooltip
-				content="This chat won't appear in history and your messages will not be saved."
-				className="w-fit"
-				placement="top-start"
+				content={$i18n.t('This chat won’t appear in history and your messages will not be saved.')}
+				className="w-full flex justify-center mb-0.5"
+				placement="top"
 			>
 				<div class="flex items-center gap-2 text-gray-500 font-medium text-lg my-2 w-fit">
-					<EyeSlash strokeWidth="2.5" className="size-5" /> Temporary Chat
+					<EyeSlash strokeWidth="2.5" className="size-5" />{$i18n.t('Temporary Chat')}
 				</div>
 			</Tooltip>
 		{/if}
@@ -98,7 +98,7 @@
 		>
 			<div>
 				<div class="text-2xl @sm:text-3xl line-clamp-1" in:fade={{ duration: 100 }}>
-          {$i18n.t("Hi, I'm your Private AI", { name: $user.name })}
+          {$i18n.t("Hi, I'm your Private AI", { name: $user?.name })}
 				</div>
 
         <div class="text-sm mt-2 line-clamp-1 text-neutral-500">
@@ -168,6 +168,6 @@
 				}}
         on:setInput={setInputPrompt}
 			/>
-		</div>     
+		</div>
 	</div>
 {/key}
