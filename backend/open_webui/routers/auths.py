@@ -359,10 +359,10 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                 decoded = jwt.decode(split_token, options={"verify_signature": False})
 
                 if decoded["name"]:
-                    trusted_name = decoded.name
+                    trusted_name = decoded["name"]
                 
                 if decoded["picture"]:
-                    trusted_profile_image_url = decoded.picture
+                    trusted_profile_image_url = decoded["picture"]
 
             await signup(
                 request,
