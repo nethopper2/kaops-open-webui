@@ -5,6 +5,9 @@ import datetime
 import logging
 from aiohttp import ClientSession
 
+import jwt
+
+
 from open_webui.models.auths import (
     AddUserForm,
     ApiKey,
@@ -43,6 +46,7 @@ from open_webui.utils.auth import (
     get_verified_user,
     get_current_user,
     get_password_hash,
+    decode_token
 )
 from open_webui.utils.webhook import post_webhook
 from open_webui.utils.access_control import get_permissions
@@ -333,20 +337,33 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
+        
+        # Fetch the Authorization headers added to request
+        # This will be used when using Google SSO to extract user picture and full name
+        token = request.headers.get('Authorization', '')
 
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
         trusted_name = trusted_email
         trusted_profile_image_url = "/user.png"
+
         if WEBUI_AUTH_TRUSTED_NAME_HEADER:
             trusted_name = request.headers.get(
                 WEBUI_AUTH_TRUSTED_NAME_HEADER, trusted_email
             )
 
-        if WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER:
-            trusted_profile_image_url = request.headers.get(
-                WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER, trusted_profile_image_url
-            )
         if not Users.get_user_by_email(trusted_email.lower()):
+            if token:
+                log.info(f"User Token {token}")
+        
+                split_token = token.split("Bearer ")[1]
+                decoded = jwt.decode(split_token, options={"verify_signature": False})
+
+                if decoded.name:
+                    trusted_name = decoded.name
+                
+                if decoded.picture:
+                    trusted_profile_image_url = decoded.picture
+
             await signup(
                 request,
                 response,
@@ -363,7 +380,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
 
             log.info(f"User {user.name}, in groups: {trusted_groups}")
 
-            Users.update_user_groups_from_string(user, trusted_groups, DEFAULT_USER_PERMISSIONS)
+            Users.update_user_groups_from_header(user, trusted_groups, DEFAULT_USER_PERMISSIONS)
     elif WEBUI_AUTH == False:
         admin_email = "admin@localhost"
         admin_password = "admin"

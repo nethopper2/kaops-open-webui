@@ -240,7 +240,7 @@ class UsersTable:
         except Exception:
             return None
     
-    def update_user_groups_from_string(self, user, group_string, default_permissions):
+    def update_user_groups_from_header(self, user, group_string, default_permissions):
         log.info("Running enhanced group sync using comma-separated string")
 
         # Step 1: Parse comma-separated string into a list of cleaned, lower-cased group names
