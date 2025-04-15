@@ -12,7 +12,7 @@
 
 	import { getKnowledgeBases } from '$lib/apis/knowledge';
 	import { getFunctions } from '$lib/apis/functions';
-	import { getModels, getToolServersData, getVersionUpdates } from '$lib/apis';
+	import { getBackendConfig, getModels, getToolServersData, getVersionUpdates } from '$lib/apis';
 	import { getAllTags } from '$lib/apis/chats';
 	import { getPrompts } from '$lib/apis/prompts';
 	import { getTools } from '$lib/apis/tools';
@@ -227,6 +227,9 @@
 	});
 
 	const checkForVersionUpdates = async () => {
+		const backendConfig = await getBackendConfig();
+		if (!backendConfig?.features?.enable_upstream_ui) return;
+
 		version = await getVersionUpdates(localStorage.token).catch((error) => {
 			return {
 				current: WEBUI_VERSION,
@@ -239,7 +242,7 @@
 <SettingsModal bind:show={$showSettings} />
 <!-- <ChangelogModal bind:show={$showChangelog} /> -->
 
-{#if version && compareVersion(version.latest, version.current) && ($settings?.showUpdateToast ?? true)}
+{#if version && compareVersion(version.latest, version.current) && ($settings?.showUpdateToast ?? true) && $config?.features?.enable_upstream_ui}
 	<div class=" absolute bottom-8 right-8 z-50" in:fade={{ duration: 100 }}>
 		<UpdateInfoToast
 			{version}
