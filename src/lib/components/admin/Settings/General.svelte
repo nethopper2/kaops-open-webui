@@ -50,6 +50,9 @@
 	};
 
 	const checkForVersionUpdates = async () => {
+		const backendConfig = await getBackendConfig();
+		if (!backendConfig?.features?.enable_upstream_ui) return;
+
 		updateAvailable = null;
 		version = await getVersionUpdates(localStorage.token).catch((error) => {
 			return {
@@ -135,89 +138,98 @@
 										v{WEBUI_VERSION}
 									</Tooltip>
 
-									<a
-										href="https://github.com/open-webui/open-webui/releases/tag/v{version.latest}"
-										target="_blank"
-									>
-										{updateAvailable === null
-											? $i18n.t('Checking for updates...')
-											: updateAvailable
-												? `(v${version.latest} ${$i18n.t('available!')})`
-												: $i18n.t('(latest)')}
-									</a>
+									{#if $config?.features?.enable_upstream_ui}
+										<a
+											href="https://github.com/open-webui/open-webui/releases/tag/v{version.latest}"
+											target="_blank"
+										>
+											{updateAvailable === null
+												? $i18n.t('Checking for updates...')
+												: updateAvailable
+													? `(v${version.latest} ${$i18n.t('available!')})`
+													: $i18n.t('(latest)')}
+										</a>
+									{/if}
 								</div>
 
+								{#if $config?.features?.enable_upstream_ui}
+									<button
+										class=" underline flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-500"
+										type="button"
+										on:click={() => {
+											showChangelog.set(true);
+										}}
+									>
+										<div>{$i18n.t("See what's new")}</div>
+									</button>
+								{/if}
+							</div>
+
+							{#if $config?.features?.enable_upstream_ui}
 								<button
-									class=" underline flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-500"
+									class=" text-xs px-3 py-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-850 dark:hover:bg-gray-800 transition rounded-lg font-medium"
 									type="button"
 									on:click={() => {
-										showChangelog.set(true);
+										checkForVersionUpdates();
 									}}
 								>
-									<div>{$i18n.t("See what's new")}</div>
+									{$i18n.t('Check for updates')}
 								</button>
-							</div>
-
-							<button
-								class=" text-xs px-3 py-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-850 dark:hover:bg-gray-800 transition rounded-lg font-medium"
-								type="button"
-								on:click={() => {
-									checkForVersionUpdates();
-								}}
-							>
-								{$i18n.t('Check for updates')}
-							</button>
+							{/if}
 						</div>
 					</div>
 
-					<div class="mb-2.5">
-						<div class="flex w-full justify-between items-center">
-							<div class="text-xs pr-2">
-								<div class="">
-									{$i18n.t('Help')}
+					{#if $config?.features?.enable_upstream_ui}
+						<div class="mb-2.5">
+							<div class="flex w-full justify-between items-center">
+								<div class="text-xs pr-2">
+									<div class="">
+										{$i18n.t('Help')}
+									</div>
+									<div class=" text-xs text-gray-500">
+										{$i18n.t('Discover how to use Open WebUI and seek support from the community.')}
+									</div>
 								</div>
-								<div class=" text-xs text-gray-500">
-									{$i18n.t('Discover how to use Open WebUI and seek support from the community.')}
-								</div>
+
+								<a
+									class="flex-shrink-0 text-xs font-medium underline"
+									href="https://docs.openwebui.com/"
+									target="_blank"
+								>
+									{$i18n.t('Documentation')}
+								</a>
 							</div>
 
-							<a
-								class="flex-shrink-0 text-xs font-medium underline"
-								href="https://docs.openwebui.com/"
-								target="_blank"
-							>
-								{$i18n.t('Documentation')}
-							</a>
-						</div>
+							<div class="mt-1">
+								<div class="flex space-x-1">
+									<a href="https://discord.gg/5rJgQTnV4s" target="_blank">
+										<img
+											alt="Discord"
+											src="https://img.shields.io/badge/Discord-Open_WebUI-blue?logo=discord&logoColor=white"
+										/>
+									</a>
 
-						<div class="mt-1">
-							<div class="flex space-x-1">
-								<a href="https://discord.gg/5rJgQTnV4s" target="_blank">
-									<img
-										alt="Discord"
-										src="https://img.shields.io/badge/Discord-Open_WebUI-blue?logo=discord&logoColor=white"
-									/>
-								</a>
+									<a href="https://twitter.com/OpenWebUI" target="_blank">
+										<img
+											alt="X (formerly Twitter) Follow"
+											src="https://img.shields.io/twitter/follow/OpenWebUI"
+										/>
+									</a>
 
-								<a href="https://twitter.com/OpenWebUI" target="_blank">
-									<img
-										alt="X (formerly Twitter) Follow"
-										src="https://img.shields.io/twitter/follow/OpenWebUI"
-									/>
-								</a>
-
-								<a href="https://github.com/open-webui/open-webui" target="_blank">
-									<img
-										alt="Github Repo"
-										src="https://img.shields.io/github/stars/open-webui/open-webui?style=social&label=Star us on Github"
-									/>
-								</a>
+									<a href="https://github.com/open-webui/open-webui" target="_blank">
+										<img
+											alt="Github Repo"
+											src="https://img.shields.io/github/stars/open-webui/open-webui?style=social&label=Star us on Github"
+										/>
+									</a>
+								</div>
 							</div>
 						</div>
-					</div>
+					{/if}
 
 					<div class="mb-2.5">
-						<div class="flex w-full justify-between items-center">
+						{#if $config?.features?.enable_upstream_ui}
+							<div class="flex w-full justify-between items-center">
 							<div class="text-xs pr-2">
 								<div class="">
 									{$i18n.t('License')}
@@ -268,6 +280,7 @@
 								{$i18n.t('Activate')}
 							</button> -->
 						</div>
+						{/if}
 					</div>
 				</div>
 
