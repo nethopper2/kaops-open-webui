@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getVersionUpdates } from '$lib/apis';
+import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 	import { getOllamaVersion } from '$lib/apis/ollama';
 	import { WEBUI_BUILD_HASH, WEBUI_VERSION } from '$lib/constants';
 	import { WEBUI_NAME, config, showChangelog } from '$lib/stores';
@@ -19,6 +19,9 @@
 	};
 
 	const checkForVersionUpdates = async () => {
+		const backendConfig = await getBackendConfig();
+		if (!backendConfig?.features?.enable_upstream_ui) return;
+
 		updateAvailable = null;
 		version = await getVersionUpdates(localStorage.token).catch((error) => {
 			return {
@@ -51,6 +54,7 @@
 					{$i18n.t('Version')}
 				</div>
 			</div>
+
 			<div class="flex w-full justify-between items-center">
 				<div class="flex flex-col text-xs text-gray-700 dark:text-gray-200">
 					<div class="flex gap-1">
@@ -58,36 +62,42 @@
 							v{WEBUI_VERSION}
 						</Tooltip>
 
-						<a
-							href="https://github.com/open-webui/open-webui/releases/tag/v{version.latest}"
-							target="_blank"
-						>
-							{updateAvailable === null
-								? $i18n.t('Checking for updates...')
-								: updateAvailable
-									? `(v${version.latest} ${$i18n.t('available!')})`
-									: $i18n.t('(latest)')}
-						</a>
+						{#if $config?.features?.enable_upstream_ui}
+							<a
+								href="https://github.com/open-webui/open-webui/releases/tag/v{version.latest}"
+								target="_blank"
+							>
+								{updateAvailable === null
+									? $i18n.t('Checking for updates...')
+									: updateAvailable
+										? `(v${version.latest} ${$i18n.t('available!')})`
+										: $i18n.t('(latest)')}
+							</a>
+						{/if}
 					</div>
 
-					<button
-						class=" underline flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-500"
-						on:click={() => {
-							showChangelog.set(true);
-						}}
-					>
-						<div>{$i18n.t("See what's new")}</div>
-					</button>
+					{#if $config?.features?.enable_upstream_ui}
+						<button
+							class=" underline flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-500"
+							on:click={() => {
+								showChangelog.set(true);
+							}}
+						>
+							<div>{$i18n.t("See what's new")}</div>
+						</button>
+					{/if}
 				</div>
 
-				<button
-					class=" text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-850 dark:hover:bg-gray-800 transition rounded-lg font-medium"
-					on:click={() => {
-						checkForVersionUpdates();
-					}}
-				>
-					{$i18n.t('Check for updates')}
-				</button>
+				{#if $config?.features?.enable_upstream_ui}
+					<button
+						class=" text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-850 dark:hover:bg-gray-800 transition rounded-lg font-medium"
+						on:click={() => {
+							checkForVersionUpdates();
+						}}
+					>
+						{$i18n.t('Check for updates')}
+					</button>
+				{/if}
 			</div>
 		</div>
 
@@ -115,7 +125,7 @@
 				<span class=" capitalize">{$config?.license_metadata?.type}</span> license purchased by
 				<span class=" capitalize">{$config?.license_metadata?.organization_name}</span>
 			</div>
-		{:else}
+		{:else if $config?.features?.enable_upstream_ui}
 			<div class="flex space-x-1">
 				<a href="https://discord.gg/5rJgQTnV4s" target="_blank">
 					<img
