@@ -11,7 +11,10 @@
         * Clicking the lower left user, then `Admin Panel`. Under `Settings/General` you should not see any buttons or text about an upgrade or checking for an upgrade, only the version string. (NOTE: Do we need this info in 2 places?)
       * Social Links in the `Settings/Interface` area mentioned above.
       * License link & Social Links in the `Admin Panel` area mentioned above.
-    * The api call to `api/version/updates` is not made in the above areas. 
+    * The api call to `api/version/updates` is not made in the above areas.
+    * Hid the `her` theme in `Settings/General` since it made unexplained changes to the UI.
+    * Replaced the `Workspace/Knowledge` section with our own component for use with Google Drive & RAG.
+    * Hid the `Discover a ...` button in each of the sub sections in `Workspace` since they link to nothing useful.
 
 ## Branding
 
