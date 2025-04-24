@@ -35,10 +35,9 @@ onMount(async () => {
 		</div>
 	</div>
 
-	<div class="flex flex-col gap-3 mb-5">
-		<p>{$i18n.t('Lorem ipsum dolor sit amet consectetur adipisicing elit. Tempore cupiditate suscipit inventore esse rerum illo, officia impedit accusamus ipsam quod accusantium libero molestiae ut quas atque enim, explicabo ducimus? Repudiandae.')}</p>
-		<p>{$i18n.t('Lorem ipsum dolor sit amet consectetur adipisicing elit. Tempore cupiditate suscipit inventore esse rerum illo, officia impedit accusamus ipsam quod accusantium libero molestiae ut quas atque enim, explicabo ducimus? Repudiandae.')}</p>
-		<p>{$i18n.t('Lorem ipsum dolor sit amet consectetur adipisicing elit. Tempore cupiditate suscipit inventore esse rerum illo, officia impedit accusamus ipsam quod accusantium libero molestiae ut quas atque enim, explicabo ducimus? Repudiandae.')}</p>
+	<div class="flex flex-col gap-3 mb-5 text-pretty markdown-prose">
+		<p>{$i18n.t('Data automatically populates collections based on their sources, using SSO credentials and group information. This setup supports cross-service searching and AI-driven insight, while enforcing access controls through SSO authentication and maintaining privacy safeguards with role-based permissions.')}</p>
+		<p>{$i18n.t('Currently, only Google Drive supports data import for the Knowledge collections. To change the content that the AI uses, update or modify the files stored in your Google Drive. The system will then reflect those changes in the corresponding collection, ensuring the AI works with your latest documents.')}</p>
 	</div>
 
 	<div>
