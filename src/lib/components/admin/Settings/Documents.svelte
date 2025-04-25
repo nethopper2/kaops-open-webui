@@ -28,6 +28,7 @@
 	import Switch from '$lib/components/common/Switch.svelte';
 	import Textarea from '$lib/components/common/Textarea.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
+	import { config } from '$lib/stores';
 
 	const i18n = getContext('i18n');
 
@@ -835,6 +836,7 @@
 					</div>
 				</div>
 
+				{#if $config?.features?.enable_upstream_ui}
 				<div class="mb-3">
 					<div class=" mb-2.5 text-base font-medium">{$i18n.t('Integration')}</div>
 
@@ -854,6 +856,7 @@
 						</div>
 					</div>
 				</div>
+				{/if}
 
 				<div class="mb-3">
 					<div class=" mb-2.5 text-base font-medium">{$i18n.t('Danger Zone')}</div>
