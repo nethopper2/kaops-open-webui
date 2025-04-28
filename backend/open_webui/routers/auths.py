@@ -5,9 +5,6 @@ import datetime
 import logging
 from aiohttp import ClientSession
 
-import jwt
-
-
 from open_webui.models.auths import (
     AddUserForm,
     ApiKey,
@@ -28,7 +25,6 @@ from open_webui.env import (
     WEBUI_AUTH,
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
     WEBUI_AUTH_TRUSTED_NAME_HEADER,
-    WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER,
     WEBUI_AUTH_TRUSTED_GROUPS_HEADER,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
@@ -36,7 +32,7 @@ from open_webui.env import (
 )
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response
-from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP, DEFAULT_USER_PERMISSIONS
+from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP, DEFAULT_USER_PERMISSIONS, OAUTH_PROVIDER_NAME
 from pydantic import BaseModel
 from open_webui.utils.misc import parse_duration, validate_email_format
 from open_webui.utils.auth import (
@@ -340,7 +336,10 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         
         # Fetch the Authorization headers added to request
         # This will be used when using Google SSO to extract user picture and full name
-        token = request.headers.get('Authorization', '')
+        sso_provider = str(OAUTH_PROVIDER_NAME).lower()
+        token = request.headers.get(
+                'X-Forwared-Auth', None
+            )
 
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
         trusted_name = trusted_email
@@ -352,17 +351,13 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             )
 
         if not Users.get_user_by_email(trusted_email.lower()):
-            if token:
-                log.info(f"User Token {token}")
-        
-                split_token = token.split("Bearer ")[1]
-                decoded = jwt.decode(split_token, options={"verify_signature": False})
+            if sso_provider:
+                sso_response = Users.get_user_data_from_sso_provider(sso_provider, token)
+                if sso_response:
+                    trusted_email = sso_response.get('trusted_email', trusted_email)
+                    trusted_name = sso_response.get('trusted_name', trusted_name)
+                    trusted_profile_image_url = sso_response.get('trusted_profile_image_url', trusted_profile_image_url)
 
-                if decoded["name"]:
-                    trusted_name = decoded["name"]
-                
-                if decoded["picture"]:
-                    trusted_profile_image_url = decoded["picture"]
 
             await signup(
                 request,
