@@ -143,6 +143,7 @@ type Settings = {
 	splitLargeDeltas?: boolean;
 	chatDirection: 'LTR' | 'RTL' | 'auto';
 	ctrlEnterToSend?: boolean;
+	showUpdateToast?: boolean;
 
 	system?: string;
 	requestFormat?: string;
@@ -213,6 +214,7 @@ type Config = {
 		enable_admin_chat_access: boolean;
 		enable_community_sharing: boolean;
 		enable_autocomplete_generation: boolean;
+		enable_upstream_ui: boolean
 	};
 	oauth: {
 		providers: {
