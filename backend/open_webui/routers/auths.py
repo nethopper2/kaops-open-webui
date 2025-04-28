@@ -343,7 +343,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         # This will be used when using Google SSO to extract user picture and full name
         sso_provider = str(OAUTH_PROVIDER_NAME).lower()
         token = request.headers.get(
-                'X-Forwared-Access-Token', None
+                'X-Forwarded-Access-Token', None
             )
 
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
