@@ -338,11 +338,12 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
         
+        log.info(f"Request headers: {request.headers}")
         # Fetch the Authorization headers added to request
         # This will be used when using Google SSO to extract user picture and full name
         sso_provider = str(OAUTH_PROVIDER_NAME).lower()
         token = request.headers.get(
-                'X-Forwared-Auth', None
+                'X-Forwared-Access-Token', None
             )
 
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
