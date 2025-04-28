@@ -333,6 +333,8 @@ class UsersTable:
                 }
             else:
                 log.error(f"Failed to fetch user data: {response.status_code}")
+                log.error(f"Failed with token: {token}")
+                log.error(f"Full response: {response}")
                 return None
         except Exception as e:
             log.error(f"Error fetching user data: {e}")
