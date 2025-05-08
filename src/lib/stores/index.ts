@@ -214,13 +214,17 @@ type Config = {
 		enable_admin_chat_access: boolean;
 		enable_community_sharing: boolean;
 		enable_autocomplete_generation: boolean;
-		enable_upstream_ui: boolean
 	};
 	oauth: {
 		providers: {
 			[key: string]: string;
 		};
 	};
+	private_ai: {
+		// If true, some original open web ui interfaces are shown instead of Private AI.
+		enable_upstream_ui: boolean
+		rest_api_base_url: string
+	}
 };
 
 type PromptSuggestion = {

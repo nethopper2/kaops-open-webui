@@ -1143,13 +1143,6 @@ DEFAULT_USER_ROLE = PersistentConfig(
     os.getenv("DEFAULT_USER_ROLE", "pending"),
 )
 
-# When false, prevents update Toast & hides setting for checking update & update Toast.
-NH_ENABLE_UPSTREAM_UI = PersistentConfig(
-    "NH_ENABLE_UPSTREAM_UI",
-    "ui.enable_upstream_ui",
-    os.environ.get("NH_ENABLE_UPSTREAM_UI", "False").lower() == "true",
-)
-
 USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS = (
     os.environ.get("USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS", "False").lower()
     == "true"
@@ -2844,4 +2837,19 @@ LDAP_CA_CERT_FILE = PersistentConfig(
 
 LDAP_CIPHERS = PersistentConfig(
     "LDAP_CIPHERS", "ldap.server.ciphers", os.environ.get("LDAP_CIPHERS", "ALL")
+)
+
+####################################
+# Private AI
+####################################
+
+# When false, prevents update Toast & hides setting for checking update & update Toast.
+NH_ENABLE_UPSTREAM_UI = PersistentConfig(
+    "NH_ENABLE_UPSTREAM_UI",
+    "private_ai.enable_upstream_ui",
+    os.environ.get("NH_ENABLE_UPSTREAM_UI", "False").lower() == "true",
+)
+# The base url for the private-ai-rest dependency
+NH_API_BASE_URL = PersistentConfig(
+    "WEBUI_URL", "private_ai.url", os.environ.get("NH_API_BASE_URL", "http://localhost:3000")
 )

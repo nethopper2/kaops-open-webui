@@ -251,7 +251,7 @@
 						<option value="dark">🌑 {$i18n.t('Dark')}</option>
 						<option value="oled-dark">🌃 {$i18n.t('OLED Dark')}</option>
 						<option value="light">☀️ {$i18n.t('Light')}</option>
-						{#if $config?.features?.enable_upstream_ui}
+						{#if $config?.private_ai?.enable_upstream_ui}
 						<option value="her">🌷 Her</option>
 						{/if}
 						<!-- <option value="rose-pine dark">🪻 {$i18n.t('Rosé Pine')}</option>

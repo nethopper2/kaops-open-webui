@@ -1036,7 +1036,7 @@
 
 								<div class=" flex justify-between mt-1 mb-2.5 mx-0.5 max-w-full" dir="ltr">
 									<div class="ml-1 self-end flex items-center flex-1 max-w-[80%] gap-0.5">
-										{#if $config?.features?.enable_upstream_ui}
+										{#if $config?.private_ai?.enable_upstream_ui}
 										<InputMenu
 											bind:selectedToolIds
 											{screenCaptureHandler}

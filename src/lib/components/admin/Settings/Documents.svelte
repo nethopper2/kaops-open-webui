@@ -836,7 +836,7 @@
 					</div>
 				</div>
 
-				{#if $config?.features?.enable_upstream_ui}
+				{#if $config?.private_ai?.enable_upstream_ui}
 				<div class="mb-3">
 					<div class=" mb-2.5 text-base font-medium">{$i18n.t('Integration')}</div>
 

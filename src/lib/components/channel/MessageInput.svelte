@@ -491,7 +491,7 @@
 						</div>
 
 						<div class=" flex justify-between mb-2.5 mt-1.5 mx-0.5">
-							{#if $config?.features?.enable_upstream_ui}
+							{#if $config?.private_ai?.enable_upstream_ui}
 							<div class="ml-1 self-end flex space-x-1">
 								<InputMenu
 									{screenCaptureHandler}

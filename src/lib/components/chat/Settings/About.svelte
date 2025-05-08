@@ -20,7 +20,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 
 	const checkForVersionUpdates = async () => {
 		const backendConfig = await getBackendConfig();
-		if (!backendConfig?.features?.enable_upstream_ui) return;
+		if (!backendConfig?.private_ai?.enable_upstream_ui) return;
 
 		updateAvailable = null;
 		version = await getVersionUpdates(localStorage.token).catch((error) => {
@@ -62,7 +62,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 							v{WEBUI_VERSION}
 						</Tooltip>
 
-						{#if $config?.features?.enable_upstream_ui}
+						{#if $config?.private_ai?.enable_upstream_ui}
 							<a
 								href="https://github.com/open-webui/open-webui/releases/tag/v{version.latest}"
 								target="_blank"
@@ -76,7 +76,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 						{/if}
 					</div>
 
-					{#if $config?.features?.enable_upstream_ui}
+					{#if $config?.private_ai?.enable_upstream_ui}
 						<button
 							class=" underline flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-500"
 							on:click={() => {
@@ -88,7 +88,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 					{/if}
 				</div>
 
-				{#if $config?.features?.enable_upstream_ui}
+				{#if $config?.private_ai?.enable_upstream_ui}
 					<button
 						class=" text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-850 dark:hover:bg-gray-800 transition rounded-lg font-medium"
 						on:click={() => {
@@ -125,7 +125,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 				<span class=" capitalize">{$config?.license_metadata?.type}</span> license purchased by
 				<span class=" capitalize">{$config?.license_metadata?.organization_name}</span>
 			</div>
-		{:else if $config?.features?.enable_upstream_ui}
+		{:else if $config?.private_ai?.enable_upstream_ui}
 			<div class="flex space-x-1">
 				<a href="https://discord.gg/5rJgQTnV4s" target="_blank">
 					<img

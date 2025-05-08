@@ -6,7 +6,7 @@ import { getKnowledgeBases } from '$lib/apis/knowledge';
 import Knowledge from '$lib/components/workspace/Knowledge.svelte';
 
 onMount(async () => {
-	if (config?.features?.enable_upstream_ui) {
+	if (config?.private_ai?.enable_upstream_ui) {
 		await Promise.all([
 			(async () => {
 				knowledge.set(await getKnowledgeBases(localStorage.token));
@@ -16,7 +16,7 @@ onMount(async () => {
 	});
 </script>
 
-{#if $config?.features?.enable_upstream_ui}
+{#if $config?.private_ai?.enable_upstream_ui}
 	{#if $knowledge !== null}
 	<Knowledge />
 	{/if}

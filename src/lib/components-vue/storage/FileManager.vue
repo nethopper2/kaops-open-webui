@@ -14,12 +14,12 @@ import 'devextreme-vue/text-area'
 import { DxTextBox } from 'devextreme-vue/text-box'
 import RemoteFileSystemProvider from 'devextreme/file_management/remote_provider'
 import type { ContextMenuItemClickEvent } from 'devextreme/ui/file_manager'
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { getBackendConfig } from '$lib/apis';
 
-const fileSystemProvider = new RemoteFileSystemProvider({
-	endpointUrl: 'http://localhost:3000/api/file-manager', // TODO: cleanup - need env var for this?
-	// endpointUrl: '/api/file-manager', // TODO: cleanup - need env var for this?
-})
+const loading = ref(true)
+
+let fileSystemProvider: RemoteFileSystemProvider
 
 const itemViewConfig = {
 	details: {
@@ -83,10 +83,25 @@ function addTagOptionAndAutoSelectIt() {
 
 	tagToAdd.value = ''
 }
+
+onMounted(async () => {
+	loading.value = true
+	const backendConfig = await getBackendConfig();
+
+	fileSystemProvider = new RemoteFileSystemProvider({
+		endpointUrl: `${backendConfig.private_ai.rest_api_base_url}/api/file-manager`, // TODO: cleanup - need env var for this?
+		requestHeaders: {
+			Authorization: 'Bearer ' + localStorage.getItem('token'),
+		}
+	})
+
+	loading.value = false
+})
 </script>
 
 <template>
 	<dx-file-manager
+		v-if="!loading"
 		:file-system-provider="fileSystemProvider"
 		:item-view="itemViewConfig"
 		:on-context-menu-item-click="handleContextMenuItemClick"
