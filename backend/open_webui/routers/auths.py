@@ -5,9 +5,6 @@ import datetime
 import logging
 from aiohttp import ClientSession
 
-import jwt
-
-
 from open_webui.models.auths import (
     AddUserForm,
     ApiKey,
@@ -37,7 +34,7 @@ from open_webui.env import (
 )
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response
-from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP, DEFAULT_USER_PERMISSIONS
+from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP, DEFAULT_USER_PERMISSIONS, OAUTH_PROVIDER_NAME
 from pydantic import BaseModel
 from open_webui.utils.misc import parse_duration, validate_email_format
 from open_webui.utils.auth import (
@@ -343,6 +340,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
         
+        log.info(f"Request headers: {request.headers}")
         # Fetch the Authorization headers added to request
         # This will be used when using SSO to extract user profile and file data
         sso_provider = str(OAUTH_PROVIDER_NAME).lower()
