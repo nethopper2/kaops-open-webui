@@ -349,6 +349,11 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         token = request.headers.get(
                 'X-Forwarded-Access-Token', None
             )
+        
+         #Retrieve the trusted email from the headers and set trusted name and profile image URL to default values
+        trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
+        trusted_name = trusted_email
+        trusted_profile_image_url = "/user.png"
 
         # If the trusted name header is present, use it to set the trusted name
         # Otherwise, use the trusted email as the name
@@ -417,7 +422,6 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         user = Auths.authenticate_user(form_data.email.lower(), form_data.password)
 
     if user:
-
         expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
         expires_at = None
         if expires_delta:

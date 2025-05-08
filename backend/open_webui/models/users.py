@@ -3,6 +3,9 @@ import logging
 import sys
 from typing import Optional
 
+import requests
+import jwt
+
 from open_webui.internal.db import Base, JSONField, get_db
 
 
@@ -213,6 +216,35 @@ class UsersTable:
                         .get("webhook_url", None)
                     )
         except Exception:
+            return None
+        
+    def get_user_profile_data_from_sso_provider(self, provider: str, token: str):
+        try:
+            match provider:
+                case 'google':
+                    response = requests.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
+        
+                case 'okta':
+                    decoded = jwt.decode(token, options={"verify_signature": False})
+                    oktaDomain = decoded["iss"]
+                    response = requests.get(f"{oktaDomain}/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
+
+            if response.status_code == 200:
+                data = response.json()
+                trusted_email = data.get('email', None)
+                trusted_name = data.get('name', None)
+                trusted_profile_image_url = data.get('picture', "/user.png")
+
+                return {
+                    'trusted_email': trusted_email,
+                    'trusted_name': trusted_name,
+                    'trusted_profile_image_url': trusted_profile_image_url
+                }
+            else:
+                log.error(f"Failed to fetch user data: {response.status_code}")
+                return None
+        except Exception as e:
+            log.error(f"Error fetching user data: {e}")
             return None
 
     def update_user_role_by_id(self, id: str, role: str) -> Optional[UserModel]:
