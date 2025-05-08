@@ -380,14 +380,14 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                 ),
             )
         
-        # Authenticate the user using the trusted email
-        user = Auths.authenticate_user_by_trusted_header(trusted_email)
-
         # If the user exists and the SSO provider is present, update the user's profile image URL and name
         # and fetch user file data from the SSO provider
-        if sso_provider:
-            if user_exists:
-                Users.update_user_by_id(user.id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
+        if sso_provider and user_exists:
+            # Update the user's profile image URL and name in the database
+            # This is done to ensure that the user's profile image URL and name are always up to date
+            # with the data fetched from the SSO provider
+            if user_exists.profile_image_url != trusted_profile_image_url:
+                Users.update_user_by_id(user_exists.id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
     
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER:
             trusted_groups = request.headers.get(
@@ -397,6 +397,9 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             log.info(f"User {user.name}, in groups: {trusted_groups}")
 
             Users.update_user_groups_from_header(user, trusted_groups, DEFAULT_USER_PERMISSIONS)
+
+        # Authenticate the user using the trusted email
+        user = Auths.authenticate_user_by_trusted_header(trusted_email)
 
     elif WEBUI_AUTH == False:
         admin_email = "admin@localhost"
