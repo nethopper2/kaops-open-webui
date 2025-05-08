@@ -29,6 +29,7 @@ from open_webui.env import (
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
     WEBUI_AUTH_TRUSTED_NAME_HEADER,
     WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER,
+    OAUTH_PROVIDER_NAME,
     WEBUI_AUTH_TRUSTED_GROUPS_HEADER,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
@@ -343,31 +344,32 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
         
         # Fetch the Authorization headers added to request
-        # This will be used when using Google SSO to extract user picture and full name
-        token = request.headers.get('Authorization', '')
+        # This will be used when using SSO to extract user profile and file data
+        sso_provider = str(OAUTH_PROVIDER_NAME).lower()
+        token = request.headers.get(
+                'X-Forwarded-Access-Token', None
+            )
 
-        trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
-        trusted_name = trusted_email
-        trusted_profile_image_url = "/user.png"
-
+        # If the trusted name header is present, use it to set the trusted name
+        # Otherwise, use the trusted email as the name
         if WEBUI_AUTH_TRUSTED_NAME_HEADER:
             trusted_name = request.headers.get(
                 WEBUI_AUTH_TRUSTED_NAME_HEADER, trusted_email
             )
 
-        if not Users.get_user_by_email(trusted_email.lower()):
-            if token:
-                log.info(f"User Token {token}")
-        
-                split_token = token.split("Bearer ")[1]
-                decoded = jwt.decode(split_token, options={"verify_signature": False})
+        # If the SSO provider is present, use it to fetch user profile data
+        # and update the trusted email, name, and profile image URL 
+        if sso_provider:
+            sso_response = Users.get_user_profile_data_from_sso_provider(sso_provider, token)
+            if sso_response:
+                trusted_email = sso_response.get('trusted_email', trusted_email)
+                trusted_name = sso_response.get('trusted_name', trusted_name)
+                trusted_profile_image_url = sso_response.get('trusted_profile_image_url', trusted_profile_image_url)
 
-                if decoded["name"]:
-                    trusted_name = decoded["name"]
-                
-                if decoded["picture"]:
-                    trusted_profile_image_url = decoded["picture"]
+        # Check if the user already exists in the database
+        user_exists = Users.get_user_by_email(trusted_email)
 
+        if not user_exists:
             await signup(
                 request,
                 response,
@@ -375,8 +377,16 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                     email=trusted_email, password=str(uuid.uuid4()), name=trusted_name, profile_image_url=trusted_profile_image_url
                 ),
             )
+        
+        # Authenticate the user using the trusted email
         user = Auths.authenticate_user_by_trusted_header(trusted_email)
 
+        # If the user exists and the SSO provider is present, update the user's profile image URL and name
+        # and fetch user file data from the SSO provider
+        if sso_provider:
+            if user_exists:
+                Users.update_user_by_id(user.id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
+    
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER:
             trusted_groups = request.headers.get(
                 WEBUI_AUTH_TRUSTED_GROUPS_HEADER, ''
@@ -385,6 +395,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             log.info(f"User {user.name}, in groups: {trusted_groups}")
 
             Users.update_user_groups_from_header(user, trusted_groups, DEFAULT_USER_PERMISSIONS)
+
     elif WEBUI_AUTH == False:
         admin_email = "admin@localhost"
         admin_password = "admin"
