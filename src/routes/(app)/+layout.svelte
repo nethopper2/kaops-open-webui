@@ -228,7 +228,7 @@
 
 	const checkForVersionUpdates = async () => {
 		const backendConfig = await getBackendConfig();
-		if (!backendConfig?.features?.enable_upstream_ui) return;
+		if (!backendConfig?.private_ai?.enable_upstream_ui) return;
 
 		version = await getVersionUpdates(localStorage.token).catch((error) => {
 			return {
@@ -242,7 +242,7 @@
 <SettingsModal bind:show={$showSettings} />
 <!-- <ChangelogModal bind:show={$showChangelog} /> -->
 
-{#if version && compareVersion(version.latest, version.current) && ($settings?.showUpdateToast ?? true) && $config?.features?.enable_upstream_ui}
+{#if version && compareVersion(version.latest, version.current) && ($settings?.showUpdateToast ?? true) && $config?.private_ai?.enable_upstream_ui}
 	<div class=" absolute bottom-8 right-8 z-50" in:fade={{ duration: 100 }}>
 		<UpdateInfoToast
 			{version}

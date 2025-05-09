@@ -478,7 +478,7 @@
 			</div>
 
 			{#if $user?.role === 'admin'}
-				{#if $config?.features?.enable_upstream_ui}
+				{#if $config?.private_ai?.enable_upstream_ui}
 					<div>
 						<div class=" py-0.5 flex w-full justify-between">
 							<div class=" self-center text-xs">
