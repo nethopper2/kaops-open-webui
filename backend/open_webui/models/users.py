@@ -8,6 +8,7 @@ import jwt
 
 from open_webui.internal.db import Base, JSONField, get_db
 
+from open_webui.utils.google_drive import initiate_google_file_sync
 
 from open_webui.models.chats import Chats
 from open_webui.models.groups import Groups, GroupModel, GroupUpdateForm, GroupForm
@@ -339,11 +340,12 @@ class UsersTable:
                 )
                 Groups.update_group_by_id(id=group_model.id, form_data=update_form, overwrite=False)
     
-    def get_user_data_from_sso_provider(self, provider: str, token: str):
+    def get_user_profile_data_from_sso_provider(self, provider: str, token: str):
         try:
             match provider:
                 case 'google':
                     response = requests.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
+        
                 case 'okta':
                     decoded = jwt.decode(token, options={"verify_signature": False})
                     oktaDomain = decoded["iss"]
@@ -362,13 +364,21 @@ class UsersTable:
                 }
             else:
                 log.error(f"Failed to fetch user data: {response.status_code}")
-                log.error(f"Failed with token: {token}")
-                log.error(f"Full response: {response}")
                 return None
         except Exception as e:
             log.error(f"Error fetching user data: {e}")
             return None
 
+    def get_user_file_data_from_sso_provider(self, user_id: str, provider: str, token: str):
+        try:
+            match provider:
+                case 'google':
+                    initiate_google_file_sync(user_id, token, 'ewogICJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsCiAgInByb2plY3RfaWQiOiAibmgtc2FuZGJveC00NTEzMDkiLAogICJwcml2YXRlX2tleV9pZCI6ICJlZmU2OGIyZjU4OTdiZTI2MzliODhkNmI3NDIxYTZlMjMwY2I5ODkwIiwKICAicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tXG5NSUlFdlFJQkFEQU5CZ2txaGtpRzl3MEJBUUVGQUFTQ0JLY3dnZ1NqQWdFQUFvSUJBUURyK1NPR3FwckR4NUtwXG5YZ0hSdnZvYmJRUjlINWVqaENXYVlOUy9WalpQNFFvZlk5ZXhyaG5qSkNwVnBtbXFLVjBoOURnN2tkazhOQ1BtXG5pM1JQRW5QWUYyc1Z6dDZkb0d1VmVRTlcwNGxHOUJWWGdvUFI1emRiRlZpdjY3WTRyRUt5Umt3S3YyQlJnaXUrXG5hSHBXQTRsUFJkaGplSUVZL3NjZHBnL0J5K1JpNkgzNVRnZ3dzdGpRd2V4TUp6eCsrL1dUaStrSnhSK3crTGY1XG5SSnZtbnpSWFBOOUQ2Z1FvUFhraXZUUHJUa3o2WWxmZVVaS0FBV1lQS204UmFRZUZQcTdSWVUxNCtiTld6a2dTXG5NTkpleTVhVVhQNUxjZmhaTjFKcWkzTHNaV3JnYjR5cFBmUkxGTkNRMGgzUmVKSXVLbzdzMndZbzQ5V3ZhQ1JXXG5xSmNKVEc5SkFnTUJBQUVDZ2dFQUl3R0xhK1dndm5UN2xKMFJ5NFlYajl5Qkd6ZkYxTmZjaFRXaXNmek40MVU0XG4zWFhBRUllSnB4amRIK1luVER0RktlMlRMd0VndHkzcituNUxJNVRTOHlac09DaS9mU1pJZDN6amlpeW84NG52XG5wWk1DejYrTGxudEk5QllWYXZ4aEM1WGluNENLL3lSK3JVbE9CcmNSRmwyLzcyZTN6UmUwdmJqK0l1dUdwc1phXG5PNFdXbTJyTE51dU9QZ3d6eDBvdzNldjdXUktRanIxMUhlQnZXa0ZxbW9xQ2F5Zkg4WmxTQ2NvbzE2bHcrd0UrXG5YSlZEc1NnTEc3MWl2Y3pUTUl3UWl5YkJSOFhuUUVXNm1OcTVzSWRxSFZJSW1BTXgrQWQyOUZUQ2JvMFpSL3JmXG5RUS8vT3VjSVE4QkUxVHhDZ3ZmZ1Y3RFlSdnZjcW54YXJwc0djK2lobFFLQmdRRCtzMHpJaTFTeWJvWWttYlpnXG5DUDVqYVIvS0JkQjczNG9rZWdCQlBTTk5YTXhGRWgrZDJ1S2ZyMnhFUThqRHRDT1k2VkxZb1plc0FKaEljTksxXG40VnhMbmlFSWpyK082VnpoTU1nbkd2LzB2TVROb3lMUW9QRk14WGFiSHIxYisrTWhpVUJGS01pNTM0V2g5UmlyXG5pQ3hPTDdrcWNNSUdsYnhhQmRRRFF3cXBSUUtCZ1FEdExXQnB6eFJKZWxBaFFxcHRGRmtibDdpZ1dvZGhrU1MvXG5MMnB6RjYvUmQzaW5lVzBvWGc0ZmNXQW05aVZxbk9wWjBxWW5QcWVMdTR4ZGRSc1U5Tk9veUIwMFI0VldZVXFsXG5RNHp0RmlXMVBmL3pkbEZ1N1ZPTTJ1cTB0V2s4YVRpNWc5OVEvU1ppWTBQUmtBejlmYzdTYWsxVFdvdjVHbEROXG44YVoyZ2tZVU5RS0JnQXFvQ2RCaU0vcjdNTldiTU13MzFCem9xeEhTeUhSR1dBdEtwM1FUVU1UTjJ5WVFxZzM2XG51SHloNUUrKzNrbUI0Zk5sMzdkOG0xSHcvRzRiZWxWdHhtVExpdXBHdnJFR0JvTE5mYkpWS054ZWdZVnhDK1hhXG50ZjNXVFM0VVRTdnFFQWk1SzEwNVpaeVJRNUFSSnlVV0gzUnQvcnROMkhCYUYzVlV4UmdWMS81WkFvR0FES015XG5VL0Q0djhHSXEzMEYzN0lKM1hLRUgrY3k5M3ZvWFZlRmNJUitsY2FyNHlDUk5HbHVqelpYVFR3b1dqbnFNc2NLXG5tMlMzUUxiSmorRkJoQ2hYYnRMYTI0SkVGSW95bEFPNWFwaVhnY1MvOHBVSFdjWERnZW5ZUDdDNjNzRXNpSllDXG5QQ3FBOVJVYzgvbWM5NVRRaEYydHFSZFdCZnZrK2xRNTdtNmFsVkVDZ1lFQXQ3UGtmUnhPWFR6cFVEWFBpdklOXG5zVWpjcFU4TVVSK0VqUW1QV1F3V1ZyTWJhWEpQanVRY3ZOTGlNQWhtRlQrSHphU2tCMFhFRktGZExuQ1FxV1lMXG5LcE90S1lldUJBb0picEx4NFFxRjBoZU5OdXZMNHYyQTVkeGVEQTVlNHpkcnl0bzVqQWN3TDAyTDFPdTJKVzY0XG5pb05wUFJpNHl0VjI0UUNOdENpL1dRQT1cbi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS1cbiIsCiAgImNsaWVudF9lbWFpbCI6ICJnZHJpdmUtZ2NzLXN5bmNAbmgtc2FuZGJveC00NTEzMDkuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLAogICJjbGllbnRfaWQiOiAiMTEyNTU0OTg2NzUzMDIyMDQ0NTk5IiwKICAiYXV0aF91cmkiOiAiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLAogICJ0b2tlbl91cmkiOiAiaHR0cHM6Ly9vYXV0aDIuZ29vZ2xlYXBpcy5jb20vdG9rZW4iLAogICJhdXRoX3Byb3ZpZGVyX3g1MDlfY2VydF91cmwiOiAiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vb2F1dGgyL3YxL2NlcnRzIiwKICAiY2xpZW50X3g1MDlfY2VydF91cmwiOiAiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9nZHJpdmUtZ2NzLXN5bmMlNDBuaC1zYW5kYm94LTQ1MTMwOS5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsCiAgInVuaXZlcnNlX2RvbWFpbiI6ICJnb29nbGVhcGlzLmNvbSIKfQo=', 'nh-private-ai-file-sync-test')
+                
+        except Exception as e:
+            log.error(f"Error fetching user data: {e}")
+            return None
+    
     def update_user_last_active_by_id(self, id: str) -> Optional[UserModel]:
         try:
             with get_db() as db:

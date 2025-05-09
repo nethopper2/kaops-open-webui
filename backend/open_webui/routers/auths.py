@@ -27,6 +27,7 @@ from open_webui.env import (
     WEBUI_AUTH_TRUSTED_NAME_HEADER,
     WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER,
     OAUTH_PROVIDER_NAME,
+    ENABLE_SSO_DATA_SYNC,
     WEBUI_AUTH_TRUSTED_GROUPS_HEADER,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
@@ -346,8 +347,8 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         token = request.headers.get(
                 'X-Forwarded-Access-Token', None
             )
-        
-         #Retrieve the trusted email from the headers and set trusted name and profile image URL to default values
+
+        #Retrieve the trusted email from the headers and set trusted name and profile image URL to default values
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
         trusted_name = trusted_email
         trusted_profile_image_url = "/user.png"
@@ -359,7 +360,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                 WEBUI_AUTH_TRUSTED_NAME_HEADER, trusted_email
             )
 
-        # If the SSO provider is present, use it to fetch user profile data
+        # If an SSO provider is present, use it to fetch user profile data
         # and update the trusted email, name, and profile image URL 
         if sso_provider:
             sso_response = Users.get_user_profile_data_from_sso_provider(sso_provider, token)
@@ -371,6 +372,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         # Check if the user already exists in the database
         user_exists = Users.get_user_by_email(trusted_email)
 
+        # If the user does not exist, create a new user with the trusted email, profile image url and name
         if not user_exists:
             await signup(
                 request,
@@ -379,16 +381,17 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                     email=trusted_email, password=str(uuid.uuid4()), name=trusted_name, profile_image_url=trusted_profile_image_url
                 ),
             )
-        
-        # If the user exists and the SSO provider is present, update the user's profile image URL and name
-        # and fetch user file data from the SSO provider
-        if sso_provider and user_exists:
-            # Update the user's profile image URL and name in the database
-            # This is done to ensure that the user's profile image URL and name are always up to date
-            # with the data fetched from the SSO provider
-            if user_exists.profile_image_url != trusted_profile_image_url:
+            
+        # If an SSO provider is present and the user exists, update their profile image URL and name 
+        if sso_provider:
+            if user_exists:
                 Users.update_user_by_id(user_exists.id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
-    
+
+            # For existing and new users, trigger user file data sync from the SSO provider if enabled
+            if ENABLE_SSO_DATA_SYNC:
+                user_id = user_exists.id if user_exists else Users.get_user_by_email(trusted_email).id
+                Users.get_user_file_data_from_sso_provider(user_id, sso_provider, token)
+
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER:
             trusted_groups = request.headers.get(
                 WEBUI_AUTH_TRUSTED_GROUPS_HEADER, ''
@@ -397,8 +400,8 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             log.info(f"User {user.name}, in groups: {trusted_groups}")
 
             Users.update_user_groups_from_header(user, trusted_groups, DEFAULT_USER_PERMISSIONS)
-
-        # Authenticate the user using the trusted email
+            
+         # Authenticate the user using the trusted email
         user = Auths.authenticate_user_by_trusted_header(trusted_email)
 
     elif WEBUI_AUTH == False:
