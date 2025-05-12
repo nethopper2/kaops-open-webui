@@ -1,25 +1,25 @@
 <script setup lang="ts">
-import 'devextreme/dist/css/dx.dark.css'
-import { DxButton } from 'devextreme-vue/button'
-import {
-	DxContextMenu,
-	DxFileManager,
-	DxItem,
-	DxPermissions,
-} from 'devextreme-vue/file-manager'
-import { DxForm, DxItem as DxFormItem } from 'devextreme-vue/form'
-import { DxPopup, DxToolbarItem } from 'devextreme-vue/popup'
-import 'devextreme-vue/tag-box'
-import 'devextreme-vue/text-area'
-import { DxTextBox } from 'devextreme-vue/text-box'
-import RemoteFileSystemProvider from 'devextreme/file_management/remote_provider'
-import type { ContextMenuItemClickEvent } from 'devextreme/ui/file_manager'
-import { ref, onMounted } from 'vue'
+import 'devextreme/dist/css/dx.dark.css';
+import { DxButton } from 'devextreme-vue/button';
+import { DxContextMenu, DxFileManager, DxItem, DxPermissions } from 'devextreme-vue/file-manager';
+import { DxForm, DxItem as DxFormItem } from 'devextreme-vue/form';
+import { DxPopup, DxToolbarItem } from 'devextreme-vue/popup';
+import 'devextreme-vue/tag-box';
+import 'devextreme-vue/text-area';
+import { DxTextBox } from 'devextreme-vue/text-box';
+import RemoteFileSystemProvider from 'devextreme/file_management/remote_provider';
+import type { ContextMenuItemClickEvent } from 'devextreme/ui/file_manager';
+import { onMounted, ref } from 'vue';
 import { getBackendConfig } from '$lib/apis';
+import { type $Fetch, ofetch } from 'ofetch';
+import FileSystemItem from 'devextreme/file_management/file_system_item';
 
-const loading = ref(true)
+let apiFetch: $Fetch;
 
-let fileSystemProvider: RemoteFileSystemProvider
+const loading = ref(true);
+const currentFileItem = ref<FileSystemItem>();
+
+let fileSystemProvider: RemoteFileSystemProvider;
 
 const itemViewConfig = {
 	details: {
@@ -32,71 +32,135 @@ const itemViewConfig = {
 				dataField: 'dateModified',
 				dataType: 'datetime',
 				caption: 'Date Modified',
-				width: 'auto',
+				width: 'auto'
 			},
-			'size',
-		],
-	},
-}
+			'size'
+		]
+	}
+};
 
-function handleContextMenuItemClick(e: ContextMenuItemClickEvent) {
+async function handleContextMenuItemClick(e: ContextMenuItemClickEvent) {
+	// console.log('@@ handleContextMenuItemClick', e);
 	if (e.itemData.options.action === 'editMetadata') {
-		// TODO: load tag options from the server if we don't have them already.
-		// TODO: get the metadata from the server and clone it into metaDataToEdit.
-		showEditMetadataPopup.value = true
+		currentFileItem.value = e.fileSystemItem;
+		await loadMetadata();
+		showEditMetadataPopup.value = true;
 	}
 }
 
 const commonButtonOptions = {
 	type: 'default',
-	stylingMode: 'contained',
-}
+	stylingMode: 'contained'
+};
 
-const showEditMetadataPopup = ref(false)
+const showEditMetadataPopup = ref(false);
 const saveButtonOptions = {
 	...commonButtonOptions,
 	text: 'Save',
-	onClick: () => {
-		// TODO: save the metadata to the server and clear metaDataToEdit.
-		showEditMetadataPopup.value = false
-	},
-}
+	onClick: async (e: ContextMenuItemClickEvent) => {
+		try {
+			await apiFetch(`/storage/metadata`, {
+				method: 'PUT',
+				body: {
+					filePath: '' // TODO
+				}
+			});
+		} catch (err) {
+			//
+		}
 
-const tagToAdd = ref('')
-const tagChoices = ref([] as Array<string>)
+		// TODO: save the metadata to the server and clear metaDataToEdit.
+		showEditMetadataPopup.value = false;
+	}
+};
+
+const tagToAdd = ref('');
+const tagChoices = ref([] as Array<string>);
 
 const metaDataToEdit = ref({
 	contextData: '',
-	tags: [] as Array<string>,
-})
+	tags: [] as Array<string>
+});
 
 function addTagOptionAndAutoSelectIt() {
-	if (tagToAdd.value.length === 0) return
+	if (tagToAdd.value.length === 0) return;
 
 	if (!tagChoices.value.includes(tagToAdd.value)) {
-		tagChoices.value = [...tagChoices.value, tagToAdd.value]
+		tagChoices.value = [...tagChoices.value, tagToAdd.value];
 	}
 
 	if (!metaDataToEdit.value.tags.includes(tagToAdd.value)) {
-		metaDataToEdit.value.tags = [...metaDataToEdit.value.tags, tagToAdd.value]
+		metaDataToEdit.value.tags = [...metaDataToEdit.value.tags, tagToAdd.value];
 	}
 
-	tagToAdd.value = ''
+	tagToAdd.value = '';
+}
+
+async function loadMetadata () {
+	if(currentFileItem.value) {
+		try {
+			const { metadata } = await apiFetch('/storage/metadata', {
+				query: {
+					filePathParts: currentFileItem.value.pathKeys
+				}
+			});
+
+			if (metadata) {
+				metaDataToEdit.value = structuredClone(metadata);
+
+			} else{
+				console.warn('No metadata found for file: ', currentFileItem.value.pathKeys);
+			}
+		} catch (err) {
+			console.error(err);
+		}
+	}
+}
+
+async function loadTagOptions() {
+	try {
+		const { tags } = await apiFetch('/storage/tags');
+
+		if (Array.isArray(tags)) {
+			tagChoices.value = tags;
+		} else {
+			console.warn('No tags found');
+			tagChoices.value = [];
+		}
+	} catch (err) {
+		console.error(err);
+	}
+}
+
+function handleDialogShowing() {
+	loadTagOptions();
+}
+
+function handleDialogShown() {
+	//
 }
 
 onMounted(async () => {
-	loading.value = true
+	loading.value = true;
 	const backendConfig = await getBackendConfig();
 
-	fileSystemProvider = new RemoteFileSystemProvider({
-		endpointUrl: `${backendConfig.private_ai.rest_api_base_url}/api/file-manager`, // TODO: cleanup - need env var for this?
-		requestHeaders: {
-			Authorization: 'Bearer ' + localStorage.getItem('token'),
+	apiFetch = ofetch.create({
+		baseURL: `${backendConfig.private_ai.rest_api_base_url}/api`,
+		onRequest({ request, options }) {
+			options.headers ??= new Headers();
+			options.headers.set('Authorization', `Bearer ${localStorage.getItem('token')}`);
 		}
-	})
+	});
 
-	loading.value = false
-})
+	fileSystemProvider = new RemoteFileSystemProvider({
+		endpointUrl: `${backendConfig.private_ai.rest_api_base_url}/api/storage/file-manager`, // TODO: cleanup - need env var for this?
+		requestHeaders: {
+			Authorization: 'Bearer ' + localStorage.getItem('token')
+		}
+	});
+
+	loading.value = false;
+});
 </script>
 
 <template>
@@ -126,39 +190,41 @@ onMounted(async () => {
 		v-model:visible="showEditMetadataPopup"
 		title="Edit Metadata"
 		:show-close-button="true"
+		@showing="handleDialogShowing"
+		@shown="handleDialogShown"
 	>
 		<!--
 		The content slot is used normally, but as a web component for use with
 		svelte, the default slot works.
 		-->
 		<!-- <template #content>-->
-			<div class="flex justify-end gap-2 pb-4">
-				<dx-text-box v-model="tagToAdd" placeholder="Tag" />
-				<dx-button
-					text="Add Tag"
-					:options="commonButtonOptions"
-					@click="addTagOptionAndAutoSelectIt"
-				/>
-			</div>
+		<div class="flex justify-end gap-2 pb-4">
+			<dx-text-box v-model="tagToAdd" placeholder="Tag" />
+			<dx-button
+				text="Add Tag"
+				:options="commonButtonOptions"
+				@click="addTagOptionAndAutoSelectIt"
+			/>
+		</div>
 
-			<form>
-				<dx-form v-model:form-data="metaDataToEdit">
-					<dx-form-item
-						data-field="tags"
-						editor-type="dxTagBox"
-						:editor-options="{ dataSource: tagChoices, showSelectionControls: true }"
-					/>
-					<dx-form-item
-						data-field="contextData"
-						editor-type="dxTextArea"
-						help-text="Provides additional AI context during RAG"
-						:editor-options="{
-              height: 200,
-              maxLength: 200,
-            }"
-					/>
-				</dx-form>
-			</form>
+		<form>
+			<dx-form v-model:form-data="metaDataToEdit">
+				<dx-form-item
+					data-field="tags"
+					editor-type="dxTagBox"
+					:editor-options="{ dataSource: tagChoices, showSelectionControls: true }"
+				/>
+				<dx-form-item
+					data-field="contextData"
+					editor-type="dxTextArea"
+					help-text="Provides additional AI context during RAG"
+					:editor-options="{
+						height: 200,
+						maxLength: 200
+					}"
+				/>
+			</dx-form>
+		</form>
 		<!-- </template>-->
 
 		<dx-toolbar-item
@@ -166,13 +232,13 @@ onMounted(async () => {
 			toolbar="bottom"
 			location="after"
 			:options="{
-        text: 'Cancel',
-        type: 'default',
-        stylingMode: 'outlined',
-        onClick: () => {
-          showEditMetadataPopup = false
-        },
-      }"
+				text: 'Cancel',
+				type: 'default',
+				stylingMode: 'outlined',
+				onClick: () => {
+					showEditMetadataPopup = false;
+				}
+			}"
 		/>
 
 		<dx-toolbar-item
@@ -185,8 +251,9 @@ onMounted(async () => {
 </template>
 
 <style>
-.dx-filemanager { height: 100% !important; }
-
+.dx-filemanager {
+	height: 100% !important;
+}
 
 /* a work around for hiding the checkboxes since selection-mode="none" causes a build error and is a hack */
 .dx-filemanager .dx-checkbox {
