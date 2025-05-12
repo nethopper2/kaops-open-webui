@@ -30,21 +30,24 @@ from open_webui.env import (
     WEBUI_AUTH_TRUSTED_GROUPS_HEADER,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
+    WEBUI_AUTH_SIGNOUT_REDIRECT_URL,
     SRC_LOG_LEVELS,
 )
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response
 from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP, DEFAULT_USER_PERMISSIONS, OAUTH_PROVIDER_NAME
 from pydantic import BaseModel
+
 from open_webui.utils.misc import parse_duration, validate_email_format
 from open_webui.utils.auth import (
+    decode_token,
     create_api_key,
     create_token,
     get_admin_user,
     get_verified_user,
     get_current_user,
     get_password_hash,
-    decode_token
+    get_http_authorization_cred,
 )
 from open_webui.utils.webhook import post_webhook
 from open_webui.utils.access_control import get_permissions
@@ -76,31 +79,36 @@ class SessionUserResponse(Token, UserResponse):
 async def get_session_user(
     request: Request, response: Response, user=Depends(get_current_user)
 ):
-    expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
+
+    auth_header = request.headers.get("Authorization")
+    auth_token = get_http_authorization_cred(auth_header)
+    token = auth_token.credentials
+    data = decode_token(token)
+
     expires_at = None
-    if expires_delta:
-        expires_at = int(time.time()) + int(expires_delta.total_seconds())
 
-    token = create_token(
-        data={"id": user.id},
-        expires_delta=expires_delta,
-    )
+    if data:
+        expires_at = data.get("exp")
 
-    datetime_expires_at = (
-        datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc)
-        if expires_at
-        else None
-    )
+        if (expires_at is not None) and int(time.time()) > expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=ERROR_MESSAGES.INVALID_TOKEN,
+            )
 
-    # Set the cookie token
-    response.set_cookie(
-        key="token",
-        value=token,
-        expires=datetime_expires_at,
-        httponly=True,  # Ensures the cookie is not accessible via JavaScript
-        samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
-        secure=WEBUI_AUTH_COOKIE_SECURE,
-    )
+        # Set the cookie token
+        response.set_cookie(
+            key="token",
+            value=token,
+            expires=(
+                datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc)
+                if expires_at
+                else None
+            ),
+            httponly=True,  # Ensures the cookie is not accessible via JavaScript
+            samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
+            secure=WEBUI_AUTH_COOKIE_SECURE,
+        )
 
     user_permissions = get_permissions(
         user.id, request.app.state.config.USER_PERMISSIONS
@@ -229,12 +237,14 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
             ],
         )
 
-        if not search_success:
+        if not search_success or not connection_app.entries:
             raise HTTPException(400, detail="User not found in the LDAP server")
 
         entry = connection_app.entries[0]
         username = str(entry[f"{LDAP_ATTRIBUTE_FOR_USERNAME}"]).lower()
-        email = entry[f"{LDAP_ATTRIBUTE_FOR_MAIL}"].value  # retrive the Attribute value
+        email = entry[
+            f"{LDAP_ATTRIBUTE_FOR_MAIL}"
+        ].value  # retrieve the Attribute value
         if not email:
             raise HTTPException(400, "User does not have a valid email address.")
         elif isinstance(email, str):
@@ -292,18 +302,30 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
             user = Auths.authenticate_user_by_trusted_header(email)
 
             if user:
+                expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
+                expires_at = None
+                if expires_delta:
+                    expires_at = int(time.time()) + int(expires_delta.total_seconds())
+
                 token = create_token(
                     data={"id": user.id},
-                    expires_delta=parse_duration(
-                        request.app.state.config.JWT_EXPIRES_IN
-                    ),
+                    expires_delta=expires_delta,
                 )
 
                 # Set the cookie token
                 response.set_cookie(
                     key="token",
                     value=token,
+                    expires=(
+                        datetime.datetime.fromtimestamp(
+                            expires_at, datetime.timezone.utc
+                        )
+                        if expires_at
+                        else None
+                    ),
                     httponly=True,  # Ensures the cookie is not accessible via JavaScript
+                    samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
+                    secure=WEBUI_AUTH_COOKIE_SECURE,
                 )
 
                 user_permissions = get_permissions(
@@ -313,6 +335,7 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
                 return {
                     "token": token,
                     "token_type": "Bearer",
+                    "expires_at": expires_at,
                     "id": user.id,
                     "email": user.email,
                     "name": user.name,
@@ -339,14 +362,14 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
-        
+
         # Fetch the Authorization headers added to request
         # This will be used when using SSO to extract user profile and file data
         sso_provider = str(OAUTH_PROVIDER_NAME).lower()
         token = request.headers.get(
                 'X-Forwarded-Access-Token', None
             )
-        
+
          #Retrieve the trusted email from the headers and set trusted name and profile image URL to default values
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
         trusted_name = trusted_email
@@ -360,7 +383,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             )
 
         # If the SSO provider is present, use it to fetch user profile data
-        # and update the trusted email, name, and profile image URL 
+        # and update the trusted email, name, and profile image URL
         if sso_provider:
             sso_response = Users.get_user_profile_data_from_sso_provider(sso_provider, token)
             if sso_response:
@@ -379,7 +402,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                     email=trusted_email, password=str(uuid.uuid4()), name=trusted_name, profile_image_url=trusted_profile_image_url
                 ),
             )
-        
+
         # If the user exists and the SSO provider is present, update the user's profile image URL and name
         # and fetch user file data from the SSO provider
         if sso_provider and user_exists:
@@ -388,7 +411,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             # with the data fetched from the SSO provider
             if user_exists.profile_image_url != trusted_profile_image_url:
                 Users.update_user_by_id(user_exists.id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
-    
+
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER:
             trusted_groups = request.headers.get(
                 WEBUI_AUTH_TRUSTED_GROUPS_HEADER, ''
@@ -615,6 +638,12 @@ async def signout(request: Request, response: Response):
                     detail="Failed to sign out from the OpenID provider.",
                 )
 
+    if WEBUI_AUTH_SIGNOUT_REDIRECT_URL:
+        return RedirectResponse(
+            headers=response.headers,
+            url=WEBUI_AUTH_SIGNOUT_REDIRECT_URL,
+        )
+
     return {"status": True}
 
 
@@ -713,6 +742,7 @@ async def get_admin_config(request: Request, user=Depends(get_admin_user)):
         "ENABLE_COMMUNITY_SHARING": request.app.state.config.ENABLE_COMMUNITY_SHARING,
         "ENABLE_MESSAGE_RATING": request.app.state.config.ENABLE_MESSAGE_RATING,
         "ENABLE_CHANNELS": request.app.state.config.ENABLE_CHANNELS,
+        "ENABLE_NOTES": request.app.state.config.ENABLE_NOTES,
         "ENABLE_USER_WEBHOOKS": request.app.state.config.ENABLE_USER_WEBHOOKS,
     }
 
@@ -729,6 +759,7 @@ class AdminConfig(BaseModel):
     ENABLE_COMMUNITY_SHARING: bool
     ENABLE_MESSAGE_RATING: bool
     ENABLE_CHANNELS: bool
+    ENABLE_NOTES: bool
     ENABLE_USER_WEBHOOKS: bool
 
 
@@ -749,6 +780,7 @@ async def update_admin_config(
     )
 
     request.app.state.config.ENABLE_CHANNELS = form_data.ENABLE_CHANNELS
+    request.app.state.config.ENABLE_NOTES = form_data.ENABLE_NOTES
 
     if form_data.DEFAULT_USER_ROLE in ["pending", "user", "admin"]:
         request.app.state.config.DEFAULT_USER_ROLE = form_data.DEFAULT_USER_ROLE
@@ -773,11 +805,12 @@ async def update_admin_config(
         "ENABLE_API_KEY": request.app.state.config.ENABLE_API_KEY,
         "ENABLE_API_KEY_ENDPOINT_RESTRICTIONS": request.app.state.config.ENABLE_API_KEY_ENDPOINT_RESTRICTIONS,
         "API_KEY_ALLOWED_ENDPOINTS": request.app.state.config.API_KEY_ALLOWED_ENDPOINTS,
-        "ENABLE_CHANNELS": request.app.state.config.ENABLE_CHANNELS,
         "DEFAULT_USER_ROLE": request.app.state.config.DEFAULT_USER_ROLE,
         "JWT_EXPIRES_IN": request.app.state.config.JWT_EXPIRES_IN,
         "ENABLE_COMMUNITY_SHARING": request.app.state.config.ENABLE_COMMUNITY_SHARING,
         "ENABLE_MESSAGE_RATING": request.app.state.config.ENABLE_MESSAGE_RATING,
+        "ENABLE_CHANNELS": request.app.state.config.ENABLE_CHANNELS,
+        "ENABLE_NOTES": request.app.state.config.ENABLE_NOTES,
         "ENABLE_USER_WEBHOOKS": request.app.state.config.ENABLE_USER_WEBHOOKS,
     }
 
