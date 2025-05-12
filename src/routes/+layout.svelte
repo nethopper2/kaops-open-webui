@@ -2,6 +2,7 @@
 	import { io } from 'socket.io-client';
 	import { spring } from 'svelte/motion';
 	import PyodideWorker from '$lib/workers/pyodide.worker?worker';
+	import '$lib/utils/resigter-web-components.ts';
 
 	let loadingProgress = spring(0, {
 		stiffness: 0.05
