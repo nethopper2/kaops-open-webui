@@ -94,9 +94,7 @@ export const getAuthToken = async () => {
 };
 
 const initialize = async () => {
-	console.log('1');
 	if (!initialized) {
-		console.log('2');
 		await getCredentials();
 		validateCredentials();
 		await Promise.all([loadGoogleDriveApi(), loadGoogleAuthApi()]);
