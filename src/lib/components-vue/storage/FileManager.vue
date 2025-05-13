@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import 'devextreme/dist/css/dx.dark.css';
 import { DxButton } from 'devextreme-vue/button';
-import { DxContextMenu, DxFileManager, DxItem, DxPermissions } from 'devextreme-vue/file-manager';
+import {
+	DxColumn,
+	DxContextMenu,
+	DxDetails,
+	DxFileManager,
+	DxItem,
+	DxItemView,
+	DxPermissions,
+	DxToolbar
+} from 'devextreme-vue/file-manager';
 import { DxForm, DxItem as DxFormItem } from 'devextreme-vue/form';
 import { DxPopup, DxToolbarItem } from 'devextreme-vue/popup';
 import 'devextreme-vue/tag-box';
 import 'devextreme-vue/text-area';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import RemoteFileSystemProvider from 'devextreme/file_management/remote_provider';
-import type { ContextMenuItemClickEvent } from 'devextreme/ui/file_manager';
+import type { ContextMenuItemClickEvent, ContextMenuShowingEvent } from 'devextreme/ui/file_manager';
 import { onMounted, ref } from 'vue';
 import { getBackendConfig } from '$lib/apis';
 import { type $Fetch, ofetch } from 'ofetch';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
 import { toast } from 'svelte-sonner';
 
-const props = defineProps(['i18n'])
+const props = defineProps(['i18n']);
 
 let apiFetch: $Fetch;
 
@@ -24,29 +33,18 @@ const currentFileItem = ref<FileSystemItem>();
 
 let fileSystemProvider: RemoteFileSystemProvider;
 
-const itemViewConfig = {
-	details: {
-		columns: [
-			// TODO: This should not prevent the icons from showing, but it does. How to fix this?
-			//  Seems it is a bug in DevExtreme Vue.
-			'name',
-			// customize to show the time in the Date Modified column
-			{
-				dataField: 'dateModified',
-				dataType: 'datetime',
-				caption: 'Date Modified',
-				width: 'auto'
-			},
-			'size'
-		]
-	}
-};
-
 async function handleContextMenuItemClick(e: ContextMenuItemClickEvent) {
 	if (e.itemData.options.action === 'editMetadata') {
 		currentFileItem.value = e.fileSystemItem;
 		await loadMetadata();
 		showEditMetadataPopup.value = true;
+	}
+}
+
+function handleContextMenuShowing(e: ContextMenuShowingEvent) {
+	console.log('@@ e: ', e);
+	if (!e.fileSystemItem?.path.length) {
+		e.cancel = true; // Prevent the context menu from showing
 	}
 }
 
@@ -71,10 +69,8 @@ const saveButtonOptions = {
 					}
 				});
 
-				if(response.success) {
-					toast.success(
-						props.i18n.t(`Metadata saved`)
-					);
+				if (response.success) {
+					toast.success(props.i18n.t(`Metadata saved`));
 					showEditMetadataPopup.value = false;
 				} else {
 					throw new Error(response.message);
@@ -84,9 +80,7 @@ const saveButtonOptions = {
 			}
 		} catch (err) {
 			console.log('ERROR', props.i18n);
-			toast.error(
-				props.i18n.t(`Failed to save metadata`)
-			);
+			toast.error(props.i18n.t(`Failed to save metadata`));
 		}
 	}
 };
@@ -191,8 +185,9 @@ onMounted(async () => {
 	<dx-file-manager
 		v-if="!loading"
 		:file-system-provider="fileSystemProvider"
-		:item-view="itemViewConfig"
 		:on-context-menu-item-click="handleContextMenuItemClick"
+		:on-context-menu-showing="handleContextMenuShowing"
+		root-folder-name="Knowledge Data"
 		v-bind="$attrs"
 	>
 		<dx-permissions
@@ -208,6 +203,30 @@ onMounted(async () => {
 		<dx-context-menu>
 			<dx-item text="Edit Metadata" :options="{ action: 'editMetadata' }" />
 		</dx-context-menu>
+
+		<dx-item-view>
+			<dx-details>
+				<dx-column data-field="thumbnail" />
+				<dx-column data-field="name" />
+				<dx-column
+					data-field="dateModified"
+					dataType="datetime"
+					caption="Date Modified"
+					width="auto"
+				/>
+				<dx-column data-field="size" />
+			</dx-details>
+		</dx-item-view>
+
+		<dx-toolbar>
+			<dx-item name="showNavPane" :visible="true"/>
+			<dx-item name="refresh"/>
+			<dx-item
+				name="separator"
+				location="after"
+			/>
+			<dx-item name="switchView"/>
+		</dx-toolbar>
 	</dx-file-manager>
 
 	<dx-popup
