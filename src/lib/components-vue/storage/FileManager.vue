@@ -13,6 +13,9 @@ import { onMounted, ref } from 'vue';
 import { getBackendConfig } from '$lib/apis';
 import { type $Fetch, ofetch } from 'ofetch';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
+import { toast } from 'svelte-sonner';
+
+const props = defineProps(['i18n'])
 
 let apiFetch: $Fetch;
 
@@ -40,7 +43,6 @@ const itemViewConfig = {
 };
 
 async function handleContextMenuItemClick(e: ContextMenuItemClickEvent) {
-	// console.log('@@ handleContextMenuItemClick', e);
 	if (e.itemData.options.action === 'editMetadata') {
 		currentFileItem.value = e.fileSystemItem;
 		await loadMetadata();
@@ -57,30 +59,49 @@ const showEditMetadataPopup = ref(false);
 const saveButtonOptions = {
 	...commonButtonOptions,
 	text: 'Save',
-	onClick: async (e: ContextMenuItemClickEvent) => {
+	onClick: async (e: MouseEvent) => {
 		try {
-			await apiFetch(`/storage/metadata`, {
-				method: 'PUT',
-				body: {
-					filePath: '' // TODO
-				}
-			});
-		} catch (err) {
-			//
-		}
+			if (currentFileItem.value) {
+				const response = await apiFetch(`/storage/metadata`, {
+					method: 'PUT',
+					body: {
+						filePathParts: currentFileItem.value.pathKeys,
+						tags: metaDataToEdit.value.tags,
+						contextData: metaDataToEdit.value.contextData
+					}
+				});
 
-		// TODO: save the metadata to the server and clear metaDataToEdit.
-		showEditMetadataPopup.value = false;
+				if(response.success) {
+					toast.success(
+						props.i18n.t(`Metadata saved`)
+					);
+					showEditMetadataPopup.value = false;
+				} else {
+					throw new Error(response.message);
+				}
+			} else {
+				console.warn('No current file item');
+			}
+		} catch (err) {
+			console.log('ERROR', props.i18n);
+			toast.error(
+				props.i18n.t(`Failed to save metadata`)
+			);
+		}
 	}
 };
 
 const tagToAdd = ref('');
 const tagChoices = ref([] as Array<string>);
 
-const metaDataToEdit = ref({
-	contextData: '',
-	tags: [] as Array<string>
-});
+const metaDataToEdit = ref(getEmptyMetadata());
+
+function getEmptyMetadata() {
+	return {
+		contextData: '',
+		tags: [] as Array<string>
+	};
+}
 
 function addTagOptionAndAutoSelectIt() {
 	if (tagToAdd.value.length === 0) return;
@@ -96,8 +117,8 @@ function addTagOptionAndAutoSelectIt() {
 	tagToAdd.value = '';
 }
 
-async function loadMetadata () {
-	if(currentFileItem.value) {
+async function loadMetadata() {
+	if (currentFileItem.value) {
 		try {
 			const { metadata } = await apiFetch('/storage/metadata', {
 				query: {
@@ -107,8 +128,7 @@ async function loadMetadata () {
 
 			if (metadata) {
 				metaDataToEdit.value = structuredClone(metadata);
-
-			} else{
+			} else {
 				console.warn('No metadata found for file: ', currentFileItem.value.pathKeys);
 			}
 		} catch (err) {
@@ -138,6 +158,10 @@ function handleDialogShowing() {
 
 function handleDialogShown() {
 	//
+}
+
+function handleDialogHidden() {
+	metaDataToEdit.value = getEmptyMetadata();
 }
 
 onMounted(async () => {
@@ -192,6 +216,7 @@ onMounted(async () => {
 		:show-close-button="true"
 		@showing="handleDialogShowing"
 		@shown="handleDialogShown"
+		@hidden="handleDialogHidden"
 	>
 		<!--
 		The content slot is used normally, but as a web component for use with
