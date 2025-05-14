@@ -11,6 +11,7 @@
 
 	import AdvancedParams from './Advanced/AdvancedParams.svelte';
 	import Textarea from '$lib/components/common/Textarea.svelte';
+	import { appHooks } from '$lib/utils/hooks';
 
 	export let saveSettings: Function;
 	export let getModels: Function;
@@ -224,6 +225,9 @@
 		}
 
 		console.log(_theme);
+
+		// Notify anyone who cares.
+		appHooks.callHook('theme.changed', { theme: _theme, mode: themeToApply as 'light' | 'dark' })
 	};
 
 	const themeChangeHandler = (_theme: string) => {

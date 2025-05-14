@@ -10,6 +10,8 @@ import Modal from '$lib/components/common/Modal.svelte';
 
 dayjs.extend(relativeTime);
 
+let TRefFileMgr: unknown;
+
 const i18n = getContext('i18n');
 
 let loaded = false;
@@ -79,7 +81,7 @@ onMount(async () => {
 
 
 		<div class="grow flex flex-col gap-3">
-			<file-manager class="grow" i18n={$i18n} />
+			<file-manager class="grow" i18n={$i18n} bind:this={TRefFileMgr} />
 		</div>
 	</div>
 {:else}

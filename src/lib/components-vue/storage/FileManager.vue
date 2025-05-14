@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import 'devextreme/dist/css/dx.dark.css';
 import { DxButton } from 'devextreme-vue/button';
 import {
 	DxColumn,
@@ -17,14 +16,28 @@ import 'devextreme-vue/tag-box';
 import 'devextreme-vue/text-area';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import RemoteFileSystemProvider from 'devextreme/file_management/remote_provider';
-import type { ContextMenuItemClickEvent, ContextMenuShowingEvent } from 'devextreme/ui/file_manager';
-import { onMounted, ref } from 'vue';
+import type {
+	ContextMenuItemClickEvent,
+	ContextMenuShowingEvent
+} from 'devextreme/ui/file_manager';
+import { onBeforeMount, onMounted, onUnmounted, ref, useHost } from 'vue';
 import { getBackendConfig } from '$lib/apis';
 import { type $Fetch, ofetch } from 'ofetch';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
 import { toast } from 'svelte-sonner';
+import { appHooks } from '$lib/utils/hooks';
 
 const props = defineProps(['i18n']);
+const svelteHost = useHost();
+
+// Left as a reminder on how to expose methods as a custom element.
+// if (svelteHost) {
+// 	svelteHost.customMethod = () => {
+// 		console.log('customMethod called');
+// 	};
+// }
+
+const TRefFileManager = ref();
 
 let apiFetch: $Fetch;
 
@@ -42,7 +55,6 @@ async function handleContextMenuItemClick(e: ContextMenuItemClickEvent) {
 }
 
 function handleContextMenuShowing(e: ContextMenuShowingEvent) {
-	console.log('@@ e: ', e);
 	if (!e.fileSystemItem?.path.length) {
 		e.cancel = true; // Prevent the context menu from showing
 	}
@@ -158,8 +170,63 @@ function handleDialogHidden() {
 	metaDataToEdit.value = getEmptyMetadata();
 }
 
+function loadTheme(href: string) {
+	unloadCurrentTheme();
+
+	const link = document.createElement('link');
+	link.setAttribute('rel', 'stylesheet');
+	link.setAttribute('href', href);
+	link.setAttribute('data-loaded-theme', 'true'); // easier removal later
+	svelteHost?.shadowRoot?.appendChild?.(link);
+
+	// and tell the FileManager to redraw
+	TRefFileManager.value?.instance?.repaint?.();
+}
+
+function loadDarkTheme() {
+	// REMINDER: If the devextreme dependency is upgraded, you may need to
+	// re-copy the styles from `devextreme/dist/css`
+	loadTheme('/themes/vendor/dx.dark.css');
+	console.log('loaded file manager dark theme');
+}
+
+function loadLightTheme() {
+	// REMINDER: If the devextreme dependency is upgraded, you may need to
+	// re-copy the styles from `devextreme/dist/css`
+	loadTheme('/themes/vendor/dx.light.css');
+	console.log('loaded file manager light theme');
+}
+
+function unloadCurrentTheme() {
+	const link = svelteHost?.shadowRoot?.querySelector?.('link[data-loaded-theme="true"]');
+	if (link) {
+		console.log('removed file manager theme');
+		link.remove();
+	}
+}
+
+let unregisterHooks: () => void;
+
+onBeforeMount(() => {
+	// load the proper theme based on the host.
+	if(document.documentElement.classList.contains('dark')){
+		loadDarkTheme();
+	}else{
+		loadLightTheme();
+	}
+
+	unregisterHooks = appHooks.hook('theme.changed', ({mode}) => {
+		if(mode === 'dark') {
+			loadDarkTheme();
+		} else {
+			loadLightTheme();
+		}
+	});
+});
+
 onMounted(async () => {
 	loading.value = true;
+
 	const backendConfig = await getBackendConfig();
 
 	apiFetch = ofetch.create({
@@ -171,7 +238,7 @@ onMounted(async () => {
 	});
 
 	fileSystemProvider = new RemoteFileSystemProvider({
-		endpointUrl: `${backendConfig.private_ai.rest_api_base_url}/api/storage/file-manager`, // TODO: cleanup - need env var for this?
+		endpointUrl: `${backendConfig.private_ai.rest_api_base_url}/api/storage/file-manager`,
 		requestHeaders: {
 			Authorization: 'Bearer ' + localStorage.getItem('token')
 		}
@@ -179,11 +246,16 @@ onMounted(async () => {
 
 	loading.value = false;
 });
+
+onUnmounted(() => {
+	unregisterHooks()
+})
 </script>
 
 <template>
 	<dx-file-manager
 		v-if="!loading"
+		ref="TRefFileManager"
 		:file-system-provider="fileSystemProvider"
 		:on-context-menu-item-click="handleContextMenuItemClick"
 		:on-context-menu-showing="handleContextMenuShowing"
@@ -219,13 +291,10 @@ onMounted(async () => {
 		</dx-item-view>
 
 		<dx-toolbar>
-			<dx-item name="showNavPane" :visible="true"/>
-			<dx-item name="refresh"/>
-			<dx-item
-				name="separator"
-				location="after"
-			/>
-			<dx-item name="switchView"/>
+			<dx-item name="showNavPane" :visible="true" />
+			<dx-item name="refresh" />
+			<dx-item name="separator" location="after" />
+			<dx-item name="switchView" />
 		</dx-toolbar>
 	</dx-file-manager>
 
@@ -295,6 +364,19 @@ onMounted(async () => {
 </template>
 
 <style>
+/**
+ * The fonts were copied from the node_module to the static directory in
+ * /themes/vendor/icons/
+ * The dark & light stylesheets were also copied. This is needed since the shadowRoot
+ * was unable to use the font-face from the injected stylesheet.
+ */
+@font-face {
+	font-family: DXIcons;
+	src: local("DevExtreme Generic Icons"), local("devextreme_generic_icons"), url("/themes/vendor/icons/dxicons.woff2") format("woff2"), url("/themes/vendor/icons/dxicons.woff") format("woff"), url("/themes/vendor/icons/dxicons.ttf") format("truetype");
+	font-weight: 400;
+	font-style: normal
+}
+
 .dx-filemanager {
 	height: 100% !important;
 }
