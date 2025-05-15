@@ -2851,5 +2851,5 @@ NH_ENABLE_UPSTREAM_UI = PersistentConfig(
 )
 # The base url for the private-ai-rest dependency
 NH_API_BASE_URL = PersistentConfig(
-    "WEBUI_URL", "private_ai.url", os.environ.get("NH_API_BASE_URL", "http://localhost:3000")
+    "NH_API_BASE_URL", "private_ai.api_base_url", os.environ.get("NH_API_BASE_URL", "http://localhost:3000")
 )
