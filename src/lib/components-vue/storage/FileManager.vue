@@ -173,6 +173,12 @@ function handleDialogHidden() {
 function loadTheme(href: string) {
 	unloadCurrentTheme();
 
+	const linkHead = document.createElement('link');
+	linkHead.setAttribute('rel', 'stylesheet');
+	linkHead.setAttribute('href', href);
+	linkHead.setAttribute('data-loaded-theme-head', 'true'); // easier removal later
+	document.head.appendChild(linkHead);
+
 	const link = document.createElement('link');
 	link.setAttribute('rel', 'stylesheet');
 	link.setAttribute('href', href);
@@ -198,9 +204,15 @@ function loadLightTheme() {
 }
 
 function unloadCurrentTheme() {
+	const linkHead = document.head.querySelector('link[data-loaded-theme-head="true"]');
+	if (linkHead) {
+		console.log('removed file manager theme from head');
+		linkHead.remove();
+	}
+
 	const link = svelteHost?.shadowRoot?.querySelector?.('link[data-loaded-theme="true"]');
 	if (link) {
-		console.log('removed file manager theme');
+		console.log('removed file manager theme from shadowRoot');
 		link.remove();
 	}
 }
