@@ -79,9 +79,8 @@ onMount(async () => {
 		</div>
 
 
-
-		<div class="grow flex flex-col gap-3">
-			<file-manager class="grow" i18n={$i18n} bind:this={TRefFileMgr} />
+		<div class="relative grow flex flex-col">
+			<file-manager class="absolute inset-0" i18n={$i18n} bind:this={TRefFileMgr} />
 		</div>
 	</div>
 {:else}
