@@ -118,6 +118,8 @@ function addTagOptionAndAutoSelectIt() {
 
 	if (!metaDataToEdit.value.tags.includes(tagToAdd.value)) {
 		metaDataToEdit.value.tags = [...metaDataToEdit.value.tags, tagToAdd.value];
+		// force reactivity
+		metaDataToEdit.value = { ...metaDataToEdit.value };
 	}
 
 	tagToAdd.value = '';
