@@ -325,6 +325,7 @@ from open_webui.config import (
     # Private AI
     NH_ENABLE_UPSTREAM_UI,
     NH_API_BASE_URL,
+    NH_WEBUI_CUSTOM,
 )
 from open_webui.env import (
     AUDIT_EXCLUDED_PATHS,
@@ -861,6 +862,7 @@ app.state.config.AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH = (
 
 app.state.config.NH_ENABLE_UPSTREAM_UI = NH_ENABLE_UPSTREAM_UI
 app.state.config.NH_API_BASE_URL = NH_API_BASE_URL
+app.state.config.NH_WEBUI_CUSTOM = NH_WEBUI_CUSTOM
 
 
 ########################################
@@ -1315,6 +1317,7 @@ async def get_app_config(request: Request):
         "private_ai": {
             "enable_upstream_ui": app.state.config.NH_ENABLE_UPSTREAM_UI,
             "rest_api_base_url": app.state.config.NH_API_BASE_URL,
+            "webui_custom": app.state.config.NH_WEBUI_CUSTOM,
         },
         **(
             {

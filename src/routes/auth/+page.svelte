@@ -28,6 +28,9 @@
 
 	let ldapUsername = '';
 
+  let brandingLogo = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom)?.logo : '';
+  let bgImageAuth = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom)?.bgImageAuth : '';
+
 	const querystringValue = (key) => {
 		const querystring = window.location.search;
 		const urlParams = new URLSearchParams(querystring);
@@ -171,7 +174,24 @@
 />
 
 <div class="w-full h-screen max-h-[100dvh] text-white relative">
-	<div class="w-full h-full absolute top-0 left-0 bg-white dark:bg-black"></div>
+  {#if bgImageAuth}
+  <!-- ::before pseudo-element as a div -->
+  <div 
+    class="pointer-events-none absolute inset-0 -z-20"
+    style="
+      background: url('{bgImageAuth}') center/cover no-repeat;
+      filter: brightness(0.4);
+      content: '';
+    ">
+  </div>
+  <!-- ::after pseudo-element as a div -->
+  <div 
+    class="pointer-events-none absolute inset-0 -z-10 bg-black/30"
+    style="content: '';">
+  </div>
+  {:else}
+  	<div class="w-full h-full absolute top-0 left-0 bg-white dark:bg-black"></div>
+  {/if}
 
 	<div class="w-full absolute top-0 left-0 right-0 h-8 drag-region" />
 
@@ -218,6 +238,13 @@
 							}}
 						>
 							<div class="mb-1">
+								{#if brandingLogo}
+                <img
+                    src={brandingLogo}
+                    alt="Logo"
+                    class="mx-auto mb-8"
+                />              
+                {/if}
 								<div class=" text-2xl font-medium">
 									{#if $config?.onboarding ?? false}
 										{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}

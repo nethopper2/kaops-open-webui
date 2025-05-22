@@ -234,7 +234,7 @@ INVESTMENT_BANKER_PROMPT_SUGGESTIONS_DATA = [
     }  
 ]
 
-GENERAL_PROMPT_SUGGESTIONS_DATA = [
+PRIVATE_AI_PROMPT_SUGGESTIONS_DATA = [
     {
         "title": ["Data Insights", ""],
         "content": "Data Insights",
@@ -327,7 +327,6 @@ GENERAL_PROMPT_SUGGESTIONS_DATA = [
     }
 ]
 
-
 INVESTMENT_BANKER_CONFIG = {
     "version": 0,
     "ui": {
@@ -336,29 +335,30 @@ INVESTMENT_BANKER_CONFIG = {
     },
 }
 
-GENERAL_CONFIG = {
+PRIVATE_AI_CONFIG = {
     "version": 0,
     "ui": {
         "default_locale": "",
-        "prompt_suggestions": GENERAL_PROMPT_SUGGESTIONS_DATA,
+        "prompt_suggestions": PRIVATE_AI_PROMPT_SUGGESTIONS_DATA,
     },
 }
 
 SECTOR_CONFIGS = {
-    "general": GENERAL_CONFIG,
-    "investment_banking": INVESTMENT_BANKER_CONFIG,
+    "default": PRIVATE_AI_CONFIG,
+    "investmentBanking": INVESTMENT_BANKER_CONFIG,
 }
 
 SECTOR_PROMPT_DATA = {
-    "general": GENERAL_PROMPT_SUGGESTIONS_DATA,
-    "investment_banking": INVESTMENT_BANKER_PROMPT_SUGGESTIONS_DATA,
+    "default": PRIVATE_AI_PROMPT_SUGGESTIONS_DATA,
+    "investmentBanking": INVESTMENT_BANKER_PROMPT_SUGGESTIONS_DATA,
 }
 
-SECTOR_NAME = (
-    os.getenv("SECTOR_NAME", "general").lower()
-)
+# Parse the JSON string into a dictionary
+NH_WEBUI_CUSTOM = os.getenv("NH_WEBUI_CUSTOM", '{}')
+NH_CUSTOM_DATA = json.loads(NH_WEBUI_CUSTOM)
+SECTOR_NAME = NH_CUSTOM_DATA.get("sector", "default").lower()
 
-DEFAULT_CONFIG = SECTOR_CONFIGS.get(SECTOR_NAME, GENERAL_CONFIG)
+DEFAULT_CONFIG = SECTOR_CONFIGS.get(SECTOR_NAME, PRIVATE_AI_CONFIG)
 
 def get_config():
     with get_db() as db:
@@ -1152,7 +1152,7 @@ DEFAULT_MODELS = PersistentConfig(
     "DEFAULT_MODELS", "ui.default_models", os.environ.get("DEFAULT_MODELS", None)
 )
 
-PROMPT_DATA = SECTOR_PROMPT_DATA.get(SECTOR_NAME, GENERAL_PROMPT_SUGGESTIONS_DATA)
+PROMPT_DATA = SECTOR_PROMPT_DATA.get(SECTOR_NAME, PRIVATE_AI_PROMPT_SUGGESTIONS_DATA)
 DEFAULT_PROMPT_SUGGESTIONS = PersistentConfig(
     "DEFAULT_PROMPT_SUGGESTIONS",
     "ui.prompt_suggestions",
@@ -2880,4 +2880,10 @@ NH_ENABLE_UPSTREAM_UI = PersistentConfig(
 # The base url for the private-ai-rest dependency
 NH_API_BASE_URL = PersistentConfig(
     "NH_API_BASE_URL", "private_ai.api_base_url", os.environ.get("NH_API_BASE_URL", "http://localhost:3000")
+)
+# Custom NH settings for the WebUI model
+NH_WEBUI_CUSTOM = PersistentConfig(
+    "NH_WEBUI_CUSTOM",
+    "private_ai.webui_custom",
+    os.getenv("NH_WEBUI_CUSTOM", '{}'),
 )
