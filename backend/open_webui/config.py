@@ -356,7 +356,7 @@ SECTOR_PROMPT_DATA = {
 # Parse the JSON string into a dictionary
 NH_WEBUI_CUSTOM = os.getenv("NH_WEBUI_CUSTOM", '{}')
 NH_CUSTOM_DATA = json.loads(NH_WEBUI_CUSTOM)
-SECTOR_NAME = NH_CUSTOM_DATA.get("sector", "default").lower()
+SECTOR_NAME = NH_CUSTOM_DATA.get("sector", "default")
 
 DEFAULT_CONFIG = SECTOR_CONFIGS.get(SECTOR_NAME, PRIVATE_AI_CONFIG)
 
