@@ -3,6 +3,7 @@
 	import Modal from '$lib/components/common/Modal.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import { config } from '$lib/stores';
 
 	const i18n = getContext('i18n');
 
@@ -98,10 +99,20 @@
 								tippyOptions={{ duration: [500, 0] }}
 							>
 								<div class="text-sm dark:text-gray-400 flex items-center gap-2 w-fit">
+<!--									<a-->
+<!--										class="hover:text-gray-500 dark:hover:text-gray-100 underline grow"-->
+<!--										href={document?.metadata?.file_id-->
+<!--											? `${WEBUI_API_BASE_URL}/files/${document?.metadata?.file_id}/content${document?.metadata?.page !== undefined ? `#page=${document.metadata.page + 1}` : ''}`-->
+<!--											: document.source?.url?.includes('http')-->
+<!--												? document.source.url-->
+<!--												: `#`}-->
+<!--										target="_blank"-->
+<!--									>-->
+									<!-- TODO: cleanup - adjust this for when there are multiple sources -->
 									<a
 										class="hover:text-gray-500 dark:hover:text-gray-100 underline grow"
 										href={document?.metadata?.file_id
-											? `${WEBUI_API_BASE_URL}/files/${document?.metadata?.file_id}/content${document?.metadata?.page !== undefined ? `#page=${document.metadata.page + 1}` : ''}`
+											? `${$config?.private_ai.citation_document_url}/${document?.metadata?.file_id}`
 											: document.source?.url?.includes('http')
 												? document.source.url
 												: `#`}

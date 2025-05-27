@@ -322,6 +322,7 @@ from open_webui.config import (
     AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH,
     AppConfig,
     reset_config,
+    GCS_BUCKET_NAME,
     # Private AI
     NH_ENABLE_UPSTREAM_UI,
     NH_API_BASE_URL,
@@ -1315,6 +1316,7 @@ async def get_app_config(request: Request):
             ),
         },
         "private_ai": {
+            "citation_document_url": f"https://storage.cloud.google.com/{GCS_BUCKET_NAME}",
             "enable_upstream_ui": app.state.config.NH_ENABLE_UPSTREAM_UI,
             "rest_api_base_url": app.state.config.NH_API_BASE_URL,
             "webui_custom": app.state.config.NH_WEBUI_CUSTOM,
