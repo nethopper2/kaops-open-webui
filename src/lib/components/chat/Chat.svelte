@@ -253,6 +253,7 @@
 			let message = history.messages[event.message_id];
 
 			if (message) {
+				// console.log('@@ message: ', message);
 				const type = event?.data?.type ?? null;
 				const data = event?.data?.data ?? null;
 
@@ -853,7 +854,7 @@
 	};
 	const chatCompletedHandler = async (chatId, modelId, responseMessageId, messages) => {
 		const res = await chatCompleted(localStorage.token, {
-			model: modelId,
+			model: attemptStripPrivateAIModel([modelId])[0],
 			messages: messages.map((m) => ({
 				id: m.id,
 				role: m.role,
@@ -895,7 +896,7 @@
 		if ($chatId == chatId) {
 			if (!$temporaryChatEnabled) {
 				chat = await updateChatById(localStorage.token, chatId, {
-					models: selectedModels,
+					models: attemptStripPrivateAIModel(selectedModels),
 					messages: messages,
 					history: history,
 					params: params,
@@ -950,7 +951,7 @@
 		if ($chatId == chatId) {
 			if (!$temporaryChatEnabled) {
 				chat = await updateChatById(localStorage.token, chatId, {
-					models: selectedModels,
+					models: attemptStripPrivateAIModel(selectedModels),
 					messages: messages,
 					history: history,
 					params: params,
@@ -1903,7 +1904,7 @@
 		if ($chatId == _chatId) {
 			if (!$temporaryChatEnabled) {
 				chat = await updateChatById(localStorage.token, _chatId, {
-					models: selectedModels,
+					models: attemptStripPrivateAIModel(selectedModels),
 					history: history,
 					messages: createMessagesList(history, history.currentId),
 					params: params,
@@ -1914,6 +1915,37 @@
 			}
 		}
 	};
+
+	const PRIVATE_AI_MODEL = 'pipeline-final'
+	function attemptStripPrivateAIModel(models: Array<string>): Array<string> {
+		const cleaned: Array<string> = models.filter((model) => model !== PRIVATE_AI_MODEL);
+
+		// console.log('@@ $models: ', $models);
+		if (cleaned.length === 0) {
+			// Add a simple model, but don't use the arena-model
+			const okChoices = $models.filter((m) => m.id !== 'arena-model' && m.id !== PRIVATE_AI_MODEL);
+
+			if (okChoices.length > 0) {
+				// Find the smallest model by size using owned_by as the property key
+				const smallestModel = okChoices.reduce((smallest, current) => {
+					const getModelSize = (model) => {
+						const providerKey = model.owned_by;
+						return model?.[providerKey]?.size ?? Number.MAX_SAFE_INTEGER;
+					};
+
+					const smallestSize = getModelSize(smallest);
+					const currentSize = getModelSize(current);
+					return currentSize < smallestSize ? current : smallest;
+				});
+
+				cleaned.push(smallestModel.id);
+			} else {
+				console.log('No models found in attemptStripPrivateAIModel, using original models');
+				return models;
+			}
+		}
+		return cleaned;
+	}
 </script>
 
 <svelte:head>
