@@ -1916,14 +1916,17 @@
 		}
 	};
 
-	const PRIVATE_AI_MODEL = 'pipeline-final'
+	// const PRIVATE_AI_MODEL = 'pipeline-final'
+	const PRIVATE_AI_MODEL_PREFIX = 'pipeline-'
 	function attemptStripPrivateAIModel(models: Array<string>): Array<string> {
-		const cleaned: Array<string> = models.filter((model) => model !== PRIVATE_AI_MODEL);
+		const originalLength = models.length;
+		const cleaned: Array<string> = models.filter((model) => !model.startsWith(PRIVATE_AI_MODEL_PREFIX));
 
 		// console.log('@@ $models: ', $models);
-		if (cleaned.length === 0) {
+		// If we took a model out, replace it with a simple model.
+		if (cleaned.length !== originalLength) {
 			// Add a simple model, but don't use the arena-model
-			const okChoices = $models.filter((m) => m.id !== 'arena-model' && m.id !== PRIVATE_AI_MODEL);
+			const okChoices = $models.filter((m) => m.id !== 'arena-model' && !m.id.startsWith(PRIVATE_AI_MODEL_PREFIX));
 
 			if (okChoices.length > 0) {
 				// Find the smallest model by size using owned_by as the property key
