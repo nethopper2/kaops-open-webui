@@ -48,6 +48,7 @@
 	import ContentRenderer from './ContentRenderer.svelte';
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
 	import FileItem from '$lib/components/common/FileItem.svelte';
+	import SkeletonRag from './SkeletonRag.svelte';
 
 	interface MessageType {
 		id: string;
@@ -778,7 +779,11 @@
 						{:else}
 							<div class="w-full flex flex-col relative" id="response-content-container">
 								{#if message.content === '' && !message.error}
+                  {#if $config?.private_ai?.enable_upstream_ui}
 									<Skeleton />
+                  {:else}
+                  <SkeletonRag />
+                  {/if}
 								{:else if message.content && message.error !== true}
 									<!-- always show message contents even if there's an error -->
 									<!-- unless message.error === true which is legacy error handling, where the error message is stored in message.content -->
