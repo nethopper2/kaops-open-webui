@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+	import { config } from '$lib/stores';
 
   export let initialProgress = 1;
 
@@ -75,6 +76,8 @@
     // statusText = "Done!";
   }
 
+  let bgImageAuth = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom)?.bgImageAuth : '';
+
   onMount(() => {
     cancelled = false;
     runStatuses();
@@ -84,19 +87,13 @@
   });
 </script>
 
-<div class="relative min-h-[220px] flex items-center justify-center overflow-hidden rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-  <!-- Video Background -->
-  <video
-    class="absolute inset-0 w-full h-full object-cover opacity-20 dark:opacity-30 pointer-events-none"
-    autoplay
-    muted
-    loop
-    playsinline
-    preload="auto"
-    poster="your-fallback-image.jpg"
-  >
-    <source src="https://storage.googleapis.com/bowen-pai-assets/bowen-homepage-waves-full.mp4" type="video/mp4" />
-  </video>
+<div class="relative min-h-[200px] flex items-center justify-center overflow-hidden rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 mt-0">
+  <!-- Background Image Layer -->
+  <div
+    class="absolute inset-0 w-full h-full object-cover opacity-20 dark:opacity-30 pointer-events-none !mt-0"
+    style="background-image: url('{bgImageAuth}'); background-size: cover; background-position: center;"
+    aria-hidden="true"
+  ></div>
 
   <!-- Overlay for content -->
   <div class="relative z-10 flex flex-col items-center w-full px-8 py-6 bg-white/70 dark:bg-gray-900/70 backdrop-blur rounded-xl">
