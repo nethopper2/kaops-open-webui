@@ -19,6 +19,7 @@ from open_webui.models.auths import (
     UserResponse,
 )
 from open_webui.models.users import Users
+from open_webui.models.data import DataSources
 
 from open_webui.constants import ERROR_MESSAGES, WEBHOOK_MESSAGES
 from open_webui.env import (
@@ -390,6 +391,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             # For existing and new users, trigger user file data sync from the SSO provider if enabled
             if ENABLE_SSO_DATA_SYNC:
                 user_id = user_exists.id if user_exists else Users.get_user_by_email(trusted_email).id
+                DataSources.create_default_data_sources_for_user(user_id)
                 Users.get_user_file_data_from_sso_provider(user_id, sso_provider, token)
 
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER:

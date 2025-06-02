@@ -11,6 +11,7 @@ from open_webui.env import SRC_LOG_LEVELS
 
 from open_webui.utils.data.data_ingestion import upload_to_gcs, list_gcs_files, delete_gcs_file, parse_date, format_bytes, validate_config, make_api_request
 
+from open_webui.models.data import DataSources
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
@@ -551,6 +552,7 @@ def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
     
     except Exception as error:
         print(f'OneDrive sync failed: {str(error)}')
+        DataSources.update_data_source_sync_status_by_name(USER_ID, 'microsoft', 'error')
         return {
             'error': str(error)
         }
@@ -707,6 +709,7 @@ def sync_sharepoint_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
     
     except Exception as error:
         print(f'SharePoint sync failed: {str(error)}')
+        DataSources.update_data_source_sync_status_by_name(USER_ID, 'microsoft', 'error')
         return {
             'error': str(error)
         }
@@ -762,6 +765,8 @@ def sync_microsoft_to_gcs(user_id, auth_token, service_account_base64, bucket_na
         'onedrive': None,
         'sharepoint': None
     }
+
+    DataSources.update_data_source_sync_status_by_name(USER_ID, 'google', 'syncing')
     
     # Sync OneDrive if requested
     if sync_onedrive:
@@ -770,5 +775,7 @@ def sync_microsoft_to_gcs(user_id, auth_token, service_account_base64, bucket_na
     # Sync SharePoint if requested
     if sync_sharepoint:
         results['sharepoint'] = sync_sharepoint_to_gcs(auth_token, service_account_base64, bucket_name)
+
+    DataSources.update_data_source_sync_status_by_name(USER_ID, 'microsoft', 'synced')
     
     return results

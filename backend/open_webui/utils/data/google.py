@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from open_webui.env import SRC_LOG_LEVELS
 
 from open_webui.utils.data.data_ingestion import upload_to_gcs, list_gcs_files, delete_gcs_file, make_api_request, format_bytes, parse_date
+from open_webui.models.data import DataSources
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
@@ -533,9 +534,12 @@ def sync_drive_to_gcs(auth_token, service_account_base64):
         print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
+        
+        DataSources.update_data_source_sync_status_by_name(USER_ID, 'google', 'synced')
     
     except Exception as error:
         print(f'Sync failed: {str(error)}')
+        DataSources.update_data_source_sync_status_by_name(USER_ID, 'google', 'error')
         exit(1)
 
 def download_and_upload_file(file, auth_token, service_account_base64, GCS_BUCKET_NAME, exists, reason):
@@ -582,6 +586,8 @@ def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bucket_n
 
     USER_ID = user_id
     GCS_BUCKET_NAME = gcs_bucket_name
+
+    DataSources.update_data_source_sync_status_by_name(USER_ID, 'google', 'syncing')
 
     # Run the sync process
     sync_drive_to_gcs(token, creds)
