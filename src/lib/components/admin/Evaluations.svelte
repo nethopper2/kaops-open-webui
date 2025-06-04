@@ -3,6 +3,7 @@
 	import { toast } from 'svelte-sonner';
 	import Leaderboard from './Evaluations/Leaderboard.svelte';
 	import Feedbacks from './Evaluations/Feedbacks.svelte';
+  import FeedbackDashboard from './Evaluations/FeedbackDashboard.svelte';
 
 	import { getAllFeedbacks } from '$lib/apis/evaluations';
 
@@ -87,6 +88,26 @@
 				</div>
 				<div class=" self-center">{$i18n.t('Feedbacks')}</div>
 			</button>
+
+      <button
+        class="px-0.5 py-1 min-w-fit rounded-lg lg:flex-none flex text-right transition {selectedTab ===
+        'dashboard'
+          ? ''
+          : ' text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'}"
+        on:click={() => {
+          selectedTab = 'dashboard';
+        }}
+      >
+        <div class="self-center mr-2">
+          <!-- Chart Bar Icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="size-4">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 20h18M6 16v4M10 10v10M14 6v14M18 13v7" />
+          </svg>
+        </div>
+        <div class="self-center">{$i18n.t('Dashboard')}</div>
+      </button>
+
+
 		</div>
 
 		<div class="flex-1 mt-1 lg:mt-0 overflow-y-scroll">
@@ -94,6 +115,8 @@
 				<Leaderboard {feedbacks} />
 			{:else if selectedTab === 'feedbacks'}
 				<Feedbacks {feedbacks} />
+      {:else if selectedTab === 'dashboard'}
+        <FeedbackDashboard {feedbacks} />
 			{/if}
 		</div>
 	</div>
