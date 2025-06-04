@@ -7,13 +7,17 @@
 
   export let feedbacks = [];
 
+  $: feedbacks = feedbacks ?? [];
+
   // Modal state for comments
   let showComments = false;
-  let commentsList: { comment: string, prompt?: string, chat_id?: string, message_id?: string }[] = [];
+  let commentsList = [];
   let commentsTitle = '';
 
+  $: commentsList = commentsList ?? [];
+
   function openComments(title: string, feedbacksForPeriod) {
-    commentsList = feedbacksForPeriod
+    commentsList = (feedbacksForPeriod ?? [])
       .filter(fb => fb.data?.comment && fb.data.comment.trim().length > 0);
     commentsTitle = title;
     showComments = true;
@@ -33,18 +37,21 @@
   }
 
   function extractAllResults(feedbacks) {
+    feedbacks = feedbacks ?? [];
     return feedbacks
       .map(fb => fb.data?.rating)
       .filter(r => typeof r === 'number' && [-1, 0, 1].includes(r));
   }
 
   function extractAllDetailedRatings(feedbacks) {
+    feedbacks = feedbacks ?? [];
     return feedbacks
       .map(fb => fb.data?.details?.rating)
       .filter(r => typeof r === 'number' && r >= 1 && r <= 10 && !isNaN(r));
   }
 
   function extractAllComments(feedbacks) {
+    feedbacks = feedbacks ?? [];
     return feedbacks
       .filter(fb => fb.data?.comment && fb.data.comment.trim().length > 0)
       .map(fb => ({
@@ -56,6 +63,7 @@
   }
 
   function groupByDate(feedbacks) {
+    feedbacks = feedbacks ?? [];
     const today = dayjs();
     const days = [];
     for (let i = 0; i < 28; i++) {
@@ -63,7 +71,7 @@
       const dateStr = day.format('YYYY-MM-DD');
       days.push({ date: dateStr, feedbacks: [] });
     }
-    feedbacks.forEach(fb => {
+    (feedbacks ?? []).forEach(fb => {
       const date = dayjs.unix(fb.updated_at ?? fb.created_at).format('YYYY-MM-DD');
       const day = days.find(d => d.date === date);
       if (day) day.feedbacks.push(fb);
@@ -100,23 +108,24 @@
   function formatDate(dateStr) {
     return dayjs(dateStr).format('ddd, MMM D, YYYY');
   }
-function ratingArrow(rating: number) {
-  if (rating === 1) {
-    // Green up arrow
-    return `<svg class="w-5 h-5 inline-block text-green-600 dark:text-green-400 align-middle" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-      <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M12 5l-7 7m7-7l7 7"/>
-    </svg>`;
-  }
-  if (rating === -1) {
-    // Red down arrow
-    return `<svg class="w-5 h-5 inline-block text-red-600 dark:text-red-400 align-middle" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-      <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M12 19l-7-7m7 7l7-7"/>
-    </svg>`;
-  }
-  // Neutral or missing
-  return `<span class="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300 text-xs font-semibold">${rating ?? ''}</span>`;
-}
 
+  // Arrow icon for rating
+  function ratingArrow(rating: number) {
+    if (rating === 1) {
+      // Green up arrow
+      return `<svg class="w-5 h-5 inline-block text-green-600 dark:text-green-400 align-middle" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M12 5l-7 7m7-7l7 7"/>
+      </svg>`;
+    }
+    if (rating === -1) {
+      // Red down arrow
+      return `<svg class="w-5 h-5 inline-block text-red-600 dark:text-red-400 align-middle" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M12 19l-7-7m7 7l7-7"/>
+      </svg>`;
+    }
+    // Neutral or missing
+    return `<span class="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300 text-xs font-semibold">${rating ?? ''}</span>`;
+  }
 </script>
 
 <!-- Comments Modal -->
@@ -129,11 +138,11 @@ function ratingArrow(rating: number) {
         </svg>
         {commentsTitle}
       </div>
-      {#if commentsList.length === 0}
+      {#if (commentsList || []).length === 0}
         <div class="text-gray-400 italic">No comments</div>
       {:else}
         <ul class="space-y-2 max-h-96 overflow-y-auto">
-          {#each commentsList as c}
+          {#each commentsList || [] as c}
             <li class="border-b border-gray-100 dark:border-gray-800 pb-2 last:border-b-0">
               <div class="flex items-center justify-between mb-1">
                 <span>
@@ -241,12 +250,14 @@ function ratingArrow(rating: number) {
   </table>
 </div>
 
-<!-- Daily Breakdown Table -->
+<!-- Note about 28 days -->
 <div class="mb-2 text-xs text-gray-500 dark:text-gray-400 italic">
   Showing the past 28 days of comments and feedback.
 </div>
+
+<!-- Daily Breakdown Table -->
 <div class="scrollbar-hidden relative whitespace-nowrap overflow-x-auto max-w-full rounded-sm pt-0.5">
-  {#if feedbacks.length === 0}
+  {#if (feedbacks || []).length === 0}
     <div class="text-center text-xs text-gray-500 dark:text-gray-400 py-1">
       {$i18n.t('No feedbacks found')}
     </div>
@@ -264,7 +275,7 @@ function ratingArrow(rating: number) {
         </tr>
       </thead>
       <tbody>
-        {#each stats as stat}
+        {#each stats || [] as stat}
           <tr class="bg-white dark:bg-gray-900 dark:border-gray-850 text-xs">
             <td class="px-3 py-1.5">{formatDate(stat.date)}</td>
             <td class="px-3 py-1.5 text-right">{stat.count}</td>
