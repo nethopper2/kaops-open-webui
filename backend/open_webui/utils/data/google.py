@@ -6,10 +6,11 @@ import io
 import logging
 from datetime import datetime
 from urllib.parse import urlencode
+import traceback
 
 from open_webui.env import SRC_LOG_LEVELS
 
-from open_webui.utils.data.data_ingestion import upload_to_gcs, list_gcs_files, delete_gcs_file, make_api_request, format_bytes, parse_date
+from open_webui.utils.data.data_ingestion import upload_to_gcs, list_gcs_files, delete_gcs_file, make_api_request, format_bytes, parse_date, update_data_source_sync_status
 from open_webui.models.data import DataSources
 
 log = logging.getLogger(__name__)
@@ -334,18 +335,23 @@ def download_file(file_id, auth_token, mime_type=None):
     return file_content
 
 def process_folder(folder_id, folder_name, auth_token, all_files, drive_name=None):
-    """Process a single folder and its contents"""
-    folder_display_name = folder_name
-    if drive_name:
-        folder_display_name = f"{drive_name}/{folder_name}"
-    
-    print(f"Processing folder: {folder_display_name} (ID: {folder_id})")
-    
-    if drive_name:
-        # If this is a shared drive folder, prepend the drive name to path
-        return list_files_recursively(folder_id, auth_token, f"{folder_name}/", all_files, drive_name)
-    else:
-        return list_files_recursively(folder_id, auth_token, f"{folder_name}/", all_files)
+    try:
+        """Process a single folder and its contents"""
+        folder_display_name = folder_name
+        if drive_name:
+            folder_display_name = f"{drive_name}/{folder_name}"
+        
+        print(f"Processing folder: {folder_display_name} (ID: {folder_id})")
+        
+        if drive_name:
+            # If this is a shared drive folder, prepend the drive name to path
+            return list_files_recursively(folder_id, auth_token, f"{folder_name}/", all_files, drive_name)
+        else:
+            return list_files_recursively(folder_id, auth_token, f"{folder_name}/", all_files)
+    except Exception as error:
+        print(f'Listing failed for folder {folder_id}: {str(error)}')
+        # ADD THIS:
+        log.error(f"Error in process_folder for {folder_id}:", exc_info=True)
 
 def sync_drive_to_gcs(auth_token, service_account_base64):
     """Main function to sync Google Drive to Google Cloud Storage using a bearer token"""
@@ -454,7 +460,7 @@ def sync_drive_to_gcs(auth_token, service_account_base64):
         for gcs_name, gcs_file in gcs_file_map.items():
             # Only consider files that belong to this user's Google Drive folder
             if gcs_name.startswith(user_prefix) and gcs_name not in drive_file_paths:
-                delete_gcs_file(gcs_name, service_account_base64)
+                delete_gcs_file(gcs_name, service_account_base64, GCS_BUCKET_NAME)
                 
                 deleted_files.append({
                     'name': gcs_name,
@@ -535,12 +541,14 @@ def sync_drive_to_gcs(auth_token, service_account_base64):
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
         
-        DataSources.update_data_source_sync_status_by_name(USER_ID, 'google', 'synced')
+        update_data_source_sync_status(USER_ID, 'google', 'synced')
     
     except Exception as error:
-        print(f'Sync failed: {str(error)}')
-        DataSources.update_data_source_sync_status_by_name(USER_ID, 'google', 'error')
-        exit(1)
+        update_data_source_sync_status(USER_ID, 'google', 'error')
+        # Log the full error for debugging
+        print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
+        print(traceback.format_exc())
+        raise error
 
 def download_and_upload_file(file, auth_token, service_account_base64, GCS_BUCKET_NAME, exists, reason):
     """Helper function to download a file and upload it to GCS"""
@@ -573,13 +581,15 @@ def download_and_upload_file(file, auth_token, service_account_base64, GCS_BUCKE
         
     except Exception as e:
         print(f"Error processing file {file['fullPath']}: {str(e)}")
-        return None
+        log.error(f"Error in download_and_upload_file for {file['fullPath']}:", exc_info=True)
+        return None # Ensure None is returned on error
 
 # Main Execution Function
 def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str):
     log.info(f'Sync Google Drive to Google Cloud Storage')
     log.info(f'User Open WebUI ID: {user_id}')
     log.info(f'GCS Bucket Name: {gcs_bucket_name}')
+    log.info(f'Auth token: {token}')
 
     global USER_ID 
     global GCS_BUCKET_NAME
@@ -587,7 +597,7 @@ def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bucket_n
     USER_ID = user_id
     GCS_BUCKET_NAME = gcs_bucket_name
 
-    DataSources.update_data_source_sync_status_by_name(USER_ID, 'google', 'syncing')
+    update_data_source_sync_status(USER_ID, 'google', 'syncing')
 
     # Run the sync process
     sync_drive_to_gcs(token, creds)

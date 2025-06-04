@@ -8,6 +8,7 @@ from datetime import datetime
 from urllib.parse import urlencode
 from datetime import timezone
 import random
+import traceback
 
 from open_webui.env import SRC_LOG_LEVELS
 
@@ -504,22 +505,25 @@ def download_slack_file(file_info, auth_token):
             raise Exception("No download URL available")
         
         headers = {"Authorization": f"Bearer {auth_token}"}
-        response = make_request(file_url, headers=headers, stream=True, auth_token=auth_token)
         
-        if response.status_code != 200:
-            raise Exception(f"Failed to download file: {response.status_code}")
-        
-        file_content = io.BytesIO()
-        for chunk in response.iter_content(chunk_size=1024 * 1024):  # 1MB chunks
-            if chunk:
-                file_content.write(chunk)
+        with make_request(file_url, headers=headers, stream=True, auth_token=auth_token) as response:
+            # make_request (which internally calls make_api_request) already calls response.raise_for_status()
+            # If make_api_request is robust, this check might be redundant but doesn't hurt.
+            # response.raise_for_status() 
+            
+            file_content = io.BytesIO()
+            for chunk in response.iter_content(chunk_size=1024 * 1024):  # 1MB chunks
+                if chunk:
+                    file_content.write(chunk)
         
         file_content.seek(0)
         return file_content
         
     except Exception as error:
         print(f"Error downloading file {file_info.get('name', 'unknown')}: {str(error)}")
-        return None
+        # For a production application, use `log.error(..., exc_info=True)` here
+        # log.error(f"Error downloading file {file_info.get('name', 'unknown')}:", exc_info=True)
+        return None # Return None as stated in the original function's error path
 
 def process_conversation(conversation, auth_token, slack_user_id, user_info_map):
     """Process a single conversation and return its data"""
@@ -824,7 +828,7 @@ def sync_slack_to_gcs(auth_token, service_account_base64):
         
         for gcs_name, gcs_file in gcs_file_map.items():
             if gcs_name.startswith(user_prefix) and gcs_name not in all_current_paths:
-                delete_gcs_file(gcs_name, service_account_base64)
+                delete_gcs_file(gcs_name, service_account_base64, GCS_BUCKET_NAME)
                 
                 deleted_files.append({
                     'name': gcs_name,
@@ -861,7 +865,10 @@ def sync_slack_to_gcs(auth_token, service_account_base64):
     
     except Exception as error:
         update_data_source_sync_status(USER_ID, 'slack', 'error')
-        print(f'Sync failed: {str(error)}')
+        print(f'Slack Sync failed: {str(error)}')
+        # Log the full error for debugging
+        print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
+        print(traceback.format_exc())
         raise
 
 # Main Execution Function

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, BackgroundTasks
 import requests
 import os
 import logging
+import jwt
 from typing import Optional, List
 
 from open_webui.env import SRC_LOG_LEVELS
@@ -22,8 +23,38 @@ from open_webui.models.data import (
     DataSourceResponse,
 )
 
+from open_webui.env import (
+    SLACK_CLIENT_ID,
+    SLACK_CLIENT_SECRET,
+    SLACK_REDIRECT_URI,
+
+    SLACK_AUTHORIZE_URL,
+    SLACK_TOKEN_URL,
+    SLACK_AUTH_REVOKE_URL,
+
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI,
+
+    GOOGLE_AUTHORIZE_URL,
+    GOOGLE_TOKEN_URL,
+    GOOGLE_AUTH_REVOKE_URL,
+
+    MICROSOFT_CLIENT_ID,
+    MICROSOFT_CLIENT_SECRET,
+    MICROSOFT_REDIRECT_URI,
+
+    MICROSOFT_AUTHORIZE_URL,
+    MICROSOFT_TOKEN_URL,
+
+    GCS_BUCKET_NAME,
+    GCS_SERVICE_ACCOUNT_BASE64
+)
+
 # Import the slack sync utility
 from open_webui.utils.data.slack import initiate_slack_sync
+from open_webui.utils.data.google import initiate_google_file_sync
+from open_webui.utils.data.microsoft import initiate_microsoft_sync
 from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
@@ -31,18 +62,6 @@ log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
 router = APIRouter()
 
-# Load from .env
-CLIENT_ID = "1724632365717.8888278324853"
-CLIENT_SECRET = "7e2f6f13d7508f058cd29d96db49bdcb"
-REDIRECT_URI = "https://improved-ape-composed.ngrok-free.app/api/v1/data/slack/callback"
-GCS_BUCKET_NAME = "nh-private-ai-file-sync-test"
-GCS_SERVICE_ACCOUNT_BASE64 = "ewogICJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsCiAgInByb2plY3RfaWQiOiAibmgtc2FuZGJveC00NTEzMDkiLAogICJwcml2YXRlX2tleV9pZCI6ICJlZmU2OGIyZjU4OTdiZTI2MzliODhkNmI3NDIxYTZlMjMwY2I5ODkwIiwKICAicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tXG5NSUlFdlFJQkFEQU5CZ2txaGtpRzl3MEJBUUVGQUFTQ0JLY3dnZ1NqQWdFQUFvSUJBUURyK1NPR3FwckR4NUtwXG5YZ0hSdnZvYmJRUjlINWVqaENXYVlOUy9WalpQNFFvZlk5ZXhyaG5qSkNwVnBtbXFLVjBoOURnN2tkazhOQ1BtXG5pM1JQRW5QWUYyc1Z6dDZkb0d1VmVRTlcwNGxHOUJWWGdvUFI1emRiRlZpdjY3WTRyRUt5Umt3S3YyQlJnaXUrXG5hSHBXQTRsUFJkaGplSUVZL3NjZHBnL0J5K1JpNkgzNVRnZ3dzdGpRd2V4TUp6eCsrL1dUaStrSnhSK3crTGY1XG5SSnZtbnpSWFBOOUQ2Z1FvUFhraXZUUHJUa3o2WWxmZVVaS0FBV1lQS204UmFRZUZQcTdSWVUxNCtiTld6a2dTXG5NTkpleTVhVVhQNUxjZmhaTjFKcWkzTHNaV3JnYjR5cFBmUkxGTkNRMGgzUmVKSXVLbzdzMndZbzQ5V3ZhQ1JXXG5xSmNKVEc5SkFnTUJBQUVDZ2dFQUl3R0xhK1dndm5UN2xKMFJ5NFlYajl5Qkd6ZkYxTmZjaFRXaXNmek40MVU0XG4zWFhBRUllSnB4amRIK1luVER0RktlMlRMd0VndHkzcituNUxJNVRTOHlac09DaS9mU1pJZDN6amlpeW84NG52XG5wWk1DejYrTGxudEk5QllWYXZ4aEM1WGluNENLL3lSK3JVbE9CcmNSRmwyLzcyZTN6UmUwdmJqK0l1dUdwc1phXG5PNFdXbTJyTE51dU9QZ3d6eDBvdzNldjdXUktRanIxMUhlQnZXa0ZxbW9xQ2F5Zkg4WmxTQ2NvbzE2bHcrd0UrXG5YSlZEc1NnTEc3MWl2Y3pUTUl3UWl5YkJSOFhuUUVXNm1OcTVzSWRxSFZJSW1BTXgrQWQyOUZUQ2JvMFpSL3JmXG5RUS8vT3VjSVE4QkUxVHhDZ3ZmZ1Y3RFlSdnZjcW54YXJwc0djK2lobFFLQmdRRCtzMHpJaTFTeWJvWWttYlpnXG5DUDVqYVIvS0JkQjczNG9rZWdCQlBTTk5YTXhGRWgrZDJ1S2ZyMnhFUThqRHRDT1k2VkxZb1plc0FKaEljTksxXG40VnhMbmlFSWpyK082VnpoTU1nbkd2LzB2TVROb3lMUW9QRk14WGFiSHIxYisrTWhpVUJGS01pNTM0V2g5UmlyXG5pQ3hPTDdrcWNNSUdsYnhhQmRRRFF3cXBSUUtCZ1FEdExXQnB6eFJKZWxBaFFxcHRGRmtibDdpZ1dvZGhrU1MvXG5MMnB6RjYvUmQzaW5lVzBvWGc0ZmNXQW05aVZxbk9wWjBxWW5QcWVMdTR4ZGRSc1U5Tk9veUIwMFI0VldZVXFsXG5RNHp0RmlXMVBmL3pkbEZ1N1ZPTTJ1cTB0V2s4YVRpNWc5OVEvU1ppWTBQUmtBejlmYzdTYWsxVFdvdjVHbEROXG44YVoyZ2tZVU5RS0JnQXFvQ2RCaU0vcjdNTldiTU13MzFCem9xeEhTeUhSR1dBdEtwM1FUVU1UTjJ5WVFxZzM2XG51SHloNUUrKzNrbUI0Zk5sMzdkOG0xSHcvRzRiZWxWdHhtVExpdXBHdnJFR0JvTE5mYkpWS054ZWdZVnhDK1hhXG50ZjNXVFM0VVRTdnFFQWk1SzEwNVpaeVJRNUFSSnlVV0gzUnQvcnROMkhCYUYzVlV4UmdWMS81WkFvR0FES015XG5VL0Q0djhHSXEzMEYzN0lKM1hLRUgrY3k5M3ZvWFZlRmNJUitsY2FyNHlDUk5HbHVqelpYVFR3b1dqbnFNc2NLXG5tMlMzUUxiSmorRkJoQ2hYYnRMYTI0SkVGSW95bEFPNWFwaVhnY1MvOHBVSFdjWERnZW5ZUDdDNjNzRXNpSllDXG5QQ3FBOVJVYzgvbWM5NVRRaEYydHFSZFdCZnZrK2xRNTdtNmFsVkVDZ1lFQXQ3UGtmUnhPWFR6cFVEWFBpdklOXG5zVWpjcFU4TVVSK0VqUW1QV1F3V1ZyTWJhWEpQanVRY3ZOTGlNQWhtRlQrSHphU2tCMFhFRktGZExuQ1FxV1lMXG5LcE90S1lldUJBb0picEx4NFFxRjBoZU5OdXZMNHYyQTVkeGVEQTVlNHpkcnl0bzVqQWN3TDAyTDFPdTJKVzY0XG5pb05wUFJpNHl0VjI0UUNOdENpL1dRQT1cbi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS1cbiIsCiAgImNsaWVudF9lbWFpbCI6ICJnZHJpdmUtZ2NzLXN5bmNAbmgtc2FuZGJveC00NTEzMDkuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLAogICJjbGllbnRfaWQiOiAiMTEyNTU0OTg2NzUzMDIyMDQ0NTk5IiwKICAiYXV0aF91cmkiOiAiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLAogICJ0b2tlbl91cmkiOiAiaHR0cHM6Ly9vYXV0aDIuZ29vZ2xlYXBpcy5jb20vdG9rZW4iLAogICJhdXRoX3Byb3ZpZGVyX3g1MDlfY2VydF91cmwiOiAiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vb2F1dGgyL3YxL2NlcnRzIiwKICAiY2xpZW50X3g1MDlfY2VydF91cmwiOiAiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9nZHJpdmUtZ2NzLXN5bmMlNDBuaC1zYW5kYm94LTQ1MTMwOS5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsCiAgInVuaXZlcnNlX2RvbWFpbiI6ICJnb29nbGVhcGlzLmNvbSIKfQo="
-
-
-SLACK_AUTHORIZE_URL = "https://slack.com/oauth/v2/authorize"
-SLACK_TOKEN_URL = "https://slack.com/api/oauth.v2.access"
-SLACK_API_BASE = "https://slack.com/api"
-SLACK_AUTH_REVOKE_URL = "https://slack.com/api/auth.revoke"
 
 oauth_state_store = {}
 
@@ -236,8 +255,8 @@ async def update_sync_status(
     data_source = DataSources.get_data_source_by_id(id)
     if data_source and data_source.user_id == user.id:
         try:
-            updated_data_source = DataSources.update_data_source_sync_status(
-                id, form_data.sync_status, form_data.last_sync
+            updated_data_source = DataSources.update_data_source_by_id(
+                id, form_data
             )
             if updated_data_source:
                 return DataSourceResponse(
@@ -309,6 +328,1163 @@ async def delete_data_source_by_id(
         )
 
 ############################
+# Google Endpoints 
+############################
+
+@router.get("/google/initialize")
+def get_google_auth_url(user=Depends(get_verified_user)):
+    """Generate Google OAuth URL for the current authenticated user."""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    # Google scopes - choose the necessary ones for the data you want to access.
+    # For read-only access to common user data:
+    google_scopes = [
+        "https://www.googleapis.com/auth/userinfo.profile", # Basic profile info
+        "https://www.googleapis.com/auth/drive.readonly",   # Read-only Google Drive files
+        "https://www.googleapis.com/auth/gmail.readonly",   # Read-only Gmail messages
+    ]
+
+    scope_str = " ".join(google_scopes) # Google scopes are space-separated
+
+    # Use user ID as state parameter for security
+    state = user.id
+    oauth_state_store[state] = user.id  # Store for validation in callback
+
+    auth_url = (
+        f"{GOOGLE_AUTHORIZE_URL}"
+        f"?client_id={GOOGLE_CLIENT_ID}"
+        f"&redirect_uri={GOOGLE_REDIRECT_URI}"
+        f"&response_type=code"  # Always 'code' for web server apps
+        f"&scope={scope_str}"
+        f"&access_type=offline" # Crucial to get a refresh_token
+        f"&prompt=consent"      # Ensures refresh token is always granted, even if previously authorized
+        f"&state={state}"
+    )
+
+    return {
+        "url": auth_url,
+        "user_id": user.id,
+        "scopes": google_scopes
+    }
+
+@router.get("/google/callback")
+async def google_callback(request: Request, background_tasks: BackgroundTasks):
+    """Handle Google OAuth callback and initiate sync process."""
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    error = request.query_params.get("error")
+
+    if error:
+        log.error(f"Google OAuth error: {error}")
+        return Response(status_code=400, content=f"Google OAuth error: {error}")
+
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing Google OAuth code.")
+
+    if not state or state not in oauth_state_store:
+        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
+
+    user_id = oauth_state_store.pop(state)  # Remove state after use
+
+    try:
+        # Exchange code for access token
+        response = requests.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        if "error" in data:
+            raise HTTPException(status_code=400, detail=f"Google OAuth failed: {data.get('error_description', data.get('error'))}")
+
+        log.info(f"Google OAuth successful for user {user_id}")
+
+        # Extract tokens and relevant Google metadata
+        access_token = data.get("access_token")
+        refresh_token = data.get("refresh_token") # Only present if access_type=offline and prompt=consent were used, and it's the first time
+        expires_in = data.get("expires_in") # Time until access_token expires (in seconds)
+        id_token = data.get("id_token") # Contains user info if 'openid' scope requested
+        
+        # You might need to decode the id_token to get the Google User ID (sub field)
+        # For simplicity, we'll assume a direct 'user_id' can be derived or use a placeholder
+        # In a real app, you'd use a JWT library (e.g., python-jose) to decode id_token
+        google_user_id = None
+        if id_token:
+            # This is a basic mock. In production, properly decode and verify the JWT.
+            try:
+                decoded_id_token = jwt.decode(id_token, options={"verify_signature": False}) # DO NOT USE IN PROD WITHOUT VERIFICATION
+                google_user_id = decoded_id_token.get("sub") # 'sub' is the Google user ID
+            except ImportError:
+                log.warning("PyJWT not installed. Cannot decode id_token to get Google User ID.")
+            except Exception as e:
+                log.error(f"Failed to decode id_token: {e}")
+
+        
+        if not access_token:
+            raise HTTPException(
+                status_code=500,
+                detail="No access token received from Google OAuth. Ensure necessary scopes are requested."
+            )
+
+        # Encrypt tokens before storing
+        encrypted_access_token = encrypt_data(access_token)
+        encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else None
+
+        # Calculate expiration time for access token
+        access_token_expires_at = None
+        if expires_in:
+            access_token_expires_at = int(time.time()) + expires_in
+
+        # Store tokens in the database
+        try:
+            # We use the insert_new_token method which handles update-or-insert logic
+            OAuthTokens.insert_new_token(
+                user_id=user_id,
+                provider_name="Google",
+                provider_user_id=google_user_id,
+                encrypted_access_token=encrypted_access_token,
+                encrypted_refresh_token=encrypted_refresh_token,
+                access_token_expires_at=access_token_expires_at,
+                scopes=data.get("scope"), # Space-separated string of granted scopes
+            )
+            log.info(f"Stored/Updated Google OAuth tokens for user {user_id}")
+
+        except Exception as db_error:
+            log.error(f"Failed to store Google OAuth tokens in DB for user {user_id}: {db_error}")
+            raise HTTPException(status_code=500, detail="Failed to store Google tokens securely.")
+
+        # Validate required environment variables for sync
+        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+            raise HTTPException(
+                status_code=500,
+                detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
+            )
+
+        # Initiate the sync process with the *decrypted* access token
+        try:
+            log.info(f"Starting Google sync for user {user_id} with token (retrieved from OAuth response)")
+
+            # Add the task to the background tasks to sync user Google data
+            background_tasks.add_task(
+                initiate_google_file_sync,
+                user_id,
+                access_token, # Use the token directly from the response
+                GCS_SERVICE_ACCOUNT_BASE64,
+                GCS_BUCKET_NAME
+            )
+
+            update_data_source_sync_status(user_id, 'google', 'syncing')
+
+            return {
+                "message": "Google data sync initiated successfully.",
+                "user_id": user_id,
+                "google_user_id": google_user_id,
+                "status": "success"
+            }
+            
+
+        except Exception as sync_error:
+            log.error(f"Google sync failed for user {user_id}: {str(sync_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Google sync failed: {str(sync_error)}"
+            )
+
+    except requests.exceptions.RequestException as e:
+        log.error(f"Google API Request Error: {str(e)}")
+        if hasattr(e, 'response') and e.response is not None:
+            log.error(f"Response: {e.response.text}")
+        raise HTTPException(status_code=500, detail="Failed to authenticate with Google")
+
+
+@router.get("/google/status")
+def get_google_status(user=Depends(get_verified_user)):
+    """Get current user's Google integration status."""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    # Check if required environment variables are configured
+    config_status = {
+        "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
+        "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
+        "google_client_configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI),
+    }
+
+    # Check if a Google token exists for the user
+    google_token_exists = OAuthTokens.get_token_by_user_provider_details(user_id=user.id, provider_name="Google")
+    
+    # Check current sync status from data sources
+    sync_status = "not_connected"
+    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+    for ds in user_data_sources:
+        if ds.action == "google":
+            sync_status = ds.sync_status
+            break
+
+    return {
+        "user_id": user.id,
+        "configuration": config_status,
+        "google_token_present": bool(google_token_exists),
+        "current_sync_status": sync_status,
+        "ready_for_sync": all(config_status.values()) and bool(google_token_exists) and sync_status != "syncing"
+    }
+
+@router.post("/google/sync")
+async def manual_google_sync(
+    background_tasks: BackgroundTasks,
+    user=Depends(get_verified_user),
+):
+    """Manually trigger Google sync for the authenticated user, fetching tokens from DB."""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    current_time = int(time.time())
+
+    # 1. Fetch encrypted tokens for the user and Google provider
+    token_entry = OAuthTokens.get_token_by_user_provider_details(
+        user_id=user.id,
+        provider_name="Google"
+        # If a user can connect multiple Google accounts, you'd need a way
+        # to identify which specific account token to use, e.g., via a query parameter.
+    )
+
+    if not token_entry:
+        raise HTTPException(
+            status_code=404,
+            detail="No Google integration found for this user. Please authorize your Google app first."
+        )
+
+    # 2. Decrypt tokens
+    try:
+        decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
+        decrypted_refresh_token = decrypt_data(token_entry.encrypted_refresh_token) if token_entry.encrypted_refresh_token else None
+
+        sync_token = decrypted_access_token # This is the token we'll use for Google API calls
+
+    except Exception as e:
+        log.error(f"Failed to decrypt tokens for user {user.id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to decrypt Google tokens. Please try re-authorizing.")
+
+    # 3. Check token expiration and refresh if necessary
+    refresh_needed = False
+    if token_entry.access_token_expires_at:
+        # Check if less than 5 minutes until expiration
+        if (token_entry.access_token_expires_at - current_time) < (5 * 60):
+            refresh_needed = True
+            log.info(f"Access token for user {user.id} nearing expiration. Initiating refresh.")
+    elif decrypted_refresh_token:
+        # If no explicit expiration, but refresh token exists, assume proactive refresh is best practice
+        # or handle reactively if API call fails. Here, we proactively try to refresh.
+        log.info(f"Access token for user {user.id} has no explicit expiry but a refresh token exists. Will attempt refresh.")
+        refresh_needed = True
+
+
+    if refresh_needed and decrypted_refresh_token:
+        try:
+            log.info(f"Attempting to refresh Google token for user {user.id}")
+            refresh_response = requests.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "grant_type": "refresh_token",
+                    "refresh_token": decrypted_refresh_token,
+                },
+            )
+            refresh_response.raise_for_status()
+            refresh_data = refresh_response.json()
+
+            if "error" in refresh_data:
+                log.error(f"Google token refresh failed for user {user.id}: {refresh_data.get('error_description', refresh_data.get('error'))}")
+                raise HTTPException(status_code=400, detail=f"Failed to refresh Google token: {refresh_data.get('error_description', refresh_data.get('error'))}")
+
+            # Get new tokens and update expiration
+            new_access_token = refresh_data.get("access_token")
+            # Google often returns a new refresh_token, but sometimes it doesn't.
+            # If it doesn't, continue using the old one.
+            new_refresh_token = refresh_data.get("refresh_token", decrypted_refresh_token)
+            new_expires_in = refresh_data.get("expires_in")
+
+            if not new_access_token:
+                raise HTTPException(status_code=500, detail="No new access token received after refresh.")
+
+            # Encrypt new tokens
+            encrypted_new_access_token = encrypt_data(new_access_token)
+            encrypted_new_refresh_token = encrypt_data(new_refresh_token) if new_refresh_token else None
+            new_access_token_expires_at = int(time.time()) + new_expires_in if new_expires_in else None
+
+            # Update database with new tokens
+            updated_token_entry = OAuthTokens.update_token_by_id(
+                token_id=token_entry.id,
+                encrypted_access_token=encrypted_new_access_token,
+                encrypted_refresh_token=encrypted_new_refresh_token,
+                access_token_expires_at=new_access_token_expires_at,
+                scopes=refresh_data.get("scope", token_entry.scopes) # Update scopes if refresh response includes them
+            )
+
+            if not updated_token_entry:
+                raise HTTPException(status_code=500, detail="Failed to update refreshed Google tokens in database.")
+
+            log.info(f"Successfully refreshed and updated Google tokens for user {user.id}")
+            sync_token = new_access_token # Use the newly acquired access token for sync
+
+        except requests.exceptions.RequestException as e:
+            log.error(f"Google API Request Error during token refresh for user {user.id}: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                log.error(f"Refresh response: {e.response.text}")
+            raise HTTPException(status_code=500, detail="Failed to refresh Google token with provider.")
+        except Exception as e:
+            log.error(f"An error occurred during Google token refresh for user {user.id}: {str(e)}")
+            raise HTTPException(status_code=500, detail="An internal server error occurred during token refresh.")
+    elif refresh_needed and not decrypted_refresh_token:
+        log.warning(f"Access token for user {user.id} nearing expiration but no valid refresh token available. Initiating re-authorization flow.")
+        
+        try:
+            # Generate re-authorization URL for Google OAuth
+            google_auth_url = (
+                f"https://accounts.google.com/o/oauth2/auth?"
+                f"client_id={GOOGLE_CLIENT_ID}&"
+                f"redirect_uri={os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8000/auth/google/callback')}&"
+                f"scope=openid%20https://www.googleapis.com/auth/userinfo.email%20https://www.googleapis.com/auth/userinfo.profile&"
+                f"response_type=code&"
+                f"access_type=offline&"
+                f"prompt=consent&"
+                f"state={user.id}"  # Include user ID to link back after auth
+            )
+            
+            log.info(f"Generated re-authorization URL for user {user.id}")
+            
+            # Store re-authorization state (optional - for tracking purposes)
+            # You might want to store this in Redis or database temporarily
+            # await store_reauth_state(user.id, "google_token_refresh")
+            
+            # Return structured response with re-authorization URL
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": "token_expired_no_refresh",
+                    "message": "Google token is expired and no valid refresh token is available. Re-authorization required.",
+                    "reauth_url": google_auth_url,
+                    "action_required": "redirect_to_google_auth",
+                    "user_id": str(user.id),
+                    "provider": "google",
+                    "reason": "no_refresh_token" if not token_entry.encrypted_refresh_token else "invalid_refresh_token"
+                }
+            )
+            
+        except HTTPException:
+            # Re-raise HTTPException to maintain the response structure
+            raise
+        except Exception as e:
+            log.error(f"Failed to generate re-authorization URL for user {user.id}: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "reauth_generation_failed",
+                    "message": "Google token is expired and re-authorization flow could not be initiated. Please manually re-authorize your Google integration.",
+                    "user_id": str(user.id)
+                }
+            )
+
+    # 4. Validate required environment variables for sync
+    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+        raise HTTPException(
+            status_code=500,
+            detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
+        )
+
+    try:
+        log.info(f"Starting scheduled/manual Google sync for user {user.id}")
+
+        # Add the task to the background tasks to sync user Google data
+        background_tasks.add_task(
+            initiate_google_file_sync,
+            user.id,
+            sync_token, # Use the valid (or freshly refreshed) token
+            GCS_SERVICE_ACCOUNT_BASE64,
+            GCS_BUCKET_NAME
+        )
+
+        update_data_source_sync_status(user.id, 'google', 'syncing')
+
+        return {
+            "message": "Google data sync initiated successfully.",
+            "user_id": user.id,
+            "status": "success"
+        }
+
+    except Exception as sync_error:
+        log.error(f"Google sync failed for user {user.id}: {str(sync_error)}")
+        if "invalid_grant" in str(sync_error).lower() or "invalid_token" in str(sync_error).lower():
+            log.warning(f"Google sync for user {user.id} failed due to invalid token. User may need to re-authorize.")
+            # Consider deleting the invalid token from the DB here
+            # OAuthTokens.delete_token_by_id(token_entry.id)
+            raise HTTPException(
+                status_code=401,
+                detail="Google token invalid or expired. Please re-authorize your Google integration."
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Google sync failed: {str(sync_error)}"
+        )
+
+@router.delete("/google/disconnect")
+async def disconnect_google(background_tasks: BackgroundTasks, user=Depends(get_verified_user),
+    google_team_id: Optional[str] = None
+):
+    """
+    Disconnects a user's Google integration, revoking tokens, deleting credentials,
+    cleaning up GCS files and updating the data source sync status.
+
+    Args:
+        user: The authenticated user object.
+        google_team_id (Optional[str]): If provided, only attempts to disconnect the Google
+                                       integration for this specific team ID (e.g., a specific
+                                       Google Workspace ID if applicable).
+
+    Returns:
+        JSONResponse: A message indicating success or failure.
+    """
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    user_id = user.id
+    log.info(f"Initiating Google integration disconnection for user: {user_id}"
+             f"{f' (Team ID: {google_team_id})' if google_team_id else ''}"
+             f", GCS cleanup")
+
+    overall_success = True
+    messages = []
+
+    # --- Step 1: Fetch and Revoke Google Token(s) ---
+    google_tokens_to_revoke: List[OAuthTokenModel] = []
+    if google_team_id:
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user_id,
+            provider_name="Google",
+            provider_team_id=google_team_id
+        )
+        if token_entry:
+            google_tokens_to_revoke.append(token_entry)
+    else:
+        all_user_tokens = OAuthTokens.get_all_tokens_for_user(user_id=user_id)
+        google_tokens_to_revoke = [
+            token for token in all_user_tokens if token.provider_name == "Google"
+        ]
+
+    if not google_tokens_to_revoke:
+        msg = f"No Google tokens found for user {user_id}{f' (Team ID: {google_team_id})' if google_team_id else ''}. Skipping token revocation."
+        log.warning(msg)
+        messages.append(msg)
+    else:
+        for token_entry in google_tokens_to_revoke:
+            try:
+                decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
+                
+                log.info(f"Attempting to revoke Google token for user {user_id}, "
+                         f"ID: {token_entry.id}, Team ID: {token_entry.provider_team_id}")
+                
+                # Google token revocation typically requires sending the token itself as a parameter
+                revoke_response = requests.post(
+                    GOOGLE_AUTH_REVOKE_URL,
+                    params={'token': decrypted_access_token}
+                )
+                revoke_response.raise_for_status()
+                # Google's revoke endpoint usually returns an empty 200 OK on success
+                
+                if revoke_response.status_code == 200:
+                    msg = f"Successfully revoked Google token ID: {token_entry.id} for user {user_id}"
+                    log.info(msg)
+                    messages.append(msg)
+                else:
+                    msg = (f"Failed to revoke Google token ID: {token_entry.id} for user {user_id}. "
+                           f"HTTP Status: {revoke_response.status_code}, Response: {revoke_response.text}")
+                    log.warning(msg)
+                    messages.append(msg)
+            except Exception as e:
+                msg = (f"Error during Google token revocation for user {user_id}, "
+                       f"token ID: {token_entry.id}: {e}")
+                log.error(msg)
+                messages.append(msg)
+                overall_success = False
+
+    # --- Step 2: Remove stored Google credentials (OAuthToken entry) from DB ---
+    try:
+        if google_team_id:
+            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
+                user_id=user_id,
+                provider_name="Google",
+                provider_team_id=google_team_id
+            )
+        else:
+            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
+                user_id=user_id,
+                provider_name="Google"
+            )
+
+        if db_delete_success:
+            msg = f"Successfully deleted Google OAuth token(s) from DB for user {user_id}{f' (Team ID: {google_team_id})' if google_team_id else ''}."
+            log.info(msg)
+            messages.append(msg)
+        else:
+            msg = f"Failed to delete Google OAuth token(s) from DB for user {user_id}{f' (Team ID: {google_team_id})' if google_team_id else ''}. It might have already been deleted or not found."
+            log.error(msg)
+            messages.append(msg)
+    except Exception as e:
+        msg = f"Error deleting Google OAuth token(s) from DB for user {user_id}: {e}"
+        log.exception(msg)
+        messages.append(msg)
+        overall_success = False
+
+    # --- Step 3: Update Google Data Source Sync Status ---
+    # Find the data source by its 'action' ("google") to get its 'name'
+    google_data_source_found: Optional[DataSourceModel] = None
+    user_data_sources: List[DataSourceModel] = DataSources.get_data_sources_by_user_id(user_id)
+    for ds in user_data_sources:
+        if ds.action == "google":
+            google_data_source_found = ds
+            break
+
+    if google_data_source_found:
+        try:
+            updated_ds = DataSources.update_data_source_sync_status_by_name(
+                user_id=user_id,
+                source_name=google_data_source_found.name,
+                sync_status="unsynced", # Set to a specific "disconnected" status
+                last_sync=int(time.time()) # Update last sync time to now
+            )
+            if updated_ds:
+                msg = f"Successfully updated Google data source status to 'unsynced' for user {user_id} (Data Source Name: {updated_ds.name})."
+                log.info(msg)
+                messages.append(msg)
+            else:
+                msg = f"Failed to update Google data source status to 'unsynced' for user {user_id} (Data Source Name: {google_data_source_found.name})."
+                log.error(msg)
+                messages.append(msg)
+                overall_success = False
+        except Exception as e:
+            msg = f"Error updating Google data source status for user {user_id}: {e}"
+            log.exception(msg)
+            messages.append(msg)
+            overall_success = False
+    else:
+        msg = f"Google data source not found for user {user_id}. Cannot update sync status."
+        log.warning(msg)
+        messages.append(msg)
+
+    # --- Step 4: Delete user data from GCS Bucket ---
+    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+        msg = ("GCS configuration missing (GCS_BUCKET_NAME or GCS_SERVICE_ACCOUNT_BASE64). "
+                "Cannot perform GCS data cleanup as requested.")
+        log.error(msg)
+        messages.append(msg)
+        overall_success = False
+    else:
+        google_folder_path = f"{user_id}/Google Drive/" 
+        try:
+            background_tasks.add_task(
+                delete_gcs_folder,
+                google_folder_path,
+                GCS_SERVICE_ACCOUNT_BASE64,
+                GCS_BUCKET_NAME
+            )
+
+            msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Google folder."
+            log.info(msg)
+            messages.append(msg)
+            
+        except Exception as e:
+            msg = f"Error during GCS data cleanup for user {user_id}'s Google folder: {e}"
+            log.exception(msg)
+            messages.append(msg)
+            overall_success = False
+
+
+    if overall_success:
+        log.info(f"Google integration disconnection process completed successfully for user: {user_id}")
+        return {"message": "Google integration disconnected successfully.", "details": messages}
+    else:
+        log.warning(f"Google integration disconnection process completed with some failures for user: {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": "Failed to fully disconnect Google integration. See details.", "details": messages}
+        )
+
+
+############################
+# Microsoft Endpoints 
+############################
+
+@router.get("/microsoft/initialize")
+def get_microsoft_auth_url(user=Depends(get_verified_user)):
+    """Generate Microsoft OAuth URL for the current authenticated user."""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    # Microsoft Graph scopes.
+    microsoft_scopes = [
+        "User.Read",         # Read user's profile
+        "Files.Read.All",    # Read user's files in OneDrive and SharePoint
+        "Sites.Read.All",    # Read user's sites in SharePoint
+        "offline_access"     # Crucial to get a refresh_token
+    ]
+
+    scope_str = " ".join(microsoft_scopes) # Microsoft scopes are space-separated
+
+    # Use user ID as state parameter for security
+    state = user.id
+    oauth_state_store[state] = user.id  # Store for validation in callback
+
+    auth_url = (
+        f"{MICROSOFT_AUTHORIZE_URL}"
+        f"?client_id={MICROSOFT_CLIENT_ID}"
+        f"&redirect_uri={MICROSOFT_REDIRECT_URI}"
+        f"&response_type=code"  # Always 'code' for web server apps
+        f"&scope={scope_str}"
+        f"&response_mode=query" # Or 'form_post' depending on your preference
+        f"&state={state}"
+    )
+
+    return {
+        "url": auth_url,
+        "user_id": user.id,
+        "scopes": microsoft_scopes
+    }
+
+@router.get("/microsoft/callback")
+async def microsoft_callback(request: Request, background_tasks: BackgroundTasks):
+    """Handle Microsoft OAuth callback and initiate sync process."""
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    error = request.query_params.get("error")
+    error_description = request.query_params.get("error_description")
+
+    if error:
+        log.error(f"Microsoft OAuth error: {error} - {error_description}")
+        return Response(status_code=400, content=f"Microsoft OAuth error: {error_description or error}")
+
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing Microsoft OAuth code.")
+
+    if not state or state not in oauth_state_store:
+        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
+
+    user_id = oauth_state_store.pop(state)  # Remove state after use
+
+    try:
+        # Exchange code for access token
+        response = requests.post(
+            MICROSOFT_TOKEN_URL,
+            data={
+                "client_id": MICROSOFT_CLIENT_ID,
+                "client_secret": MICROSOFT_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": MICROSOFT_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        if "error" in data:
+            raise HTTPException(status_code=400, detail=f"Microsoft OAuth failed: {data.get('error_description', data.get('error'))}")
+
+        log.info(f"Microsoft OAuth successful for user {user_id}")
+
+        # Extract tokens and relevant Microsoft metadata
+        access_token = data.get("access_token")
+        refresh_token = data.get("refresh_token") # Only present if offline_access scope was requested
+        expires_in = data.get("expires_in") # Time until access_token expires (in seconds)
+        id_token = data.get("id_token") # Contains user info if 'openid' scope requested (implied by User.Read)
+
+        microsoft_user_id = None
+        if id_token:
+            try:
+                # Decode the ID token to get the user's object ID or other unique identifier
+                # In production, ALWAYS verify the signature and audience of the JWT.
+                decoded_id_token = jwt.decode(id_token, options={"verify_signature": False})
+                microsoft_user_id = decoded_id_token.get("oid") or decoded_id_token.get("sub") # 'oid' is object ID (immutable), 'sub' is subject (can be user-specific, unique). 'oid' is preferred.
+            except ImportError:
+                log.warning("PyJWT not installed. Cannot decode id_token to get Microsoft User ID.")
+            except Exception as e:
+                log.error(f"Failed to decode id_token for Microsoft: {e}")
+
+        if not access_token:
+            raise HTTPException(
+                status_code=500,
+                detail="No access token received from Microsoft OAuth. Ensure necessary scopes are requested."
+            )
+
+        # Encrypt tokens before storing
+        encrypted_access_token = encrypt_data(access_token)
+        encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else None
+
+        # Calculate expiration time for access token
+        access_token_expires_at = None
+        if expires_in:
+            access_token_expires_at = int(time.time()) + expires_in
+
+        # Store tokens in the database
+        try:
+            OAuthTokens.insert_new_token(
+                user_id=user_id,
+                provider_name="Microsoft",
+                provider_user_id=microsoft_user_id,
+                encrypted_access_token=encrypted_access_token,
+                encrypted_refresh_token=encrypted_refresh_token,
+                access_token_expires_at=access_token_expires_at,
+                scopes=data.get("scope"), # Space-separated string of granted scopes
+            )
+            log.info(f"Stored/Updated Microsoft OAuth tokens for user {user_id}")
+
+        except Exception as db_error:
+            log.error(f"Failed to store Microsoft OAuth tokens in DB for user {user_id}: {db_error}")
+            raise HTTPException(status_code=500, detail="Failed to store Microsoft tokens securely.")
+
+        # Validate required environment variables for sync (assuming GCS for storage)
+        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+            raise HTTPException(
+                status_code=500,
+                detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
+            )
+
+        # Initiate the sync process with the *decrypted* access token
+        try:
+            log.info(f"Starting Microsoft sync for user {user_id} with token (retrieved from OAuth response)")
+
+            # Add the task to the background tasks to sync user Microsoft data
+            background_tasks.add_task(
+                initiate_microsoft_sync,
+                user_id,
+                access_token, # Use the token directly from the response
+                GCS_SERVICE_ACCOUNT_BASE64,
+                GCS_BUCKET_NAME
+            )
+
+            update_data_source_sync_status(user_id, 'microsoft', 'syncing')
+
+            return {
+                "message": "Microsoft data sync initiated successfully.",
+                "user_id": user_id,
+                "microsoft_user_id": microsoft_user_id,
+                "status": "success"
+            }
+
+        except Exception as sync_error:
+            log.error(f"Microsoft sync failed for user {user_id}: {str(sync_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Microsoft sync failed: {str(sync_error)}"
+            )
+
+    except requests.exceptions.RequestException as e:
+        log.error(f"Microsoft API Request Error: {str(e)}")
+        if hasattr(e, 'response') and e.response is not None:
+            log.error(f"Response: {e.response.text}")
+        raise HTTPException(status_code=500, detail="Failed to authenticate with Microsoft")
+
+@router.get("/microsoft/status")
+def get_microsoft_status(user=Depends(get_verified_user)):
+    """Get current user's Microsoft integration status."""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    # Check if required environment variables are configured
+    config_status = {
+        "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
+        "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
+        "microsoft_client_configured": bool(MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET and MICROSOFT_REDIRECT_URI),
+    }
+
+    # Check if a Microsoft token exists for the user
+    microsoft_token_exists = OAuthTokens.get_token_by_user_provider_details(user_id=user.id, provider_name="Microsoft")
+
+    # Check current sync status from data sources
+    sync_status = "not_connected"
+    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+    for ds in user_data_sources:
+        if ds.action == "microsoft":
+            sync_status = ds.sync_status
+            break
+
+    return {
+        "user_id": user.id,
+        "configuration": config_status,
+        "microsoft_token_present": bool(microsoft_token_exists),
+        "current_sync_status": sync_status,
+        "ready_for_sync": all(config_status.values()) and bool(microsoft_token_exists) and sync_status != "syncing"
+    }
+
+
+@router.post("/microsoft/sync")
+async def manual_microsoft_sync(
+    background_tasks: BackgroundTasks,
+    user=Depends(get_verified_user),
+):
+    """Manually trigger Microsoft sync for the authenticated user, fetching tokens from DB."""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    current_time = int(time.time())
+
+    # 1. Fetch encrypted tokens for the user and Microsoft provider
+    token_entry = OAuthTokens.get_token_by_user_provider_details(
+        user_id=user.id,
+        provider_name="Microsoft"
+    )
+
+    if not token_entry:
+        raise HTTPException(
+            status_code=404,
+            detail="No Microsoft integration found for this user. Please authorize your Microsoft app first."
+        )
+
+    # 2. Decrypt tokens
+    try:
+        decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
+        decrypted_refresh_token = decrypt_data(token_entry.encrypted_refresh_token) if token_entry.encrypted_refresh_token else None
+
+        sync_token = decrypted_access_token # This is the token we'll use for Microsoft Graph API calls
+
+    except Exception as e:
+        log.error(f"Failed to decrypt tokens for user {user.id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to decrypt Microsoft tokens. Please try re-authorizing.")
+
+    # 3. Check token expiration and refresh if necessary
+    refresh_needed = False
+    if token_entry.access_token_expires_at:
+        # Check if less than 5 minutes until expiration
+        if (token_entry.access_token_expires_at - current_time) < (5 * 60):
+            refresh_needed = True
+            log.info(f"Access token for user {user.id} nearing expiration. Initiating refresh.")
+    elif decrypted_refresh_token:
+        # If no explicit expiration, but refresh token exists, assume proactive refresh is best practice
+        log.info(f"Access token for user {user.id} has no explicit expiry but a refresh token exists. Will attempt refresh.")
+        refresh_needed = True
+
+
+    if refresh_needed and decrypted_refresh_token:
+        try:
+            log.info(f"Attempting to refresh Microsoft token for user {user.id}")
+            refresh_response = requests.post(
+                MICROSOFT_TOKEN_URL,
+                data={
+                    "client_id": MICROSOFT_CLIENT_ID,
+                    "client_secret": MICROSOFT_CLIENT_SECRET,
+                    "grant_type": "refresh_token",
+                    "refresh_token": decrypted_refresh_token,
+                },
+            )
+            refresh_response.raise_for_status()
+            refresh_data = refresh_response.json()
+
+            if "error" in refresh_data:
+                log.error(f"Microsoft token refresh failed for user {user.id}: {refresh_data.get('error_description', refresh_data.get('error'))}")
+                raise HTTPException(status_code=400, detail=f"Failed to refresh Microsoft token: {refresh_data.get('error_description', refresh_data.get('error'))}")
+
+            # Get new tokens and update expiration
+            new_access_token = refresh_data.get("access_token")
+            new_refresh_token = refresh_data.get("refresh_token", decrypted_refresh_token) # Microsoft often issues new refresh tokens
+            new_expires_in = refresh_data.get("expires_in")
+
+            if not new_access_token:
+                raise HTTPException(status_code=500, detail="No new access token received after refresh.")
+
+            # Encrypt new tokens
+            encrypted_new_access_token = encrypt_data(new_access_token)
+            encrypted_new_refresh_token = encrypt_data(new_refresh_token) if new_refresh_token else None
+            new_access_token_expires_at = int(time.time()) + new_expires_in if new_expires_in else None
+
+            # Update database with new tokens
+            updated_token_entry = OAuthTokens.update_token_by_id(
+                token_id=token_entry.id,
+                encrypted_access_token=encrypted_new_access_token,
+                encrypted_refresh_token=encrypted_new_refresh_token,
+                access_token_expires_at=new_access_token_expires_at,
+                scopes=refresh_data.get("scope", token_entry.scopes)
+            )
+
+            if not updated_token_entry:
+                raise HTTPException(status_code=500, detail="Failed to update refreshed Microsoft tokens in database.")
+
+            log.info(f"Successfully refreshed and updated Microsoft tokens for user {user.id}")
+            sync_token = new_access_token # Use the newly acquired access token for sync
+
+        except requests.exceptions.RequestException as e:
+            log.error(f"Microsoft API Request Error during token refresh for user {user.id}: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                log.error(f"Refresh response: {e.response.text}")
+            raise HTTPException(status_code=500, detail="Failed to refresh Microsoft token with provider.")
+        except Exception as e:
+            log.error(f"An error occurred during Microsoft token refresh for user {user.id}: {str(e)}")
+            raise HTTPException(status_code=500, detail="An internal server error occurred during token refresh.")
+    elif refresh_needed and not decrypted_refresh_token:
+        log.warning(f"Access token for user {user.id} nearing expiration but no valid refresh token available. Initiating re-authorization flow.")
+        try:
+            # Generate re-authorization URL for Microsoft OAuth
+            microsoft_auth_url = (
+                f"{MICROSOFT_AUTHORIZE_URL}"
+                f"?client_id={MICROSOFT_CLIENT_ID}&"
+                f"redirect_uri={MICROSOFT_REDIRECT_URI}&"
+                f"scope=User.Read%20Files.Read.All%20Sites.Read.All%20offline_access&" # Re-request necessary scopes including offline_access
+                f"response_type=code&"
+                f"prompt=consent&" # Ensures refresh token is granted
+                f"state={user.id}"
+            )
+            log.info(f"Generated re-authorization URL for user {user.id}")
+
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": "token_expired_no_refresh",
+                    "message": "Microsoft token is expired and no valid refresh token is available. Re-authorization required.",
+                    "reauth_url": microsoft_auth_url,
+                    "action_required": "redirect_to_microsoft_auth",
+                    "user_id": str(user.id),
+                    "provider": "microsoft",
+                    "reason": "no_refresh_token" if not token_entry.encrypted_refresh_token else "invalid_refresh_token"
+                }
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            log.error(f"Failed to generate re-authorization URL for user {user.id}: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "reauth_generation_failed",
+                    "message": "Microsoft token is expired and re-authorization flow could not be initiated. Please manually re-authorize your Microsoft integration.",
+                    "user_id": str(user.id)
+                }
+            )
+
+    # 4. Validate required environment variables for sync (assuming GCS for storage)
+    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+        raise HTTPException(
+            status_code=500,
+            detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
+        )
+
+    try:
+        log.info(f"Starting scheduled/manual Microsoft sync for user {user.id}")
+
+        # Add the task to the background tasks to sync user Microsoft data
+        # You will need to implement initiate_microsoft_sync
+        background_tasks.add_task(
+            initiate_microsoft_sync,
+            user.id,
+            sync_token, # Use the valid (or freshly refreshed) token
+            GCS_SERVICE_ACCOUNT_BASE64,
+            GCS_BUCKET_NAME
+        )
+
+        update_data_source_sync_status(user.id, 'microsoft', 'syncing')
+
+        return {
+            "message": "Microsoft data sync initiated successfully.",
+            "user_id": user.id,
+            "status": "success"
+        }
+
+    except Exception as sync_error:
+        log.error(f"Microsoft sync failed for user {user.id}: {str(sync_error)}")
+        if "invalid_grant" in str(sync_error).lower() or "invalid_token" in str(sync_error).lower():
+            log.warning(f"Microsoft sync for user {user.id} failed due to invalid token. User may need to re-authorize.")
+            raise HTTPException(
+                status_code=401,
+                detail="Microsoft token invalid or expired. Please re-authorize your Microsoft integration."
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Microsoft sync failed: {str(sync_error)}"
+        )
+
+@router.delete("/microsoft/disconnect")
+async def disconnect_microsoft(background_tasks: BackgroundTasks, user=Depends(get_verified_user),
+    microsoft_tenant_id: Optional[str] = None # Microsoft uses tenant IDs
+):
+    """
+    Disconnects a user's Microsoft integration, revoking tokens (where possible), deleting credentials,
+    cleaning up GCS files and updating the data source sync status.
+
+    Args:
+        user: The authenticated user object.
+        microsoft_tenant_id (Optional[str]): If provided, only attempts to disconnect the Microsoft
+                                       integration for this specific tenant ID (e.g., a specific
+                                       Microsoft 365 organization).
+
+    Returns:
+        JSONResponse: A message indicating success or failure.
+    """
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    user_id = user.id
+    log.info(f"Initiating Microsoft integration disconnection for user: {user_id}"
+             f"{f' (Tenant ID: {microsoft_tenant_id})' if microsoft_tenant_id else ''}"
+             f", GCS cleanup")
+
+    overall_success = True
+    messages = []
+
+    # --- Step 1: Revoke Microsoft Token(s) ---
+    # Microsoft generally handles token invalidation at the Azure AD level.
+    # There isn't a direct "revoke token" API endpoint for individual access/refresh tokens like Google.
+    # When a user removes an app's permissions, or changes password, or admin revokes session, tokens become invalid.
+    # For programmatic revocation, usually an admin action is required (e.g., invalidating a user's refresh token
+    # via the Azure AD Graph API or by disabling the service principal for the application).
+    # For the scope of a user-facing disconnect, primarily we'll delete the token from our DB and clean up data.
+    # We can provide a "logout" URL, but it primarily clears browser session.
+
+    # Fetch token entries to log which ones are being removed
+    microsoft_tokens_to_remove: List[OAuthTokenModel] = []
+    if microsoft_tenant_id:
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user_id,
+            provider_name="Microsoft",
+            # Assuming provider_team_id can store tenant_id for Microsoft
+            provider_team_id=microsoft_tenant_id
+        )
+        if token_entry:
+            microsoft_tokens_to_remove.append(token_entry)
+    else:
+        all_user_tokens = OAuthTokens.get_all_tokens_for_user(user_id=user_id)
+        microsoft_tokens_to_remove = [
+            token for token in all_user_tokens if token.provider_name == "Microsoft"
+        ]
+
+    if not microsoft_tokens_to_remove:
+        msg = f"No Microsoft tokens found for user {user_id}{f' (Tenant ID: {microsoft_tenant_id})' if microsoft_tenant_id else ''}. Skipping token revocation attempt."
+        log.warning(msg)
+        messages.append(msg)
+    else:
+        # Log that tokens are being removed from local DB
+        for token_entry in microsoft_tokens_to_remove:
+            msg = (f"Microsoft token ID: {token_entry.id} for user {user_id}"
+                   f" (Tenant ID: {token_entry.provider_team_id}) will be removed from DB.")
+            log.info(msg)
+            messages.append(msg)
+        
+
+    # --- Step 2: Remove stored Microsoft credentials (OAuthToken entry) from DB ---
+    try:
+        if microsoft_tenant_id:
+            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
+                user_id=user_id,
+                provider_name="Microsoft",
+                provider_team_id=microsoft_tenant_id
+            )
+        else:
+            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
+                user_id=user_id,
+                provider_name="Microsoft"
+            )
+
+        if db_delete_success:
+            msg = f"Successfully deleted Microsoft OAuth token(s) from DB for user {user_id}{f' (Tenant ID: {microsoft_tenant_id})' if microsoft_tenant_id else ''}."
+            log.info(msg)
+            messages.append(msg)
+        else:
+            msg = f"Failed to delete Microsoft OAuth token(s) from DB for user {user_id}{f' (Tenant ID: {microsoft_tenant_id})' if microsoft_tenant_id else ''}. It might have already been deleted or not found."
+            log.error(msg)
+            messages.append(msg)
+            overall_success = False
+    except Exception as e:
+        msg = f"Error deleting Microsoft OAuth token(s) from DB for user {user_id}: {e}"
+        log.exception(msg)
+        messages.append(msg)
+        overall_success = False
+
+    # --- Step 3: Update Microsoft Data Source Sync Status ---
+    microsoft_data_source_found: Optional[DataSourceModel] = None
+    user_data_sources: List[DataSourceModel] = DataSources.get_data_sources_by_user_id(user_id)
+    for ds in user_data_sources:
+        if ds.action == "microsoft":
+            microsoft_data_source_found = ds
+            break
+
+    if microsoft_data_source_found:
+        try:
+            updated_ds = DataSources.update_data_source_sync_status_by_name(
+                user_id=user_id,
+                source_name=microsoft_data_source_found.name,
+                sync_status="unsynced",
+                last_sync=int(time.time())
+            )
+            if updated_ds:
+                msg = f"Successfully updated Microsoft data source status to 'unsynced' for user {user_id} (Data Source Name: {updated_ds.name})."
+                log.info(msg)
+                messages.append(msg)
+            else:
+                msg = f"Failed to update Microsoft data source status to 'unsynced' for user {user_id} (Data Source Name: {microsoft_data_source_found.name})."
+                log.error(msg)
+                messages.append(msg)
+                overall_success = False
+        except Exception as e:
+            msg = f"Error updating Microsoft data source status for user {user_id}: {e}"
+            log.exception(msg)
+            messages.append(msg)
+            overall_success = False
+    else:
+        msg = f"Microsoft data source not found for user {user_id}. Cannot update sync status."
+        log.warning(msg)
+        messages.append(msg)
+
+    # --- Step 4: Delete user data from GCS Bucket ---
+    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+        msg = ("GCS configuration missing (GCS_BUCKET_NAME or GCS_SERVICE_ACCOUNT_BASE64). "
+                "Cannot perform GCS data cleanup as requested.")
+        log.error(msg)
+        messages.append(msg)
+        overall_success = False
+    else:
+        onedrive_folder_path = f"{user_id}/OneDrive/" 
+        sharepoint_folder_path = f"{user_id}/SharePoint/" 
+        try:
+
+            background_tasks.add_task(
+                delete_gcs_folder,
+                onedrive_folder_path,
+                GCS_SERVICE_ACCOUNT_BASE64,
+                GCS_BUCKET_NAME
+            )
+            
+            background_tasks.add_task(
+                delete_gcs_folder,
+                sharepoint_folder_path,
+                GCS_SERVICE_ACCOUNT_BASE64,
+                GCS_BUCKET_NAME
+            )
+
+            msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Microsoft folder."
+            log.info(msg)
+            messages.append(msg)
+            
+        except Exception as e:
+            msg = f"Error during GCS data cleanup for user {user_id}'s Microsoft folder: {e}"
+            log.exception(msg)
+            messages.append(msg)
+            overall_success = False
+
+    if overall_success:
+        log.info(f"Microsoft integration disconnection process completed successfully for user: {user_id}")
+        return {"message": "Microsoft integration disconnected successfully.", "details": messages}
+    else:
+        log.warning(f"Microsoft integration disconnection process completed with some failures for user: {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": "Failed to fully disconnect Microsoft integration. See details.", "details": messages}
+        )
+
+############################
 # Slack Endpoints 
 ############################
 
@@ -356,10 +1532,10 @@ def get_slack_auth_url(user=Depends(get_verified_user)):
     
     auth_url = (
         f"{SLACK_AUTHORIZE_URL}"
-        f"?client_id={CLIENT_ID}"
+        f"?client_id={SLACK_CLIENT_ID}"
         f"&scope={bot_scope_str}"
         f"&user_scope={user_scope_str}"  # This is the key addition
-        f"&redirect_uri={REDIRECT_URI}"
+        f"&redirect_uri={SLACK_REDIRECT_URI}"
         f"&state={state}"
     )
 
@@ -372,7 +1548,7 @@ def get_slack_auth_url(user=Depends(get_verified_user)):
 
 
 @router.get("/slack/callback")
-def slack_callback(request: Request):
+def slack_callback(request: Request, background_tasks: BackgroundTasks):
     """Handle Slack OAuth callback and initiate sync process."""
     code = request.query_params.get("code")
     state = request.query_params.get("state")
@@ -396,10 +1572,10 @@ def slack_callback(request: Request):
             SLACK_TOKEN_URL,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data={
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
+                "client_id": SLACK_CLIENT_ID,
+                "client_secret": SLACK_CLIENT_SECRET,
                 "code": code,
-                "redirect_uri": REDIRECT_URI,
+                "redirect_uri": SLACK_REDIRECT_URI,
             },
         )
         response.raise_for_status()
@@ -491,11 +1667,13 @@ def slack_callback(request: Request):
         try:
             log.info(f"Starting Slack sync for user {user_id} with {'user' if user_access_token else 'bot'} token (retrieved from OAuth response)")
             
-            initiate_slack_sync(
-                user_id=user_id,
-                token=sync_token_for_immediate_use,
-                creds=GCS_SERVICE_ACCOUNT_BASE64,
-                gcs_bucket_name=GCS_BUCKET_NAME
+            # Add the task to the background tasks to sync user slack data
+            background_tasks.add_task(
+                initiate_slack_sync,
+                user_id,
+                sync_token_for_immediate_use,
+                GCS_SERVICE_ACCOUNT_BASE64,
+                GCS_BUCKET_NAME
             )
 
             update_data_source_sync_status(user_id, 'slack', 'syncing')
@@ -535,7 +1713,7 @@ def get_slack_status(user=Depends(get_verified_user)):
     config_status = {
         "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
         "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
-        "slack_client_configured": bool(CLIENT_ID and CLIENT_SECRET and REDIRECT_URI),
+        "slack_client_configured": bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_REDIRECT_URI),
     }
     
     return {
@@ -547,6 +1725,7 @@ def get_slack_status(user=Depends(get_verified_user)):
 
 @router.post("/slack/sync")
 def manual_slack_sync(
+    background_tasks: BackgroundTasks,
     user=Depends(get_verified_user),
 ):
     """Manually trigger Slack sync for the authenticated user, fetching tokens from DB."""
@@ -600,8 +1779,8 @@ def manual_slack_sync(
                 SLACK_TOKEN_URL,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 data={
-                    "client_id": CLIENT_ID,
-                    "client_secret": CLIENT_SECRET,
+                    "client_id": SLACK_CLIENT_ID,
+                    "client_secret": SLACK_CLIENT_SECRET,
                     "grant_type": "refresh_token",
                     "refresh_token": decrypted_refresh_token,
                 },
@@ -666,11 +1845,13 @@ def manual_slack_sync(
     try:
         log.info(f"Starting scheduled/manual Slack sync for user {user.id}")
 
-        initiate_slack_sync(
-            user_id=user.id,
-            token=sync_token, # Use the valid (or freshly refreshed) token
-            creds=GCS_SERVICE_ACCOUNT_BASE64,
-            gcs_bucket_name=GCS_BUCKET_NAME
+        # Add the task to the background tasks to sync user slack data
+        background_tasks.add_task(
+            initiate_slack_sync,
+            user.id,
+            sync_token, # Use the valid (or freshly refreshed) token
+            GCS_SERVICE_ACCOUNT_BASE64,
+            GCS_BUCKET_NAME
         )
 
         update_data_source_sync_status(user.id, 'slack', 'syncing')
@@ -696,8 +1877,9 @@ def manual_slack_sync(
             detail=f"Slack sync failed: {str(sync_error)}"
         )
 
+
 @router.delete("/slack/disconnect")
-async def disconnect_slack(user=Depends(get_verified_user),
+async def disconnect_slack(background_tasks: BackgroundTasks, user=Depends(get_verified_user),
     slack_team_id: Optional[str] = None
 ):
     """
@@ -848,20 +2030,17 @@ async def disconnect_slack(user=Depends(get_verified_user),
     else:
         slack_folder_path = f"{user_id}/Slack/"
         try:
-            gcs_cleanup_success =  await delete_gcs_folder( 
-                folder_path=slack_folder_path,
-                service_account_base64=GCS_SERVICE_ACCOUNT_BASE64,
-                GCS_BUCKET_NAME=GCS_BUCKET_NAME
+            background_tasks.add_task(
+                delete_gcs_folder,
+                slack_folder_path,
+                GCS_SERVICE_ACCOUNT_BASE64,
+                GCS_BUCKET_NAME
             )
-            if gcs_cleanup_success:
-                msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Slack folder."
-                log.info(msg)
-                messages.append(msg)
-            else:
-                msg = f"Failed to delete GCS data for user {user_id}'s Slack folder."
-                log.error(msg)
-                messages.append(msg)
-                overall_success = False
+
+            msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Slack folder."
+            log.info(msg)
+            messages.append(msg)
+            
         except Exception as e:
             msg = f"Error during GCS data cleanup for user {user_id}'s Slack folder: {e}"
             log.exception(msg)

@@ -6,8 +6,8 @@ export interface DataSourceResponse {
 	user_id: string;
 	name: string;
 	context: string;
-	sync_status: string;
-	last_sync: number | null;
+	sync_status: 'synced' | 'syncing' | 'error' | 'unsynced';
+	last_sync: string | null;
 	icon: string;
 	action: string;
 	created_at: number;

@@ -20,6 +20,7 @@ from open_webui.models.auths import (
 )
 from open_webui.models.users import Users
 from open_webui.models.data import DataSources
+from open_webui.models.datatokens import OAuthToken
 
 from open_webui.constants import ERROR_MESSAGES, WEBHOOK_MESSAGES
 from open_webui.env import (
@@ -34,7 +35,7 @@ from open_webui.env import (
     WEBUI_AUTH_COOKIE_SECURE,
     SRC_LOG_LEVELS,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
 from fastapi.responses import RedirectResponse, Response
 from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP, DEFAULT_USER_PERMISSIONS, OAUTH_PROVIDER_NAME
 from pydantic import BaseModel
@@ -337,7 +338,7 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
 
 
 @router.post("/signin", response_model=SessionUserResponse)
-async def signin(request: Request, response: Response, form_data: SigninForm):
+async def signin(request: Request, response: Response, form_data: SigninForm, background_tasks: BackgroundTasks):
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
@@ -373,7 +374,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         # Check if the user already exists in the database
         user_exists = Users.get_user_by_email(trusted_email)
 
-        # If the user does not exist, create a new user with the trusted email, profile image url and name
+        # If the user does not exist, create a new user with the trusted email, profile image url, name and default data sources
         if not user_exists:
             await signup(
                 request,
@@ -383,16 +384,30 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                 ),
             )
             
-        # If an SSO provider is present and the user exists, update their profile image URL and name 
         if sso_provider:
+            user_id = user_exists.id if user_exists else Users.get_user_by_email(trusted_email).id
+
+            # Fetch and save the user's OAuth tokens from the SSO provider
+            Users.fetch_and_save_user_oauth_tokens(
+                user_id, sso_provider, token
+            )
+
+            # If an SSO provider is present and the user exists, 
+            # update their profile image URL and name with the latest data 
+            # from the SSO provider
             if user_exists:
-                Users.update_user_by_id(user_exists.id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
+                Users.update_user_by_id(user_id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
+
 
             # For existing and new users, trigger user file data sync from the SSO provider if enabled
             if ENABLE_SSO_DATA_SYNC:
-                user_id = user_exists.id if user_exists else Users.get_user_by_email(trusted_email).id
-                DataSources.create_default_data_sources_for_user(user_id)
-                Users.get_user_file_data_from_sso_provider(user_id, sso_provider, token)
+                # Add background tasks to sync user file data from the SSO provider
+                background_tasks.add_task(
+                    Users.get_user_file_data_from_sso_provider,
+                    user_id,
+                    sso_provider,
+                    token
+                )
 
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER:
             trusted_groups = request.headers.get(
@@ -570,6 +585,9 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
             user_permissions = get_permissions(
                 user.id, request.app.state.config.USER_PERMISSIONS
             )
+
+            # Create default data sources for the new user
+            DataSources.create_default_data_sources_for_user(user.id)
 
             return {
                 "token": token,

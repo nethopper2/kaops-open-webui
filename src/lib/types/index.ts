@@ -18,8 +18,8 @@ export type DataSource = {
 	id: string;
 	name: string;
 	context: string;
-	syncStatus: 'synced' | 'syncing' | 'error' | 'unsynced';
-	lastSync: string; // ISO date string
+	sync_status: 'synced' | 'syncing' | 'error' | 'unsynced';
+	last_sync: string | null; // ISO date string
 	icon: string; // Icon name or component
 	action?: string; // Optional action text
 };

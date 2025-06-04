@@ -2,6 +2,8 @@ import base64
 import json
 import time
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import httpx
 import jwt
 import os
@@ -56,15 +58,51 @@ def parse_date(date_str):
     return datetime.fromisoformat(date_str.replace('Z', '+00:00')) if date_str else None
 
 def make_api_request(url, method='GET', headers=None, params=None, data=None, stream=False, auth_token=None):
-    """Helper function to make API requests with error handling"""    
+    """
+    Helper function to make API requests with error handling and retry logic.
+
+    Args:
+        url (str): The URL for the API request.
+        method (str): The HTTP method (e.g., 'GET', 'POST').
+        headers (dict, optional): Dictionary of HTTP headers.
+        params (dict, optional): Dictionary of URL parameters.
+        data (dict/str, optional): Request body data.
+        stream (bool): Whether to stream the response content.
+        auth_token (str, optional): OAuth token for Authorization header.
+
+    Returns:
+        requests.Response or dict: The Response object if streaming, otherwise JSON content.
+
+    Raises:
+        requests.exceptions.RequestException: If the request fails after retries.
+    """
     if headers is None:
         headers = {}
-    
+
     if auth_token:
         headers['Authorization'] = f'Bearer {auth_token}'
-    
+
+    # Configure retry strategy
+    # Total retries: 5 attempts (1 initial + 4 retries)
+    # Backoff factor: 1s, 2s, 4s, 8s, 16s sleeps between retries
+    # Status codes to retry: 429 (Too Many Requests), 5xx (Server Errors)
+    # Allowed methods: Typically safe methods, plus POST/PUT/DELETE for idempotent operations
+    retry_strategy = Retry(
+        total=5,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "PUT", "DELETE", "POST", "OPTIONS", "TRACE"]
+    )
+
+    # Create a session and mount the retry adapter
+    # Using a session allows for connection pooling and applying retries globally
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
     try:
-        response = requests.request(
+        response = session.request(
             method=method,
             url=url,
             headers=headers,
@@ -72,13 +110,40 @@ def make_api_request(url, method='GET', headers=None, params=None, data=None, st
             data=data,
             stream=stream
         )
-        response.raise_for_status()
+        response.raise_for_status() # Raises an HTTPError for bad responses (4xx or 5xx)
+
+        # If it's not a stream, we can safely return the JSON content.
+        # If it *is* a stream, we must return the response object so the caller
+        # can use 'with' to ensure it's closed.
         return response.json() if not stream else response
-    except requests.exceptions.RequestException as e:
-        print(f"API Request Error: {str(e)}")
-        if hasattr(e, 'response') and e.response is not None:
-            print(f"Response: {e.response.text}")
+
+    except requests.exceptions.ConnectionError as e:
+        # This catches network-related errors, including ConnectionResetError
+        log.error(f"Network connection error for URL: {url} - {e}", exc_info=True)
+        raise # Re-raise the exception after logging
+    except requests.exceptions.Timeout as e:
+        # Catches request timeouts
+        log.error(f"Request timed out for URL: {url} - {e}", exc_info=True)
         raise
+    except requests.exceptions.HTTPError as e:
+        # Catches HTTP errors (4xx or 5xx status codes)
+        status_code = e.response.status_code if hasattr(e, 'response') and e.response is not None else 'N/A'
+        response_text = e.response.text if hasattr(e, 'response') and e.response is not None else 'No response body'
+        log.error(f"HTTP error for URL: {url} - Status: {status_code}, Response: {response_text} - {e}", exc_info=True)
+        raise
+    except requests.exceptions.RequestException as e:
+        # Catches any other requests-related errors
+        log.error(f"An unexpected API Request Error occurred for URL: {url} - {e}", exc_info=True)
+        if hasattr(e, 'response') and e.response is not None:
+            log.error(f"Response: {e.response.text}")
+        raise
+    finally:
+        # In this setup, the session and its underlying connections are managed by the HTTPAdapter
+        # and are typically reused. Explicitly closing the session here would prevent reuse.
+        # For a function that's called repeatedly, it's generally better to let the session manage
+        # its connection pool unless you have specific reasons to close it after each single request.
+        # If you were creating a new session for every request, session.close() would be necessary.
+        pass
 
 def upload_to_gcs(file_content, destination_name, content_type, service_account_base64, GCS_BUCKET_NAME):
     """Upload file to GCS using REST API"""
@@ -102,8 +167,8 @@ def upload_to_gcs(file_content, destination_name, content_type, service_account_
         gcs_token = token_response.json()['access_token']
         
         # Upload to GCS
-        encoded_object_name = urlencode({'name': destination_name}, safe='')
-        upload_url = GCS_UPLOAD_URL.format(bucket=GCS_BUCKET_NAME) + "?" + encoded_object_name
+        encoded_object_name = urlencode({'name': destination_name}) 
+        upload_url = f"{GCS_UPLOAD_URL.format(bucket=GCS_BUCKET_NAME)}?{encoded_object_name}"
         
         headers = {
             'Authorization': f'Bearer {gcs_token}',
@@ -121,7 +186,7 @@ def upload_to_gcs(file_content, destination_name, content_type, service_account_
         
     except Exception as error:
         print(f"GCS upload failed for {destination_name}: {str(error)}")
-        raise
+        raise # Re-raise to ensure calling functions are aware of the failure
 
 def list_gcs_files(service_account_base64, GCS_BUCKET_NAME):
     """List all files in GCS bucket using REST API with pagination"""
@@ -331,9 +396,6 @@ def update_data_source_sync_status(
     Updates the sync status and last sync timestamp for a data source,
     identified by user ID and its 'action' field.
 
-    This function now leverages the more direct `update_data_source_sync_status_by_name`
-    method by first finding the data source's actual 'name' using its 'action' field.
-
     Args:
         user_id (str): The ID of the user whose data source is to be updated.
         source_action (str): The 'action' identifier of the data source (e.g., "slack", "google").
@@ -361,8 +423,6 @@ def update_data_source_sync_status(
             log.warning(f"Data source with action '{source_action}' not found for user {user_id}. Cannot update sync status.")
             return None
         
-        # Now, use the new update_data_source_sync_status_by_name function
-        # passing the actual name we just retrieved.
         updated_source = DataSources.update_data_source_sync_status_by_name(
             user_id=user_id,
             source_name=target_data_source_name, # Use the actual name found

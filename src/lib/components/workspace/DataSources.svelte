@@ -20,44 +20,7 @@
 	let loaded = false;
 	let query = '';
 
-	// Sample data sources - replace with your actual data
-	let dataSources: Array<DataSource> = [
-		{
-			id: 'ds1',
-			name: 'Google File Storage',
-			context: 'Google Drive',
-			syncStatus: 'synced',
-			lastSync: '2025-05-29T10:30:00Z',
-			icon: 'Google',
-			action: 'sync'
-		},
-		{
-			id: 'ds2',
-			name: 'Microsoft Office 365 File Storage',
-			context: 'OneDrive & SharePoint',
-			syncStatus: 'error',
-			lastSync: '2025-05-29T09:15:00Z',
-			icon: 'Microsoft',
-			action: ' '
-		},
-		{
-			id: 'ds3',
-			name: 'Slack',
-			context: 'Direct Messages, Channels, Group Chats, Files & Canvases',
-			syncStatus: 'synced',
-			lastSync: '2025-05-28T14:20:00Z',
-			icon: 'Slack',
-			action: ''
-		}
-		// {
-		// 	id: 'ds4',
-		// 	name: 'User Preferences',
-		// 	context: '',
-		// 	syncStatus: 'synced',
-		// 	lastSync: '2025-05-29T08:45:00Z',
-		// 	icon: 'user-cog'
-		// }
-	];
+	let dataSources: Array<DataSource> = [];
 
 	let filteredItems = [];
 
@@ -112,15 +75,13 @@
 	const handleSync = (dataSource: DataSource) => {
 		console.log('Syncing:', dataSource.name);
 
-		console.log(dataSource.sync_status.toLowerCase());
-
-		switch (dataSource.sync_status.toLowerCase()) {
+		switch ((dataSource.sync_status as string).toLowerCase()) {
 			case 'synced':
-				return updateSync(dataSource.action);
+				return updateSync(dataSource.action as string);
 			case 'error':
-				return updateSync(dataSource.action);
+				return updateSync(dataSource.action as string);
 			case 'unsynced':
-				return initializeSync(dataSource.action);
+				return initializeSync(dataSource.action as string);
 		}
 	};
 
@@ -139,9 +100,7 @@
 	const updateSync = async (action: string) => {
 		console.log('Manual sync initiated for:', action);
 
-		let syncDetails = await manualDataSync(localStorage.token, action);
-
-		console.log('Sync details:', syncDetails);
+		await manualDataSync(localStorage.token, action);
 
 		dataSources = await getDataSources(localStorage.token);
 	};
@@ -151,9 +110,7 @@
 
 		console.log('Disconnecting sync for:', action);
 
-		let disconnectDetails = await disconnectDataSync(localStorage.token, action);
-
-		console.log('Disconnect details:', disconnectDetails);
+		await disconnectDataSync(localStorage.token, action as string);
 
 		dataSources = await getDataSources(localStorage.token);
 	};

@@ -105,10 +105,17 @@ class DataSourcesTable:
     ]
 
     def create_default_data_sources_for_user(self, user_id: str) -> List[DataSourceModel]:
-        """Create default data sources for a new user"""
+        """Create default data sources for a new user (only if they don't already exist)"""
         created_sources = []
         
+        # Get existing data source names for this user
+        existing_source_names = self.get_existing_data_source_names(user_id)
+        
         for default_source in self.DEFAULT_DATA_SOURCES:
+            # Skip if this default source already exists for the user
+            if default_source["name"] in existing_source_names:
+                continue
+                
             # Create unique ID for this user's data source
             unique_id = f"{user_id}_{uuid.uuid4()}"
             
@@ -126,6 +133,18 @@ class DataSourcesTable:
                 created_sources.append(created_source)
                 
         return created_sources
+
+    def get_existing_data_source_names(self, user_id: str) -> set:
+        """Get set of existing data source names for a user"""
+        with get_db() as db:
+            try:
+                existing_names = db.query(DataSource.name).filter(
+                    DataSource.user_id == user_id
+                ).all()
+                return {name[0] for name in existing_names}
+            except Exception as e:
+                log.exception(f"Error fetching existing data source names: {e}")
+                return set()
 
     def insert_new_data_source(self, user_id: str, form_data: DataSourceForm) -> Optional[DataSourceModel]:
         with get_db() as db:

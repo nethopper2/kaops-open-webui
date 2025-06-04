@@ -3,13 +3,14 @@ import time
 import requests
 import concurrent.futures
 import io
+import traceback
 import logging
 from datetime import datetime
 from urllib.parse import urlencode, quote
 
 from open_webui.env import SRC_LOG_LEVELS
 
-from open_webui.utils.data.data_ingestion import upload_to_gcs, list_gcs_files, delete_gcs_file, parse_date, format_bytes, validate_config, make_api_request
+from open_webui.utils.data.data_ingestion import upload_to_gcs, list_gcs_files, delete_gcs_file, parse_date, format_bytes, validate_config, make_api_request, update_data_source_sync_status
 
 from open_webui.models.data import DataSources
 log = logging.getLogger(__name__)
@@ -153,35 +154,47 @@ def download_onedrive_file(file_id, auth_token):
         io.BytesIO: file content
     """
     try:
-        # Get download URL
+        # Get download URL from metadata
         metadata_url = f"{GRAPH_API_BASE}/me/drive/items/{file_id}"
-        metadata = make_request(metadata_url, auth_token=auth_token)
+        # This metadata call does NOT stream, so make_api_request will return JSON
+        metadata = make_api_request(metadata_url, auth_token=auth_token)
         
+        file_content = io.BytesIO()
+
         if '@microsoft.graph.downloadUrl' in metadata:
             download_url = metadata['@microsoft.graph.downloadUrl']
-            # This is a direct download link that doesn't need the auth token
-            response = requests.get(download_url, stream=True)
+            # Direct download link:
+            # IMPORTANT: Your make_api_request assumes it should *add* the auth_token.
+            # If the downloadUrl is pre-authenticated (which it often is for MS Graph),
+            # make_api_request shouldn't add the auth_token again.
+            # We'll call make_api_request without auth_token if it's a pre-signed URL.
+            
+            # Assuming make_api_request's 'auth_token' parameter *only* adds if present.
+            # If it were always adding it, you'd need a separate simpler requests.get or modify make_api_request logic.
+            # Given how make_api_request is written, if auth_token is None, it won't add the header.
+            with make_api_request(download_url, stream=True, auth_token=None) as response:
+                # make_api_request already calls raise_for_status()
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        file_content.write(chunk)
         else:
-            # Fallback to content endpoint
+            # Fallback to content endpoint which REQUIRES auth_token
             download_url = f"{GRAPH_API_BASE}/me/drive/items/{file_id}/content"
-            response = make_request(download_url, auth_token=auth_token, stream=True)
-        
-        # Check if request was successful
-        if response.status_code != 200:
-            raise Exception(f"Failed to download file: {response.text}")
-        
-        # Read content into memory
-        file_content = io.BytesIO()
-        for chunk in response.iter_content(chunk_size=1024 * 1024):  # 1MB chunks
-            if chunk:
-                file_content.write(chunk)
+            with make_api_request(download_url, auth_token=auth_token, stream=True) as response:
+                # make_api_request already calls raise_for_status()
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        file_content.write(chunk)
         
         file_content.seek(0)
         return file_content
     
     except Exception as error:
         print(f"OneDrive download failed for {file_id}: {str(error)}")
+        # Consider using a logger with exc_info=True for better debugging in a real app
+        # log.error(f"OneDrive download failed for {file_id}:", exc_info=True)
         raise
+
 
 # SharePoint Functions
 def get_sharepoint_sites(auth_token):
@@ -225,6 +238,54 @@ def get_sharepoint_sites(auth_token):
         print(f"Error getting SharePoint sites: {str(error)}")
         return []
 
+def download_sharepoint_file(site_id, drive_id, file_id, auth_token):
+    """
+    Download file content from SharePoint
+    
+    Args:
+        site_id (str): The ID of the SharePoint site
+        drive_id (str): The ID of the drive
+        file_id (str): The ID of the file to download
+        auth_token (str): OAuth token for authentication
+        
+    Returns:
+        io.BytesIO: file content
+    """
+    try:
+        # Get download URL from metadata
+        metadata_url = f"{GRAPH_API_BASE}/sites/{site_id}/drives/{drive_id}/items/{file_id}"
+        # This metadata call does NOT stream, so make_api_request will return JSON
+        metadata = make_api_request(metadata_url, auth_token=auth_token)
+        
+        file_content = io.BytesIO()
+
+        if '@microsoft.graph.downloadUrl' in metadata:
+            download_url = metadata['@microsoft.graph.downloadUrl']
+            # Direct download link:
+            # Same logic as OneDrive: assuming make_api_request without auth_token means no auth header added.
+            with make_api_request(download_url, stream=True, auth_token=None) as response:
+                # make_api_request already calls raise_for_status()
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        file_content.write(chunk)
+        else:
+            # Fallback to content endpoint which REQUIRES auth_token
+            download_url = f"{GRAPH_API_BASE}/sites/{site_id}/drives/{drive_id}/items/{file_id}/content"
+            with make_api_request(download_url, auth_token=auth_token, stream=True) as response:
+                # make_api_request already calls raise_for_status()
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        file_content.write(chunk)
+        
+        file_content.seek(0)
+        return file_content
+    
+    except Exception as error:
+        print(f"SharePoint download failed for {file_id}: {str(error)}")
+        # Consider using a logger with exc_info=True for better debugging in a real app
+        # log.error(f"SharePoint download failed for {file_id}:", exc_info=True)
+        raise
+    
 def list_sharepoint_files_recursively(site_id, drive_id, folder_id, auth_token, current_path='', all_files=None, site_name=''):
     """Recursive file listing with path construction for SharePoint"""
     if all_files is None:
@@ -325,36 +386,40 @@ def download_sharepoint_file(site_id, drive_id, file_id, auth_token):
         io.BytesIO: file content
     """
     try:
-        # Get download URL
+        # Get download URL from metadata
         metadata_url = f"{GRAPH_API_BASE}/sites/{site_id}/drives/{drive_id}/items/{file_id}"
-        metadata = make_request(metadata_url, auth_token=auth_token)
+        # This metadata call does NOT stream, so make_api_request will return JSON
+        metadata = make_api_request(metadata_url, auth_token=auth_token)
         
+        file_content = io.BytesIO()
+
         if '@microsoft.graph.downloadUrl' in metadata:
             download_url = metadata['@microsoft.graph.downloadUrl']
-            # This is a direct download link that doesn't need the auth token
-            response = requests.get(download_url, stream=True)
+            # *** CRITICAL: Use 'with' for make_api_request with stream=True ***
+            # Assuming make_api_request without auth_token means no auth header added for pre-signed URLs.
+            with make_api_request(download_url, stream=True, auth_token=None) as response:
+                # make_api_request already calls raise_for_status()
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        file_content.write(chunk)
         else:
-            # Fallback to content endpoint
+            # Fallback to content endpoint which REQUIRES auth_token
             download_url = f"{GRAPH_API_BASE}/sites/{site_id}/drives/{drive_id}/items/{file_id}/content"
-            response = make_request(download_url, auth_token=auth_token, stream=True)
-        
-        # Check if request was successful
-        if response.status_code != 200:
-            raise Exception(f"Failed to download file: {response.text}")
-        
-        # Read content into memory
-        file_content = io.BytesIO()
-        for chunk in response.iter_content(chunk_size=1024 * 1024):  # 1MB chunks
-            if chunk:
-                file_content.write(chunk)
+            with make_api_request(download_url, auth_token=auth_token, stream=True) as response:
+                # make_api_request already calls raise_for_status()
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        file_content.write(chunk)
         
         file_content.seek(0)
         return file_content
     
     except Exception as error:
         print(f"SharePoint download failed for {file_id}: {str(error)}")
+        # For a production application, use `log.error(..., exc_info=True)` here
+        # log.error(f"SharePoint download failed for {file_id}:", exc_info=True)
         raise
-
+    
 # Main Sync Functions
 def download_and_upload_onedrive_file(file, auth_token, service_account_base64, GCS_BUCKET_NAME, exists, reason):
     """Helper function to download a OneDrive file and upload it to GCS"""
@@ -551,11 +616,13 @@ def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
         }
     
     except Exception as error:
+        update_data_source_sync_status(USER_ID, 'microsoft', 'error')
         print(f'OneDrive sync failed: {str(error)}')
-        DataSources.update_data_source_sync_status_by_name(USER_ID, 'microsoft', 'error')
-        return {
-            'error': str(error)
-        }
+        # Log the full error for debugging
+        print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
+        print(traceback.format_exc())
+        raise error
+
 
 def sync_sharepoint_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
     """Main function to sync SharePoint to Google Cloud Storage"""
@@ -708,11 +775,12 @@ def sync_sharepoint_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
         }
     
     except Exception as error:
+        update_data_source_sync_status(USER_ID, 'microsoft', 'error')
         print(f'SharePoint sync failed: {str(error)}')
-        DataSources.update_data_source_sync_status_by_name(USER_ID, 'microsoft', 'error')
-        return {
-            'error': str(error)
-        }
+        # Log the full error for debugging
+        print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
+        print(traceback.format_exc())
+        raise error
 
 def process_sharepoint_folder(site_id, drive_id, folder_id, auth_token, site_drive_name, current_path="", collected_files=None):
     """Helper function to process a SharePoint folder and its contents recursively"""
@@ -736,7 +804,7 @@ def process_sharepoint_folder(site_id, drive_id, folder_id, auth_token, site_dri
         return collected_files
 
 # Main execution function 
-def sync_microsoft_to_gcs(user_id, auth_token, service_account_base64, bucket_name, sync_onedrive=True, sync_sharepoint=True):
+def initiate_microsoft_sync(user_id, auth_token, service_account_base64, bucket_name, sync_onedrive=True, sync_sharepoint=True):
     """
     Main entry point to sync both OneDrive and SharePoint to GCS
     
@@ -757,6 +825,9 @@ def sync_microsoft_to_gcs(user_id, auth_token, service_account_base64, bucket_na
     # Set global variables
     USER_ID = user_id
     GCS_BUCKET_NAME = bucket_name
+
+
+    log.info(f"Initiating Microsoft sync for user {USER_ID} to bucket {GCS_BUCKET_NAME}")
     
     # Validate configuration
     validate_config()
@@ -766,7 +837,7 @@ def sync_microsoft_to_gcs(user_id, auth_token, service_account_base64, bucket_na
         'sharepoint': None
     }
 
-    DataSources.update_data_source_sync_status_by_name(USER_ID, 'google', 'syncing')
+    update_data_source_sync_status(USER_ID, 'microsoft', 'syncing')
     
     # Sync OneDrive if requested
     if sync_onedrive:
@@ -776,6 +847,6 @@ def sync_microsoft_to_gcs(user_id, auth_token, service_account_base64, bucket_na
     if sync_sharepoint:
         results['sharepoint'] = sync_sharepoint_to_gcs(auth_token, service_account_base64, bucket_name)
 
-    DataSources.update_data_source_sync_status_by_name(USER_ID, 'microsoft', 'synced')
+    update_data_source_sync_status(USER_ID, 'microsoft', 'synced')
     
     return results
