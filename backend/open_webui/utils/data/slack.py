@@ -888,9 +888,13 @@ def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_name: s
 
     global USER_ID 
     global GCS_BUCKET_NAME
+    global script_start_time
+    global total_api_calls
 
     USER_ID = user_id
     GCS_BUCKET_NAME = gcs_bucket_name
+    total_api_calls = 0
+    script_start_time = time.time()
 
     # Validate token quickly before starting async process
     user_info = get_slack_user_info(token)

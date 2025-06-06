@@ -18,7 +18,7 @@ log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
 # Metrics tracking
 total_api_calls = 0
-script_start_time = time.time()
+script_start_time = 0
 
 # Load environment variables
 USER_ID = ""
@@ -593,9 +593,13 @@ def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bucket_n
 
     global USER_ID 
     global GCS_BUCKET_NAME
+    global script_start_time
+    global total_api_calls
 
     USER_ID = user_id
     GCS_BUCKET_NAME = gcs_bucket_name
+    total_api_calls = 0
+    script_start_time = time.time()
 
     update_data_source_sync_status(USER_ID, 'google', 'syncing')
 

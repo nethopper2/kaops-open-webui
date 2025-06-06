@@ -342,7 +342,6 @@ def get_google_auth_url(user=Depends(get_verified_user)):
     google_scopes = [
         "https://www.googleapis.com/auth/userinfo.profile", # Basic profile info
         "https://www.googleapis.com/auth/drive.readonly",   # Read-only Google Drive files
-        "https://www.googleapis.com/auth/gmail.readonly",   # Read-only Gmail messages
     ]
 
     scope_str = " ".join(google_scopes) # Google scopes are space-separated

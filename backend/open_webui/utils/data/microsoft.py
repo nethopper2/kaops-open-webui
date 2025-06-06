@@ -804,7 +804,7 @@ def process_sharepoint_folder(site_id, drive_id, folder_id, auth_token, site_dri
         return collected_files
 
 # Main execution function 
-def initiate_microsoft_sync(user_id, auth_token, service_account_base64, bucket_name, sync_onedrive=True, sync_sharepoint=True):
+def initiate_microsoft_sync(user_id, auth_token, service_account_base64, gcs_bucket_name, sync_onedrive=True, sync_sharepoint=True):
     """
     Main entry point to sync both OneDrive and SharePoint to GCS
     
@@ -819,12 +819,15 @@ def initiate_microsoft_sync(user_id, auth_token, service_account_base64, bucket_
     Returns:
         dict: Summary of sync operations
     """
-    global USER_ID
+    global USER_ID 
     global GCS_BUCKET_NAME
-    
-    # Set global variables
+    global script_start_time
+    global total_api_calls
+
     USER_ID = user_id
-    GCS_BUCKET_NAME = bucket_name
+    GCS_BUCKET_NAME = gcs_bucket_name
+    total_api_calls = 0
+    script_start_time = time.time()
 
 
     log.info(f"Initiating Microsoft sync for user {USER_ID} to bucket {GCS_BUCKET_NAME}")
@@ -841,11 +844,11 @@ def initiate_microsoft_sync(user_id, auth_token, service_account_base64, bucket_
     
     # Sync OneDrive if requested
     if sync_onedrive:
-        results['onedrive'] = sync_onedrive_to_gcs(auth_token, service_account_base64, bucket_name)
+        results['onedrive'] = sync_onedrive_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
     
     # Sync SharePoint if requested
     if sync_sharepoint:
-        results['sharepoint'] = sync_sharepoint_to_gcs(auth_token, service_account_base64, bucket_name)
+        results['sharepoint'] = sync_sharepoint_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
 
     update_data_source_sync_status(USER_ID, 'microsoft', 'synced')
     
