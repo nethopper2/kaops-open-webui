@@ -10,7 +10,7 @@
   let fullscreen = false;
   let threadQuestions: Record<string, any[]> = {};
 
-  // Group comments
+  // Group comments by chat_id or meta.chat_id
   $: groupedComments = commentsList.reduce((acc, comment, index) => {
     const chatId = comment.chat_id || comment.meta?.chat_id;
     if (chatId) {
@@ -144,7 +144,12 @@
                     <span class="ml-1" use:html={getRatingArrow(c.data?.rating)}></span>
                     {#if c.data?.details?.rating !== undefined}
                       <span class="font-semibold ml-3">Detailed Rating:</span>
-                      <span>{c.data.details.rating}</span>
+                      <span class="{c.data.details.rating >= 6 ? 'text-green-600 dark:text-green-400' : c.data.details.rating <= 4 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}">
+                        {c.data.details.rating}
+                      </span>
+                      {#if c.data?.model_id}
+                        <span class="ml-3 px-1 bg-gray-200 dark:bg-gray-700 rounded">{c.data.model_id}</span>
+                      {/if}
                     {/if}
                   </div>
                   <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
