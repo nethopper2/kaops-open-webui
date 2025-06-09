@@ -2,6 +2,7 @@
   import dayjs from 'dayjs';
   import { getContext } from 'svelte';
   import { goto } from '$app/navigation';
+  import CommentsModal from './CommentsModal.svelte';
 
   const i18n = getContext('i18n');
 
@@ -129,70 +130,12 @@
 </script>
 
 <!-- Comments Modal -->
-{#if showComments}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-    <div class="bg-white dark:bg-gray-900 rounded-lg shadow-2xl p-6 max-w-xl w-full border border-gray-100 dark:border-gray-800">
-      <div class="font-bold text-lg mb-3 flex items-center">
-        <svg class="w-6 h-6 text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.77 9.77 0 01-4-.8L3 21l1.8-4A8.96 8.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-        {commentsTitle}
-      </div>
-      {#if (commentsList || []).length === 0}
-        <div class="text-gray-400 italic">No comments</div>
-      {:else}
-        <ul class="space-y-2 max-h-96 overflow-y-auto">
-          {#each commentsList || [] as c}
-            <li class="border-b border-gray-100 dark:border-gray-800 pb-2 last:border-b-0">
-              <div class="flex items-center justify-between mb-1">
-                <span>
-                  <span class="font-semibold text-gray-800 dark:text-gray-100">{c.user?.name}</span>
-                  <span class="text-xs text-gray-400 ml-2">{c.user?.email}</span>
-                </span>
-                <span class="flex items-center gap-2">
-                  {#if c.meta?.chat_id}
-                    <a
-                      class="text-blue-600 dark:text-blue-400 underline text-xs font-medium"
-                      href={"/c/" + c.meta.chat_id}
-                      target="_blank"
-                      rel="noopener"
-                      title="View message thread"
-                    >
-                      View Thread
-                    </a>
-                  {/if}
-                  <span class="text-xs text-gray-400">{c.created_at ? dayjs.unix(c.created_at).fromNow() : ''}</span>
-                </span>
-              </div>
-              <div class="flex flex-wrap gap-2 items-center text-xs text-gray-500 dark:text-gray-400 mb-1">
-                <span>
-                  <span class="font-semibold">Rating:</span>
-                  {@html ratingArrow(c.data?.rating)}
-                </span>
-                {#if typeof c.data?.details?.rating === 'number'}
-                  <span>
-                    <span class="font-semibold">Details:</span>
-                    <span class={c.data.details.rating >= 6 ? "text-green-600 dark:text-green-400 font-semibold" : c.data.details.rating <= 4 ? "text-red-600 dark:text-red-400 font-semibold" : ""}>{c.data.details.rating}</span>
-                  </span>
-                {/if}
-                {#if c.data?.model_id}
-                  <span class="bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">Model: {c.data.model_id}</span>
-                {/if}
-                {#if c.data?.reason}
-                  <span class="bg-gray-50 dark:bg-gray-900 px-2 py-0.5 rounded">{c.data.reason.replace(/_/g, ' ')}</span>
-                {/if}
-              </div>
-              <div class="text-gray-700 dark:text-gray-200 text-sm italic mb-1">{c.data?.comment}</div>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-      <button class="mt-6 px-5 py-1.5 bg-gray-100 dark:bg-gray-800 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium float-right" on:click={() => showComments = false}>
-        Close
-      </button>
-    </div>
-  </div>
-{/if}
+<CommentsModal
+  show={showComments}
+  commentsList={commentsList}
+  commentsTitle={commentsTitle}
+  onClose={() => showComments = false}
+/>
 
 <div class="mt-0.5 mb-2 gap-1 flex flex-row justify-between">
   <div class="flex md:self-center text-lg font-medium px-0.5">
@@ -209,7 +152,7 @@
       <tr class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-850 dark:text-gray-400">
         <th class="px-3 py-1.5 text-center border-r dark:border-gray-700" colspan="2">{ $i18n.t('Results') }</th>
         <th class="px-3 py-1.5 text-center border-r dark:border-gray-700" colspan="2">{ $i18n.t('Detailed Results') }</th>
-        <th class="px-3 py-1.5 text-center">{ $i18n.t('Comments') }</th>
+        <th class="px-3 py-1.5 text-center">{ $i18n.t('Actions') }</th>
       </tr>
       <tr class="text-xs text-gray-700 bg-gray-50 dark:bg-gray-850 dark:text-gray-400">
         <th class="px-3 py-1.5 text-right">{ $i18n.t('Total') }</th>
@@ -262,25 +205,29 @@
       {$i18n.t('No feedbacks found')}
     </div>
   {:else}
-    <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400 table-auto max-w-full rounded-sm">
+    <table class="w-full pr-5 text-sm text-left text-gray-500 dark:text-gray-400 table-auto max-w-full rounded-sm border border-gray-100 dark:border-gray-800">
       <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-850 dark:text-gray-400 -translate-y-0.5">
-        <tr>
-          <th class="px-3 py-1.5">{ $i18n.t('Date') }</th>
-          <th class="px-3 py-1.5 text-right">{ $i18n.t('Feedback Count') }</th>
-          <th class="px-3 py-1.5 text-right">{ $i18n.t('Results Count') }</th>
-          <th class="px-3 py-1.5 text-right">{ $i18n.t('Average Result') }</th>
-          <th class="px-3 py-1.5 text-right">{ $i18n.t('Detailed Ratings Count (1–10)') }</th>
-          <th class="px-3 py-1.5 text-right">{ $i18n.t('Average Detailed Rating (1–10)') }</th>
-          <th class="px-3 py-1.5 text-center">{ $i18n.t('Comments') }</th>
+        <tr class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-850 dark:text-gray-400">
+          <th class="px-3 py-1.5 border-r dark:border-gray-700"></th>
+          <th class="px-3 py-1.5 text-center border-r dark:border-gray-700" colspan="2">{ $i18n.t('Results') }</th>
+          <th class="px-3 py-1.5 text-center border-r dark:border-gray-700" colspan="2">{ $i18n.t('Detailed Ratings') }</th>
+          <th class="px-3 py-1.5 text-center">{ $i18n.t('Actions') }</th>
+        </tr>
+        <tr class="text-xs text-gray-700 bg-gray-50 dark:bg-gray-850 dark:text-gray-400">
+          <th class="px-3 py-1.5 border-r dark:border-gray-700">{ $i18n.t('Date') }</th>
+          <th class="px-3 py-1.5 text-center">{ $i18n.t('Count') }</th>
+          <th class="px-3 py-1.5 text-center border-r dark:border-gray-700">{ $i18n.t('Average') }</th>
+          <th class="px-3 py-1.5 text-center">{ $i18n.t('Count') }</th>
+          <th class="px-3 py-1.5 text-center border-r dark:border-gray-700">{ $i18n.t('Average (1–10)') }</th>
+          <th class="px-3 py-1.5 text-center"></th>
         </tr>
       </thead>
       <tbody>
         {#each stats || [] as stat}
           <tr class="bg-white dark:bg-gray-900 dark:border-gray-850 text-xs">
-            <td class="px-3 py-1.5">{formatDate(stat.date)}</td>
-            <td class="px-3 py-1.5 text-right">{stat.count}</td>
+            <td class="px-3 py-1.5 border-r dark:border-gray-700">{formatDate(stat.date)}</td>
             <td class="px-3 py-1.5 text-right">{stat.resultsCount}</td>
-            <td class="px-3 py-1.5 text-right">
+            <td class="px-3 py-1.5 text-right border-r dark:border-gray-700">
               {#if stat.resultsCount}
                 <span class={ratingColorClass(+stat.avg_result)}>{stat.avg_result}</span>
               {:else}
@@ -288,7 +235,7 @@
               {/if}
             </td>
             <td class="px-3 py-1.5 text-right">{stat.detailedCount}</td>
-            <td class="px-3 py-1.5 text-right">
+            <td class="px-3 py-1.5 text-right border-r dark:border-gray-700">
               {#if stat.detailedCount}
                 <span class={ratingColorClass(+stat.avg_detailed)}>{stat.avg_detailed}</span>
               {:else}
