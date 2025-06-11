@@ -63,18 +63,6 @@ onMount(async () => {
 						</div>
 					</Modal>
 				</div>
-				<div>
-					<a
-						href="https://drive.google.com"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="inline-flex items-center gap-1 px-3.5 py-2 text-sm font-medium bg-black hover:bg-gray-900 text-white dark:bg-white dark:text-black dark:hover:bg-gray-100 transition rounded-full"
-						aria-label={$i18n.t('Open Google Drive')}
-					>
-						<Link />
-						{$i18n.t('Open Google Drive')}
-					</a>
-				</div>
 			</div>
 		</div>
 
