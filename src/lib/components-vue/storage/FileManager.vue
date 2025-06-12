@@ -314,32 +314,34 @@ onUnmounted(() => {
 
 	<dx-popup
 		v-model:visible="showEditMetadataPopup"
-		title="Edit Metadata"
 		:show-close-button="true"
+		:max-width="700"
+		title="Edit Metadata"
 		@showing="handleDialogShowing"
 		@shown="handleDialogShown"
 		@hidden="handleDialogHidden"
 	>
+		<!-- REMINDER: I wanted to use this with title-template="title" above, but it causes rendering problems. -->
+<!--		<template #title>-->
+<!--			<div class="flex flex-col gap-2">-->
+<!--				<div>Edit Metadata</div>-->
+<!--				<div class="text-xs opacity-80">-->
+<!--					{{ currentFileItem?.path }}-->
+<!--				</div>-->
+<!--			</div>-->
+<!--		</template>-->
 		<!--
 		The content slot is used normally, but as a web component for use with
 		svelte, the default slot works.
 		-->
 		<!-- <template #content>-->
-		<div class="flex justify-end gap-2 pb-4">
-			<dx-text-box v-model="tagToAdd" placeholder="Tag" />
-			<dx-button
-				text="Add Tag"
-				:options="commonButtonOptions"
-				@click="addTagOptionAndAutoSelectIt"
-			/>
-		</div>
-
 		<form>
 			<dx-form v-model:form-data="metaDataToEdit">
 				<dx-form-item
 					data-field="tags"
 					editor-type="dxTagBox"
-					:editor-options="{ dataSource: tagChoices, showSelectionControls: true }"
+					:editor-options="{ dataSource: tagChoices, showSelectionControls: true, acceptCustomValue: true }"
+					help-text="Enter or choose tags"
 				/>
 				<dx-form-item
 					data-field="contextData"
