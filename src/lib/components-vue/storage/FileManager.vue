@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { DxButton } from 'devextreme-vue/button';
 import {
 	DxColumn,
 	DxContextMenu,
@@ -14,13 +13,12 @@ import { DxForm, DxItem as DxFormItem } from 'devextreme-vue/form';
 import { DxPopup, DxToolbarItem } from 'devextreme-vue/popup';
 import 'devextreme-vue/tag-box';
 import 'devextreme-vue/text-area';
-import { DxTextBox } from 'devextreme-vue/text-box';
 import RemoteFileSystemProvider from 'devextreme/file_management/remote_provider';
 import type {
 	ContextMenuItemClickEvent,
 	ContextMenuShowingEvent
 } from 'devextreme/ui/file_manager';
-import { onBeforeMount, onMounted, onUnmounted, ref, useHost } from 'vue';
+import { computed, onBeforeMount, onMounted, onUnmounted, ref, useHost } from 'vue';
 import { getBackendConfig } from '$lib/apis';
 import { type $Fetch, ofetch } from 'ofetch';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
@@ -101,28 +99,15 @@ const tagToAdd = ref('');
 const tagChoices = ref([] as Array<string>);
 
 const metaDataToEdit = ref(getEmptyMetadata());
+const fileOrDirectoryName = computed(() => {
+	return (currentFileItem.value?.path ?? '').split('/').pop() ?? '';
+})
 
 function getEmptyMetadata() {
 	return {
 		contextData: '',
 		tags: [] as Array<string>
 	};
-}
-
-function addTagOptionAndAutoSelectIt() {
-	if (tagToAdd.value.length === 0) return;
-
-	if (!tagChoices.value.includes(tagToAdd.value)) {
-		tagChoices.value = [...tagChoices.value, tagToAdd.value];
-	}
-
-	if (!metaDataToEdit.value.tags.includes(tagToAdd.value)) {
-		metaDataToEdit.value.tags = [...metaDataToEdit.value.tags, tagToAdd.value];
-		// force reactivity
-		metaDataToEdit.value = { ...metaDataToEdit.value };
-	}
-
-	tagToAdd.value = '';
 }
 
 async function loadMetadata() {
@@ -223,14 +208,14 @@ let unregisterHooks: () => void;
 
 onBeforeMount(() => {
 	// load the proper theme based on the host.
-	if(document.documentElement.classList.contains('dark')){
+	if (document.documentElement.classList.contains('dark')) {
 		loadDarkTheme();
-	}else{
+	} else {
 		loadLightTheme();
 	}
 
-	unregisterHooks = appHooks.hook('theme.changed', ({mode}) => {
-		if(mode === 'dark') {
+	unregisterHooks = appHooks.hook('theme.changed', ({ mode }) => {
+		if (mode === 'dark') {
 			loadDarkTheme();
 		} else {
 			loadLightTheme();
@@ -262,8 +247,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-	unregisterHooks()
-})
+	unregisterHooks();
+});
 </script>
 
 <template>
@@ -315,21 +300,36 @@ onUnmounted(() => {
 	<dx-popup
 		v-model:visible="showEditMetadataPopup"
 		:show-close-button="true"
+		:max-height="700"
 		:max-width="700"
 		title="Edit Metadata"
 		@showing="handleDialogShowing"
 		@shown="handleDialogShown"
 		@hidden="handleDialogHidden"
 	>
+		<div class="text-xs p-4 mb-4 border border-black/20 dark:border-white/20 rounded">
+			<div class="grid grid-cols-none gap-1">
+				<div>Path</div>
+				<div class="w-full opacity-70">
+					{{ currentFileItem?.path }}
+				</div>
+
+				<div>{{ currentFileItem?.isDirectory ? 'Directory' : 'File' }}</div>
+				<div class="grow opacity-70">
+					{{ fileOrDirectoryName }}
+				</div>
+			</div>
+		</div>
+
 		<!-- REMINDER: I wanted to use this with title-template="title" above, but it causes rendering problems. -->
-<!--		<template #title>-->
-<!--			<div class="flex flex-col gap-2">-->
-<!--				<div>Edit Metadata</div>-->
-<!--				<div class="text-xs opacity-80">-->
-<!--					{{ currentFileItem?.path }}-->
-<!--				</div>-->
-<!--			</div>-->
-<!--		</template>-->
+		<!--		<template #title>-->
+		<!--			<div class="flex flex-col gap-2">-->
+		<!--				<div>Edit Metadata</div>-->
+		<!--				<div class="text-xs opacity-80">-->
+		<!--					{{ currentFileItem?.path }}-->
+		<!--				</div>-->
+		<!--			</div>-->
+		<!--		</template>-->
 		<!--
 		The content slot is used normally, but as a web component for use with
 		svelte, the default slot works.
@@ -340,7 +340,14 @@ onUnmounted(() => {
 				<dx-form-item
 					data-field="tags"
 					editor-type="dxTagBox"
-					:editor-options="{ dataSource: tagChoices, showSelectionControls: true, acceptCustomValue: true }"
+					:editor-options="{
+						dataSource: tagChoices,
+						showSelectionControls: true,
+						acceptCustomValue: true,
+						// REMINDER: Search allows filtering, but the input is in the same place as when adding a custom value.
+						//           This has potential to be confusing, so this is commented out for now.
+						// searchEnabled: true
+					}"
 					help-text="Enter or choose tags"
 				/>
 				<dx-form-item
@@ -388,9 +395,14 @@ onUnmounted(() => {
  */
 @font-face {
 	font-family: DXIcons;
-	src: local("DevExtreme Generic Icons"), local("devextreme_generic_icons"), url("/themes/vendor/icons/dxicons.woff2") format("woff2"), url("/themes/vendor/icons/dxicons.woff") format("woff"), url("/themes/vendor/icons/dxicons.ttf") format("truetype");
+	src:
+		local('DevExtreme Generic Icons'),
+		local('devextreme_generic_icons'),
+		url('/themes/vendor/icons/dxicons.woff2') format('woff2'),
+		url('/themes/vendor/icons/dxicons.woff') format('woff'),
+		url('/themes/vendor/icons/dxicons.ttf') format('truetype');
 	font-weight: 400;
-	font-style: normal
+	font-style: normal;
 }
 
 .dx-filemanager {
