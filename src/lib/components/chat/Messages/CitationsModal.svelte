@@ -1,10 +1,12 @@
 <script lang="ts">
-	import { getContext, onMount, tick } from 'svelte';
-	import Modal from '$lib/components/common/Modal.svelte';
-	import Tooltip from '$lib/components/common/Tooltip.svelte';
-	import { WEBUI_API_BASE_URL } from '$lib/constants';
-	import { config } from '$lib/stores';
+import { getContext } from 'svelte';
+import Modal from '$lib/components/common/Modal.svelte';
+import Tooltip from '$lib/components/common/Tooltip.svelte';
+import { config } from '$lib/stores';
+import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue';
 
+// The PopupMetadataEdit component instance.
+	let TRefFilePopup: { visible: boolean, fileItem: FileItem, i18n: { t: (s: string) => string }; }
 	const i18n = getContext('i18n');
 
 	export let show = false;
@@ -126,6 +128,23 @@
 											{document.metadata.page + 1})
 										</span>
 									{/if}
+
+									<button
+										class="flex text-xs items-center space-x-1 px-2 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-200 transition"
+										on:click={() => {
+											TRefFilePopup.fileItem = {
+												path: document?.metadata?.file_id,
+												isDirectory: false,
+											}
+											TRefFilePopup.i18n = $i18n;
+											TRefFilePopup.visible = true;
+										}}
+										aria-label="Edit Metadata"
+									>
+										<div class="self-center mr-2 font-medium line-clamp-1">
+											Edit Metadata
+										</div>
+									</button>
 								</div>
 							</Tooltip>
 							{#if showRelevance}
@@ -196,5 +215,10 @@
 				{/each}
 			</div>
 		</div>
+
+		<popup-metadata-edit
+			bind:this={TRefFilePopup}
+			on:update:visible={() => TRefFilePopup.visible = false}
+		/>
 	</div>
 </Modal>
