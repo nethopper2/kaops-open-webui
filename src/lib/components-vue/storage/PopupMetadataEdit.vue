@@ -232,7 +232,7 @@ onBeforeMount(() => {
 				<dx-form-item
 					data-field="contextData"
 					editor-type="dxTextArea"
-					help-text="Provides additional AI context during RAG"
+					:help-text="fileItem?.isDirectory ? `To help our AI system generate accurate responses, please briefly describe this directory's purpose, list and explain its contents, outline any naming conventions, and provide instructions for use. Optionally, add example questions you might ask the AI about the files—this helps the AI understand your needs and improves its answers. Update this information whenever the directory changes.` : `To help our AI system generate accurate responses, please provide a brief description of this file's purpose, explain its contents, and include instructions for use if applicable. Optionally, add example questions you might ask the AI about this file—this helps the AI understand your needs and improves its answers. If relevant, mention any important details such as the file's format, structure, or dependencies. Be sure to update this information whenever the file changes.`"
 					:editor-options="{
 						height: 200,
 						maxLength: 200
