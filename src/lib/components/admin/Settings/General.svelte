@@ -51,7 +51,7 @@
 
 	const checkForVersionUpdates = async () => {
 		const backendConfig = await getBackendConfig();
-		if (!backendConfig?.features?.enable_upstream_ui) return;
+		if (!backendConfig?.private_ai?.enable_upstream_ui) return;
 
 		updateAvailable = null;
 		version = await getVersionUpdates(localStorage.token).catch((error) => {
@@ -138,7 +138,7 @@
 										v{WEBUI_VERSION}
 									</Tooltip>
 
-									{#if $config?.features?.enable_upstream_ui}
+									{#if $config?.private_ai?.enable_upstream_ui}
 										<a
 											href="https://github.com/open-webui/open-webui/releases/tag/v{version.latest}"
 											target="_blank"
@@ -152,7 +152,7 @@
 									{/if}
 								</div>
 
-								{#if $config?.features?.enable_upstream_ui}
+								{#if $config?.private_ai?.enable_upstream_ui}
 									<button
 										class=" underline flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-500"
 										type="button"
@@ -165,7 +165,7 @@
 								{/if}
 							</div>
 
-							{#if $config?.features?.enable_upstream_ui}
+							{#if $config?.private_ai?.enable_upstream_ui}
 								<button
 									class=" text-xs px-3 py-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-850 dark:hover:bg-gray-800 transition rounded-lg font-medium"
 									type="button"
@@ -179,7 +179,7 @@
 						</div>
 					</div>
 
-					{#if $config?.features?.enable_upstream_ui}
+					{#if $config?.private_ai?.enable_upstream_ui}
 						<div class="mb-2.5">
 							<div class="flex w-full justify-between items-center">
 								<div class="text-xs pr-2">
@@ -228,7 +228,7 @@
 					{/if}
 
 					<div class="mb-2.5">
-						{#if $config?.features?.enable_upstream_ui}
+						{#if $config?.private_ai?.enable_upstream_ui}
 							<div class="flex w-full justify-between items-center">
 							<div class="text-xs pr-2">
 								<div class="">

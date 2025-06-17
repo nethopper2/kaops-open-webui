@@ -1,14 +1,12 @@
 // Google Drive Picker API configuration
+import { getBackendConfig } from '$lib/apis';
+
 let API_KEY = '';
 let CLIENT_ID = '';
 
 // Function to fetch credentials from backend config
 async function getCredentials() {
-	const response = await fetch('/api/config');
-	if (!response.ok) {
-		throw new Error('Failed to fetch Google Drive credentials');
-	}
-	const config = await response.json();
+	const config = await getBackendConfig();
 	API_KEY = config.google_drive?.api_key;
 	CLIENT_ID = config.google_drive?.client_id;
 

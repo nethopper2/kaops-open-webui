@@ -113,7 +113,7 @@
 			return K * (outcome - expectedScore) * similarity;
 		}
 
-		feedbacks.forEach((feedback) => {
+		(feedbacks || []).forEach((feedback) => {
 			const modelA = feedback.data.model_id;
 			const statsA = getOrDefaultStats(modelA);
 			let outcome: number;

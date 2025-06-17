@@ -3,6 +3,7 @@
 ## ENV vars
 
 ### 0.6.5
+* **NH_API_BASE_URL** - The base of the url for the private-ai-rest dependency.
 * **NH_ENABLE_UPSTREAM_UI** - When `true`, UI behaves as it does without our modification. When `false` or not defined, this affects:
     * The update available Toast notification is not shown.
     * The settings UI for checking for an update and toggling the update Toast Notification is not shown. This can be verified by:
@@ -11,7 +12,10 @@
         * Clicking the lower left user, then `Admin Panel`. Under `Settings/General` you should not see any buttons or text about an upgrade or checking for an upgrade, only the version string. (NOTE: Do we need this info in 2 places?)
       * Social Links in the `Settings/Interface` area mentioned above.
       * License link & Social Links in the `Admin Panel` area mentioned above.
-    * The api call to `api/version/updates` is not made in the above areas. 
+    * The api call to `api/version/updates` is not made in the above areas.
+    * Hid the `her` theme in `Settings/General` since it made unexplained changes to the UI.
+    * Replaced the `Workspace/Knowledge` section with our own component for use with Google Drive & RAG.
+    * Hid the `Discover a ...` button in each of the subsections in `Workspace` since they link to nothing useful.
 
 ## Branding
 

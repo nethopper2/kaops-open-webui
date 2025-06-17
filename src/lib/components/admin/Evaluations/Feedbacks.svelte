@@ -112,10 +112,10 @@
 
 		<div class="flex self-center w-[1px] h-6 mx-2.5 bg-gray-50 dark:bg-gray-850" />
 
-		<span class="text-lg font-medium text-gray-500 dark:text-gray-300">{feedbacks.length}</span>
+		<span class="text-lg font-medium text-gray-500 dark:text-gray-300">{feedbacks?.length  || 0} </span>
 	</div>
 
-	{#if feedbacks.length > 0}
+	{#if (feedbacks ?? []).length > 0}
 		<div>
 			<Tooltip content={$i18n.t('Export')}>
 				<button
@@ -249,7 +249,7 @@
 	{/if}
 </div>
 
-{#if feedbacks.length > 0}
+{#if (feedbacks ?? []).length > 0}
 	<div class=" flex flex-col justify-end w-full text-right gap-1">
 		<div class="line-clamp-1 text-gray-500 text-xs">
 			{$i18n.t('Help us create the best community leaderboard by sharing your feedback history!')}
@@ -280,6 +280,6 @@
 	</div>
 {/if}
 
-{#if feedbacks.length > 10}
-	<Pagination bind:page count={feedbacks.length} perPage={10} />
+{#if (feedbacks ?? []).length > 10}
+	<Pagination bind:page count={feedbacks?.length} perPage={10} />
 {/if}
