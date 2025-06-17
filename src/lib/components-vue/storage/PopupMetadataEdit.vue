@@ -4,25 +4,25 @@ import { DxForm, DxItem as DxFormItem } from 'devextreme-vue/form';
 import { DxPopup, DxToolbarItem } from 'devextreme-vue/popup';
 import 'devextreme-vue/tag-box';
 import 'devextreme-vue/text-area';
-import { computed, onBeforeMount, ref, useHost, watch } from 'vue';
+import { computed, onBeforeMount, onUnmounted, ref, useHost, watch } from 'vue';
 import { toast } from 'svelte-sonner';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
 import { apiFetch } from '$lib/apis/private-ai/fetchClients';
 import { DxLoadPanel } from 'devextreme-vue/load-panel';
-import { appHooks } from '$lib/utils/hooks';
+import { useTheme } from '../composables/useTheme';
 
 // Use a partial of FileSystemItem
-export type FileItem =  Pick<FileSystemItem, 'isDirectory' | 'path'>
+export type FileItem = Pick<FileSystemItem, 'isDirectory' | 'path'>;
 
 const props = defineProps<{
 	fileItem?: FileItem;
 	i18n: { t: (s: string) => string };
-}>()
+}>();
 
 const svelteHost = useHost();
 
 const emit = defineEmits(['update:visible', 'saved', 'cancelled']);
-const localVisible = defineModel<boolean>('visible', { default: false })
+const localVisible = defineModel<boolean>('visible', { default: false });
 
 const loadingVisible = ref(false);
 const tagChoices = ref([] as Array<string>);
@@ -88,7 +88,10 @@ async function deleteMetadata() {
 
 async function showConfirmDeleteDialog() {
 	try {
-		let result = await confirm(props.i18n.t("Are you sure you want to delete this metadata?"), props.i18n.t("Confirm Deletion"));
+		let result = await confirm(
+			props.i18n.t('Are you sure you want to delete this metadata?'),
+			props.i18n.t('Confirm Deletion')
+		);
 		if (result) {
 			deleteMetadata();
 		}
@@ -107,7 +110,7 @@ function getEmptyMetadata() {
 async function loadMetadata() {
 	if (props.fileItem) {
 		try {
-			metadataExists.value = false
+			metadataExists.value = false;
 			const { metadata } = await apiFetch('/storage/metadata', {
 				query: {
 					filePath: props.fileItem.path
@@ -116,16 +119,16 @@ async function loadMetadata() {
 
 			if (metadata) {
 				metadataToEdit.value = structuredClone(metadata);
-				metadataExists.value = true
+				metadataExists.value = true;
 			} else {
 				console.warn('No metadata found for file: ', props.fileItem.path);
 				metadataToEdit.value = getEmptyMetadata();
-				metadataExists.value = false
+				metadataExists.value = false;
 			}
 		} catch (err) {
 			console.error(err);
 			metadataToEdit.value = getEmptyMetadata();
-			metadataExists.value = false
+			metadataExists.value = false;
 		}
 	}
 }
@@ -149,13 +152,12 @@ async function loadTagOptions() {
 async function handleDialogShowing() {
 	try {
 		loadingVisible.value = true;
-		await Promise.all([loadTagOptions(), loadMetadata()])
+		await Promise.all([loadTagOptions(), loadMetadata()]);
 	} catch (err) {
 		console.error(err);
 	} finally {
 		loadingVisible.value = false;
 	}
-
 }
 
 function handleDialogShown() {
@@ -177,72 +179,11 @@ watch(
 	}
 );
 
-// TODO: cleanup - This them related code is duplicated. Move it to a composable.
-function loadTheme(href: string) {
-	unloadCurrentTheme();
-
-	const linkHead = document.createElement('link');
-	linkHead.setAttribute('rel', 'stylesheet');
-	linkHead.setAttribute('href', href);
-	linkHead.setAttribute('data-loaded-theme-head', 'true'); // easier removal later
-	document.head.appendChild(linkHead);
-
-	const link = document.createElement('link');
-	link.setAttribute('rel', 'stylesheet');
-	link.setAttribute('href', href);
-	link.setAttribute('data-loaded-theme', 'true'); // easier removal later
-	svelteHost?.shadowRoot?.appendChild?.(link);
-
-	// TODO: cleanup - need to do this for the popup?
-	// and tell the Popup to redraw
-	// TRefFileManager.value?.instance?.repaint?.();
-}
-
-function loadDarkTheme() {
-	// REMINDER: If the devextreme dependency is upgraded, you may need to
-	// re-copy the styles from `devextreme/dist/css`
-	loadTheme('/themes/vendor/dx.dark.css');
-	console.log('loaded file manager dark theme');
-}
-
-function loadLightTheme() {
-	// REMINDER: If the devextreme dependency is upgraded, you may need to
-	// re-copy the styles from `devextreme/dist/css`
-	loadTheme('/themes/vendor/dx.light.css');
-	console.log('loaded file manager light theme');
-}
-
-function unloadCurrentTheme() {
-	const linkHead = document.head.querySelector('link[data-loaded-theme-head="true"]');
-	if (linkHead) {
-		console.log('removed file manager theme from head');
-		linkHead.remove();
-	}
-
-	const link = svelteHost?.shadowRoot?.querySelector?.('link[data-loaded-theme="true"]');
-	if (link) {
-		console.log('removed file manager theme from shadowRoot');
-		link.remove();
-	}
-}
-
-let unregisterHooks: () => void;
+// Use the theme composable
+const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme();
 
 onBeforeMount(() => {
-	// load the proper theme based on the host.
-	if (document.documentElement.classList.contains('dark')) {
-		loadDarkTheme();
-	} else {
-		loadLightTheme();
-	}
-
-	unregisterHooks = appHooks.hook('theme.changed', ({ mode }) => {
-		if (mode === 'dark') {
-			loadDarkTheme();
-		} else {
-			loadLightTheme();
-		}
-	});
+	setupTheme();
 });
 </script>
 
