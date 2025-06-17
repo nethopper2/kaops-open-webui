@@ -14,11 +14,11 @@ import type {
 	ContextMenuItemClickEvent,
 	ContextMenuShowingEvent
 } from 'devextreme/ui/file_manager';
-import { onBeforeMount, onMounted, onUnmounted, ref, useHost } from 'vue';
+import { onBeforeMount, onMounted, ref, useHost } from 'vue';
 import { getBackendConfig } from '$lib/apis';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
-import { appHooks } from '$lib/utils/hooks';
 import PopupMetadataEdit from './PopupMetadataEdit.vue';
+import { useTheme } from '../composables/useTheme';
 
 const props = defineProps(['i18n']);
 const svelteHost = useHost();
@@ -52,70 +52,16 @@ function handleContextMenuShowing(e: ContextMenuShowingEvent) {
 
 const showEditMetadataPopup = ref(false);
 
-function loadTheme(href: string) {
-	unloadCurrentTheme();
-
-	const linkHead = document.createElement('link');
-	linkHead.setAttribute('rel', 'stylesheet');
-	linkHead.setAttribute('href', href);
-	linkHead.setAttribute('data-loaded-theme-head', 'true'); // easier removal later
-	document.head.appendChild(linkHead);
-
-	const link = document.createElement('link');
-	link.setAttribute('rel', 'stylesheet');
-	link.setAttribute('href', href);
-	link.setAttribute('data-loaded-theme', 'true'); // easier removal later
-	svelteHost?.shadowRoot?.appendChild?.(link);
-
-	// and tell the FileManager to redraw
-	TRefFileManager.value?.instance?.repaint?.();
-}
-
-function loadDarkTheme() {
-	// REMINDER: If the devextreme dependency is upgraded, you may need to
-	// re-copy the styles from `devextreme/dist/css`
-	loadTheme('/themes/vendor/dx.dark.css');
-	console.log('loaded file manager dark theme');
-}
-
-function loadLightTheme() {
-	// REMINDER: If the devextreme dependency is upgraded, you may need to
-	// re-copy the styles from `devextreme/dist/css`
-	loadTheme('/themes/vendor/dx.light.css');
-	console.log('loaded file manager light theme');
-}
-
-function unloadCurrentTheme() {
-	const linkHead = document.head.querySelector('link[data-loaded-theme-head="true"]');
-	if (linkHead) {
-		console.log('removed file manager theme from head');
-		linkHead.remove();
+// Use the theme composable
+const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme(
+	() => {
+		// and tell the FileManager to redraw
+		TRefFileManager.value?.instance?.repaint?.();
 	}
-
-	const link = svelteHost?.shadowRoot?.querySelector?.('link[data-loaded-theme="true"]');
-	if (link) {
-		console.log('removed file manager theme from shadowRoot');
-		link.remove();
-	}
-}
-
-let unregisterHooks: () => void;
+);
 
 onBeforeMount(() => {
-	// load the proper theme based on the host.
-	if (document.documentElement.classList.contains('dark')) {
-		loadDarkTheme();
-	} else {
-		loadLightTheme();
-	}
-
-	unregisterHooks = appHooks.hook('theme.changed', ({ mode }) => {
-		if (mode === 'dark') {
-			loadDarkTheme();
-		} else {
-			loadLightTheme();
-		}
-	});
+	setupTheme();
 });
 
 onMounted(async () => {
@@ -131,10 +77,6 @@ onMounted(async () => {
 	});
 
 	loading.value = false;
-});
-
-onUnmounted(() => {
-	unregisterHooks();
 });
 </script>
 

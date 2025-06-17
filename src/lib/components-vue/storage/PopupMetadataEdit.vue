@@ -1,46 +1,37 @@
 <script setup lang="ts">
+import { confirm } from 'devextreme/ui/dialog';
 import { DxForm, DxItem as DxFormItem } from 'devextreme-vue/form';
 import { DxPopup, DxToolbarItem } from 'devextreme-vue/popup';
 import 'devextreme-vue/tag-box';
 import 'devextreme-vue/text-area';
-import { computed, onBeforeMount, ref, toRef, useHost, watch } from 'vue';
+import { computed, onBeforeMount, onUnmounted, ref, useHost, watch } from 'vue';
 import { toast } from 'svelte-sonner';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
 import { apiFetch } from '$lib/apis/private-ai/fetchClients';
 import { DxLoadPanel } from 'devextreme-vue/load-panel';
-import { appHooks } from '$lib/utils/hooks';
+import { useTheme } from '../composables/useTheme';
 
 // Use a partial of FileSystemItem
-export type FileItem =  Pick<FileSystemItem, 'isDirectory' | 'path'>
+export type FileItem = Pick<FileSystemItem, 'isDirectory' | 'path'>;
 
 const props = defineProps<{
 	fileItem?: FileItem;
 	i18n: { t: (s: string) => string };
-}>()
+}>();
 
 const svelteHost = useHost();
 
 const emit = defineEmits(['update:visible', 'saved', 'cancelled']);
-const localVisible = defineModel<boolean>('visible', { default: false })
+const localVisible = defineModel<boolean>('visible', { default: false });
 
 const loadingVisible = ref(false);
 const tagChoices = ref([] as Array<string>);
-const metaDataToEdit = ref(getEmptyMetadata());
+const metadataExists = ref(false);
+const metadataToEdit = ref(getEmptyMetadata());
 
 const fileOrDirectoryName = computed(() => {
 	return (props.fileItem?.path ?? '').split('/').pop() ?? '';
 });
-
-const commonButtonOptions = {
-	type: 'default',
-	stylingMode: 'contained'
-};
-
-const saveButtonOptions = {
-	...commonButtonOptions,
-	text: 'Save',
-	onClick: saveMetadata
-};
 
 async function saveMetadata() {
 	try {
@@ -49,8 +40,8 @@ async function saveMetadata() {
 				method: 'PUT',
 				body: {
 					filePath: props.fileItem.path,
-					tags: metaDataToEdit.value.tags,
-					contextData: metaDataToEdit.value.contextData
+					tags: metadataToEdit.value.tags,
+					contextData: metadataToEdit.value.contextData
 				}
 			});
 
@@ -70,6 +61,45 @@ async function saveMetadata() {
 	}
 }
 
+async function deleteMetadata() {
+	try {
+		if (props.fileItem) {
+			const response = await apiFetch(`/storage/metadata`, {
+				method: 'DELETE',
+				query: {
+					filePath: props.fileItem.path
+				}
+			});
+
+			if (response.success) {
+				toast.success(props.i18n.t(`Metadata deleted`));
+				localVisible.value = false;
+			} else {
+				throw new Error(response.message);
+			}
+		} else {
+			console.warn('No current file item');
+		}
+	} catch (err) {
+		console.error('Error deleting metadata:', err);
+		toast.error(props.i18n.t(`Failed to delete metadata`));
+	}
+}
+
+async function showConfirmDeleteDialog() {
+	try {
+		let result = await confirm(
+			props.i18n.t('Are you sure you want to delete this metadata?'),
+			props.i18n.t('Confirm Deletion')
+		);
+		if (result) {
+			deleteMetadata();
+		}
+	} catch (err) {
+		console.error(err);
+	}
+}
+
 function getEmptyMetadata() {
 	return {
 		contextData: '',
@@ -80,6 +110,7 @@ function getEmptyMetadata() {
 async function loadMetadata() {
 	if (props.fileItem) {
 		try {
+			metadataExists.value = false;
 			const { metadata } = await apiFetch('/storage/metadata', {
 				query: {
 					filePath: props.fileItem.path
@@ -87,14 +118,17 @@ async function loadMetadata() {
 			});
 
 			if (metadata) {
-				metaDataToEdit.value = structuredClone(metadata);
+				metadataToEdit.value = structuredClone(metadata);
+				metadataExists.value = true;
 			} else {
 				console.warn('No metadata found for file: ', props.fileItem.path);
-				metaDataToEdit.value = getEmptyMetadata();
+				metadataToEdit.value = getEmptyMetadata();
+				metadataExists.value = false;
 			}
 		} catch (err) {
 			console.error(err);
-			metaDataToEdit.value = getEmptyMetadata();
+			metadataToEdit.value = getEmptyMetadata();
+			metadataExists.value = false;
 		}
 	}
 }
@@ -118,23 +152,20 @@ async function loadTagOptions() {
 async function handleDialogShowing() {
 	try {
 		loadingVisible.value = true;
-		await Promise.all([loadTagOptions(), loadMetadata()])
+		await Promise.all([loadTagOptions(), loadMetadata()]);
 	} catch (err) {
 		console.error(err);
 	} finally {
 		loadingVisible.value = false;
 	}
-
 }
 
 function handleDialogShown() {
 	// Could be used for additional initialization if needed
-	console.log('@@ i18n is --> ',props.i18n);
-	console.log('@@ i18n.t is --> ',props.i18n.t);
 }
 
 function handleDialogHidden() {
-	metaDataToEdit.value = getEmptyMetadata();
+	metadataToEdit.value = getEmptyMetadata();
 	emit('cancelled');
 }
 
@@ -148,72 +179,11 @@ watch(
 	}
 );
 
-// TODO: cleanup - This them related code is duplicated. Move it to a composable.
-function loadTheme(href: string) {
-	unloadCurrentTheme();
-
-	const linkHead = document.createElement('link');
-	linkHead.setAttribute('rel', 'stylesheet');
-	linkHead.setAttribute('href', href);
-	linkHead.setAttribute('data-loaded-theme-head', 'true'); // easier removal later
-	document.head.appendChild(linkHead);
-
-	const link = document.createElement('link');
-	link.setAttribute('rel', 'stylesheet');
-	link.setAttribute('href', href);
-	link.setAttribute('data-loaded-theme', 'true'); // easier removal later
-	svelteHost?.shadowRoot?.appendChild?.(link);
-
-	// TODO: cleanup - need to do this for the popup?
-	// and tell the Popup to redraw
-	// TRefFileManager.value?.instance?.repaint?.();
-}
-
-function loadDarkTheme() {
-	// REMINDER: If the devextreme dependency is upgraded, you may need to
-	// re-copy the styles from `devextreme/dist/css`
-	loadTheme('/themes/vendor/dx.dark.css');
-	console.log('loaded file manager dark theme');
-}
-
-function loadLightTheme() {
-	// REMINDER: If the devextreme dependency is upgraded, you may need to
-	// re-copy the styles from `devextreme/dist/css`
-	loadTheme('/themes/vendor/dx.light.css');
-	console.log('loaded file manager light theme');
-}
-
-function unloadCurrentTheme() {
-	const linkHead = document.head.querySelector('link[data-loaded-theme-head="true"]');
-	if (linkHead) {
-		console.log('removed file manager theme from head');
-		linkHead.remove();
-	}
-
-	const link = svelteHost?.shadowRoot?.querySelector?.('link[data-loaded-theme="true"]');
-	if (link) {
-		console.log('removed file manager theme from shadowRoot');
-		link.remove();
-	}
-}
-
-let unregisterHooks: () => void;
+// Use the theme composable
+const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme();
 
 onBeforeMount(() => {
-	// load the proper theme based on the host.
-	if (document.documentElement.classList.contains('dark')) {
-		loadDarkTheme();
-	} else {
-		loadLightTheme();
-	}
-
-	unregisterHooks = appHooks.hook('theme.changed', ({ mode }) => {
-		if (mode === 'dark') {
-			loadDarkTheme();
-		} else {
-			loadLightTheme();
-		}
-	});
+	setupTheme();
 });
 </script>
 
@@ -228,7 +198,7 @@ onBeforeMount(() => {
 		@shown="handleDialogShown"
 		@hidden="handleDialogHidden"
 	>
-		<dx-load-panel  v-model:visible="loadingVisible"/>
+		<dx-load-panel v-model:visible="loadingVisible" />
 
 		<div class="text-xs p-4 mb-4 border border-black/20 dark:border-white/20 rounded">
 			<div class="grid grid-cols-none gap-1">
@@ -245,7 +215,7 @@ onBeforeMount(() => {
 		</div>
 
 		<form>
-			<dx-form v-model:form-data="metaDataToEdit">
+			<dx-form v-model:form-data="metadataToEdit">
 				<dx-form-item
 					data-field="tags"
 					editor-type="dxTagBox"
@@ -274,6 +244,19 @@ onBeforeMount(() => {
 		<dx-toolbar-item
 			widget="dxButton"
 			toolbar="bottom"
+			location="before"
+			:visible="metadataExists"
+			:options="{
+				text: 'Delete',
+				type: 'danger',
+				stylingMode: 'outlined',
+				onClick: showConfirmDeleteDialog
+			}"
+		/>
+
+		<dx-toolbar-item
+			widget="dxButton"
+			toolbar="bottom"
 			location="after"
 			:options="{
 				text: 'Cancel',
@@ -289,7 +272,12 @@ onBeforeMount(() => {
 			widget="dxButton"
 			toolbar="bottom"
 			location="after"
-			:options="saveButtonOptions"
+			:options="{
+				text: 'Save',
+				type: 'default',
+				stylingMode: 'contained',
+				onClick: saveMetadata
+			}"
 		/>
 	</dx-popup>
 </template>
