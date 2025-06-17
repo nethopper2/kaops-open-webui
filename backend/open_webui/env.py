@@ -413,6 +413,17 @@ MICROSOFT_INTROSPECT_URL = os.environ.get(
     f"https://login.microsoftonline.com/{MICROSOFT_TENANT_ID}/oauth2/v2.0/introspect"
 )
 
+ATLASSIAN_CLIENT_ID = os.environ.get("ATLASSIAN_CLIENT_ID", None)
+ATLASSIAN_CLIENT_SECRET = os.environ.get("ATLASSIAN_CLIENT_SECRET", None)
+ATLASSIAN_REDIRECT_URL = os.environ.get("ATLASSIAN_REDIRECT_URL", None)
+
+ATLASSIAN_AUTH_SERVER =  os.environ.get("ATLASSIAN_AUTH_SERVER", "https://auth.atlassian.com") 
+ATLASSIAN_API_GATEWAY = os.environ.get("ATLASSIAN_API_GATEWAY", "https://api.atlassian.com")  
+ATLASSIAN_TOKEN_URL = os.environ.get("ATLASSIAN_TOKEN_URL", f"{ATLASSIAN_AUTH_SERVER}/oauth/token") 
+ATLASSIAN_AUTHORIZE_URL = os.environ.get("ATLASSIAN_AUTHORIZE_URL", f"{ATLASSIAN_AUTH_SERVER}/authorize")  
+ATLASSIAN_ACCESSIBLE_RESOURCES_URL = os.environ.get("ATLASSIAN_ACCESSIBLE_RESOURCES_URL", f"{ATLASSIAN_API_GATEWAY}/oauth/token/accessible-resources")   
+
+
 
 BYPASS_MODEL_ACCESS_CONTROL = (
     os.environ.get("BYPASS_MODEL_ACCESS_CONTROL", "False").lower() == "true"

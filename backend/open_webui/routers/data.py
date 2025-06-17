@@ -7,7 +7,7 @@ from typing import Optional, List
 
 from open_webui.env import SRC_LOG_LEVELS
 from open_webui.constants import ERROR_MESSAGES
-from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
 from open_webui.models.users import Users
 from open_webui.utils.data.encryption import encrypt_data, decrypt_data
@@ -22,6 +22,19 @@ from open_webui.models.data import (
     DataSources,
     DataSourceResponse,
 )
+
+
+# Import the slack sync utility
+from open_webui.utils.data.slack import initiate_slack_sync
+from open_webui.utils.data.google import initiate_google_file_sync
+from open_webui.utils.data.microsoft import initiate_microsoft_sync
+from open_webui.utils.data.atlassian import initiate_atlassian_sync
+from pydantic import BaseModel
+
+log = logging.getLogger(__name__)
+log.setLevel(SRC_LOG_LEVELS["MAIN"])
+
+router = APIRouter()
 
 from open_webui.env import (
     SLACK_CLIENT_ID,
@@ -47,21 +60,17 @@ from open_webui.env import (
     MICROSOFT_AUTHORIZE_URL,
     MICROSOFT_TOKEN_URL,
 
+    ATLASSIAN_API_GATEWAY,
+    ATLASSIAN_AUTHORIZE_URL,
+    ATLASSIAN_TOKEN_URL, 
+
+    ATLASSIAN_CLIENT_ID,
+    ATLASSIAN_CLIENT_SECRET,
+    ATLASSIAN_REDIRECT_URL,
+
     GCS_BUCKET_NAME,
     GCS_SERVICE_ACCOUNT_BASE64
 )
-
-# Import the slack sync utility
-from open_webui.utils.data.slack import initiate_slack_sync
-from open_webui.utils.data.google import initiate_google_file_sync
-from open_webui.utils.data.microsoft import initiate_microsoft_sync
-from pydantic import BaseModel
-
-log = logging.getLogger(__name__)
-log.setLevel(SRC_LOG_LEVELS["MAIN"])
-
-router = APIRouter()
-
 
 oauth_state_store = {}
 
@@ -480,7 +489,7 @@ async def google_callback(request: Request, background_tasks: BackgroundTasks):
                 GCS_BUCKET_NAME
             )
 
-            update_data_source_sync_status(user_id, 'google', 'syncing')
+            await update_data_source_sync_status(user_id, 'google', 'syncing')
 
             return {
                 "message": "Google data sync initiated successfully.",
@@ -502,7 +511,6 @@ async def google_callback(request: Request, background_tasks: BackgroundTasks):
         if hasattr(e, 'response') and e.response is not None:
             log.error(f"Response: {e.response.text}")
         raise HTTPException(status_code=500, detail="Failed to authenticate with Google")
-
 
 @router.get("/google/status")
 def get_google_status(user=Depends(get_verified_user)):
@@ -667,7 +675,7 @@ async def manual_google_sync(
             
             # Return structured response with re-authorization URL
             raise HTTPException(
-                status_code=401,
+                status_code=201,
                 detail={
                     "error": "token_expired_no_refresh",
                     "message": "Google token is expired and no valid refresh token is available. Re-authorization required.",
@@ -712,7 +720,7 @@ async def manual_google_sync(
             GCS_BUCKET_NAME
         )
 
-        update_data_source_sync_status(user.id, 'google', 'syncing')
+        await update_data_source_sync_status(user.id, 'google', 'syncing')
 
         return {
             "message": "Google data sync initiated successfully.",
@@ -1068,7 +1076,7 @@ async def microsoft_callback(request: Request, background_tasks: BackgroundTasks
                 GCS_BUCKET_NAME
             )
 
-            update_data_source_sync_status(user_id, 'microsoft', 'syncing')
+            await update_data_source_sync_status(user_id, 'microsoft', 'syncing')
 
             return {
                 "message": "Microsoft data sync initiated successfully.",
@@ -1121,7 +1129,6 @@ def get_microsoft_status(user=Depends(get_verified_user)):
         "current_sync_status": sync_status,
         "ready_for_sync": all(config_status.values()) and bool(microsoft_token_exists) and sync_status != "syncing"
     }
-
 
 @router.post("/microsoft/sync")
 async def manual_microsoft_sync(
@@ -1241,7 +1248,7 @@ async def manual_microsoft_sync(
             log.info(f"Generated re-authorization URL for user {user.id}")
 
             raise HTTPException(
-                status_code=401,
+                status_code=201,
                 detail={
                     "error": "token_expired_no_refresh",
                     "message": "Microsoft token is expired and no valid refresh token is available. Re-authorization required.",
@@ -1285,7 +1292,7 @@ async def manual_microsoft_sync(
             GCS_BUCKET_NAME
         )
 
-        update_data_source_sync_status(user.id, 'microsoft', 'syncing')
+        await update_data_source_sync_status(user.id, 'microsoft', 'syncing')
 
         return {
             "message": "Microsoft data sync initiated successfully.",
@@ -1372,6 +1379,9 @@ async def disconnect_microsoft(background_tasks: BackgroundTasks, user=Depends(g
             log.info(msg)
             messages.append(msg)
         
+        # Optionally, you could provide a link for the user to revoke permissions manually in their Microsoft account settings
+        # This is more robust for user-initiated revocation for Microsoft.
+        # "https://myapps.microsoft.com/" where they can see and revoke apps.
 
     # --- Step 2: Remove stored Microsoft credentials (OAuthToken entry) from DB ---
     try:
@@ -1486,7 +1496,6 @@ async def disconnect_microsoft(background_tasks: BackgroundTasks, user=Depends(g
 ############################
 # Slack Endpoints 
 ############################
-
 @router.get("/slack/initialize")
 def get_slack_auth_url(user=Depends(get_verified_user)):
     """Generate Slack OAuth URL for the current authenticated user."""
@@ -1545,9 +1554,8 @@ def get_slack_auth_url(user=Depends(get_verified_user)):
         "user_scopes": user_scopes
     }
 
-
 @router.get("/slack/callback")
-def slack_callback(request: Request, background_tasks: BackgroundTasks):
+async def slack_callback(request: Request, background_tasks: BackgroundTasks):
     """Handle Slack OAuth callback and initiate sync process."""
     code = request.query_params.get("code")
     state = request.query_params.get("state")
@@ -1675,7 +1683,7 @@ def slack_callback(request: Request, background_tasks: BackgroundTasks):
                 GCS_BUCKET_NAME
             )
 
-            update_data_source_sync_status(user_id, 'slack', 'syncing')
+            await update_data_source_sync_status(user_id, 'slack', 'syncing')
             
             return {
                 "message": "Slack data sync initiated successfully.",
@@ -1701,7 +1709,6 @@ def slack_callback(request: Request, background_tasks: BackgroundTasks):
             log.error(f"Response: {e.response.text}")
         raise HTTPException(status_code=500, detail="Failed to authenticate with Slack")
 
-
 @router.get("/slack/status")
 def get_slack_status(user=Depends(get_verified_user)):
     """Get current user's Slack integration status."""
@@ -1721,9 +1728,8 @@ def get_slack_status(user=Depends(get_verified_user)):
         "ready_for_sync": all(config_status.values())
     }
 
-
 @router.post("/slack/sync")
-def manual_slack_sync(
+async def manual_slack_sync(
     background_tasks: BackgroundTasks,
     user=Depends(get_verified_user),
 ):
@@ -1853,7 +1859,7 @@ def manual_slack_sync(
             GCS_BUCKET_NAME
         )
 
-        update_data_source_sync_status(user.id, 'slack', 'syncing')
+        await update_data_source_sync_status(user.id, 'slack', 'syncing')
         
         return {
             "message": "Slack data sync initiated successfully.",
@@ -1875,7 +1881,6 @@ def manual_slack_sync(
             status_code=500, 
             detail=f"Slack sync failed: {str(sync_error)}"
         )
-
 
 @router.delete("/slack/disconnect")
 async def disconnect_slack(background_tasks: BackgroundTasks, user=Depends(get_verified_user),
@@ -2055,4 +2060,547 @@ async def disconnect_slack(background_tasks: BackgroundTasks, user=Depends(get_v
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"message": "Failed to fully disconnect Slack integration. See details.", "details": messages}
+        )
+    
+
+############################
+# Atlassian Endpoints 
+############################
+@router.get("/atlassian/initialize")
+def get_atlassian_auth_url(user=Depends(get_verified_user)):
+    """Generate Atlassian OAuth URL for the current authenticated user."""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    # Atlassian scopes for Jira and Confluence (read-only where possible)
+    # Refer to Atlassian's documentation for the most current and specific scopes.
+    # atlassian_scopes = [
+    #     "read:jira-user",        # Read user profile data in Jira
+    #     "read:jira-work",        # Read Jira project and issue data
+    #     "read:confluence-space", # Read Confluence spaces
+    #     "read:confluence-content",# Read Confluence page content and attachments
+    #     "offline_access",         # Crucial to get a refresh_token
+    #     "read:project:jira",
+    # ]
+
+    atlassian_scopes = [
+        "read:user:jira",
+        "read:issue:jira",
+        "read:comment:jira",
+        "read:attachment:jira",
+        "read:project:jira",
+        "read:issue-meta:jira",
+        "read:field:jira",
+        "read:filter:jira",
+        "read:jira-work",
+        "read:jira-user",
+        "read:me",
+        "read:account",
+        "report:personal-data"
+    ]
+
+    scope_str = " ".join(atlassian_scopes) # Atlassian scopes are space-separated
+
+    state = user.id
+    oauth_state_store[state] = user.id # Store for validation in callback
+
+    # Atlassian uses 'audience' for the API gateway
+    auth_url = (
+        f"{ATLASSIAN_AUTHORIZE_URL}"
+        f"?client_id={ATLASSIAN_CLIENT_ID}"
+        f"&redirect_uri={ATLASSIAN_REDIRECT_URL}"
+        f"&scope={scope_str}"
+        f"&response_type=code"
+        f"&prompt=consent"      # Ensures refresh token is always granted
+        f"&state={state}"
+        f"&audience={ATLASSIAN_API_GATEWAY}" # Required for Atlassian's 3LO
+    )
+
+    return {
+        "url": auth_url,
+        "user_id": user.id,
+        "scopes": atlassian_scopes
+    }
+
+@router.get("/atlassian/callback")
+async def atlassian_callback(request: Request, background_tasks: BackgroundTasks):
+    """Handle Atlassian OAuth callback and initiate sync process."""
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    error = request.query_params.get("error")
+    error_description = request.query_params.get("error_description")
+
+    if error:
+        log.error(f"Atlassian OAuth error: {error} - {error_description}")
+        return Response(status_code=400, content=f"Atlassian OAuth error: {error_description or error}")
+
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing Atlassian OAuth code.")
+
+    if not state or state not in oauth_state_store:
+        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
+
+    user_id = oauth_state_store.pop(state) # Remove state after use
+
+    try:
+        response = requests.post(
+            ATLASSIAN_TOKEN_URL,
+            data={
+                "grant_type": "authorization_code",
+                "client_id": ATLASSIAN_CLIENT_ID,
+                "client_secret": ATLASSIAN_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": ATLASSIAN_REDIRECT_URL,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        if "error" in data:
+            raise HTTPException(status_code=400, detail=f"Atlassian OAuth failed: {data.get('error_description', data.get('error'))}")
+
+        log.info(f"Atlassian OAuth successful for user {user_id}")
+
+        access_token = data.get("access_token")
+        refresh_token = data.get("refresh_token")
+        expires_in = data.get("expires_in")
+
+        # Atlassian's access token is often a JWT. You can decode it to get user info.
+        # The 'sub' claim might be the user's Atlassian account ID.
+        atlassian_user_id = None
+        if access_token:
+            try:
+                # In production, properly decode and verify the JWT.
+                # For basic info, just decode without verification for initial ID extraction.
+                decoded_access_token = jwt.decode(access_token, options={"verify_signature": False})
+                atlassian_user_id = decoded_access_token.get("sub") # 'sub' is the Atlassian Account ID
+                log.info(f"Decoded Atlassian user ID (sub): {atlassian_user_id}")
+            except ImportError:
+                log.warning("PyJWT not installed. Cannot decode access_token to get Atlassian User ID.")
+            except Exception as e:
+                log.error(f"Failed to decode Atlassian access_token: {e}")
+
+        if not access_token:
+            raise HTTPException(
+                status_code=500,
+                detail="No access token received from Atlassian OAuth. Ensure necessary scopes are requested."
+            )
+
+        encrypted_access_token = encrypt_data(access_token)
+        encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else None
+
+        access_token_expires_at = None
+        if expires_in:
+            access_token_expires_at = int(time.time()) + expires_in
+
+        try:
+            OAuthTokens.insert_new_token(
+                user_id=user_id,
+                provider_name="Atlassian",
+                provider_user_id=atlassian_user_id, # Store Atlassian Account ID
+                encrypted_access_token=encrypted_access_token,
+                encrypted_refresh_token=encrypted_refresh_token,
+                access_token_expires_at=access_token_expires_at,
+                scopes=data.get("scope"),
+            )
+            log.info(f"Stored/Updated Atlassian OAuth tokens for user {user_id}")
+
+        except Exception as db_error:
+            log.error(f"Failed to store Atlassian OAuth tokens in DB for user {user_id}: {db_error}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to store Atlassian tokens securely.")
+
+        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+            raise HTTPException(
+                status_code=500,
+                detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
+            )
+
+        try:
+            log.info(f"Starting Atlassian sync for user {user_id} with token (retrieved from OAuth response)")
+
+            background_tasks.add_task(
+                initiate_atlassian_sync,
+                user_id=user_id,
+                token=access_token,
+                creds=GCS_SERVICE_ACCOUNT_BASE64,
+                gcs_bucket_name=GCS_BUCKET_NAME
+            )
+
+            await update_data_source_sync_status(user_id, 'atlassian', 'syncing')
+
+            return {
+                "message": "Atlassian data sync initiated successfully.",
+                "user_id": user_id,
+                "atlassian_user_id": atlassian_user_id,
+                "status": "success"
+            }
+
+        except Exception as sync_error:
+            log.error(f"Atlassian sync failed for user {user_id}: {str(sync_error)}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Atlassian sync failed: {str(sync_error)}"
+            )
+
+    except requests.exceptions.RequestException as e:
+        log.error(f"Atlassian API Request Error: {str(e)}", exc_info=True)
+        if hasattr(e, 'response') and e.response is not None:
+            log.error(f"Response: {e.response.text}")
+        raise HTTPException(status_code=500, detail="Failed to authenticate with Atlassian")
+
+@router.get("/atlassian/status")
+def get_atlassian_status(user=Depends(get_verified_user)):
+    """Get current user's Atlassian integration status."""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    config_status = {
+        "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
+        "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
+        "atlassian_client_configured": bool(ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET and ATLASSIAN_REDIRECT_URI),
+    }
+
+    atlassian_token_exists = OAuthTokens.get_token_by_user_provider_details(user_id=user.id, provider_name="Atlassian")
+
+    sync_status = "not_connected"
+    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+    for ds in user_data_sources:
+        if ds.action == "atlassian":
+            sync_status = ds.sync_status
+            break
+
+    return {
+        "user_id": user.id,
+        "configuration": config_status,
+        "atlassian_token_present": bool(atlassian_token_exists),
+        "current_sync_status": sync_status,
+        "ready_for_sync": all(config_status.values()) and bool(atlassian_token_exists) and sync_status != "syncing"
+    }
+
+@router.post("/atlassian/sync")
+async def manual_atlassian_sync(
+    background_tasks: BackgroundTasks,
+    user=Depends(get_verified_user),
+):
+    """Manually trigger Atlassian sync for the authenticated user, fetching tokens from DB."""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    current_time = int(time.time())
+
+    token_entry = OAuthTokens.get_token_by_user_provider_details(
+        user_id=user.id,
+        provider_name="Atlassian"
+    )
+
+    if not token_entry:
+        raise HTTPException(
+            status_code=404,
+            detail="No Atlassian integration found for this user. Please authorize your Atlassian app first."
+        )
+
+    try:
+        decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
+        decrypted_refresh_token = decrypt_data(token_entry.encrypted_refresh_token) if token_entry.encrypted_refresh_token else None
+
+        sync_token = decrypted_access_token
+
+    except Exception as e:
+        log.error(f"Failed to decrypt tokens for user {user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to decrypt Atlassian tokens. Please try re-authorizing.")
+
+    refresh_needed = False
+    if token_entry.access_token_expires_at:
+        if (token_entry.access_token_expires_at - current_time) < (5 * 60): # Refresh if less than 5 mins
+            refresh_needed = True
+            log.info(f"Access token for user {user.id} nearing expiration. Initiating refresh.")
+    elif decrypted_refresh_token:
+        log.info(f"Access token for user {user.id} has no explicit expiry but a refresh token exists. Will attempt refresh.")
+        refresh_needed = True
+
+
+    if refresh_needed and decrypted_refresh_token:
+        try:
+            log.info(f"Attempting to refresh Atlassian token for user {user.id}")
+            refresh_response = requests.post(
+                ATLASSIAN_TOKEN_URL,
+                data={
+                    "grant_type": "refresh_token",
+                    "client_id": ATLASSIAN_CLIENT_ID,
+                    "client_secret": ATLASSIAN_CLIENT_SECRET,
+                    "refresh_token": decrypted_refresh_token,
+                },
+            )
+            refresh_response.raise_for_status()
+            refresh_data = refresh_response.json()
+
+            if "error" in refresh_data:
+                log.error(f"Atlassian token refresh failed for user {user.id}: {refresh_data.get('error_description', refresh_data.get('error'))}")
+                raise HTTPException(status_code=400, detail=f"Failed to refresh Atlassian token: {refresh_data.get('error_description', refresh_data.get('error'))}")
+
+            new_access_token = refresh_data.get("access_token")
+            new_refresh_token = refresh_data.get("refresh_token", decrypted_refresh_token)
+            new_expires_in = refresh_data.get("expires_in")
+
+            if not new_access_token:
+                raise HTTPException(status_code=500, detail="No new access token received after refresh.")
+
+            encrypted_new_access_token = encrypt_data(new_access_token)
+            encrypted_new_refresh_token = encrypt_data(new_refresh_token) if new_refresh_token else None
+            new_access_token_expires_at = int(time.time()) + new_expires_in if new_expires_in else None
+
+            updated_token_entry = OAuthTokens.update_token_by_id(
+                token_id=token_entry.id,
+                encrypted_access_token=encrypted_new_access_token,
+                encrypted_refresh_token=encrypted_new_refresh_token,
+                access_token_expires_at=new_access_token_expires_at,
+                scopes=refresh_data.get("scope", token_entry.scopes)
+            )
+
+            if not updated_token_entry:
+                raise HTTPException(status_code=500, detail="Failed to update refreshed Atlassian tokens in database.")
+
+            log.info(f"Successfully refreshed and updated Atlassian tokens for user {user.id}")
+            sync_token = new_access_token
+
+        except requests.exceptions.RequestException as e:
+            log.error(f"Atlassian API Request Error during token refresh for user {user.id}: {str(e)}", exc_info=True)
+            if hasattr(e, 'response') and e.response is not None:
+                log.error(f"Refresh response: {e.response.text}")
+            raise HTTPException(status_code=500, detail="Failed to refresh Atlassian token with provider.")
+        except Exception as e:
+            log.error(f"An error occurred during Atlassian token refresh for user {user.id}: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail="An internal server error occurred during token refresh.")
+    elif refresh_needed and not decrypted_refresh_token:
+        log.warning(f"Access token for user {user.id} nearing expiration but no valid refresh token available. Initiating re-authorization flow.")
+        try:
+            atlassian_auth_url = (
+                f"{ATLASSIAN_AUTHORIZE_URL}"
+                f"?client_id={ATLASSIAN_CLIENT_ID}&"
+                f"redirect_uri={ATLASSIAN_REDIRECT_URL}&"
+                f"scope=read:jira-user%20read:jira-work%20read:confluence-space%20read:confluence-content%20offline_access&" # Re-request necessary scopes
+                f"response_type=code&"
+                f"prompt=consent&"
+                f"state={user.id}&"
+                f"audience={ATLASSIAN_API_GATEWAY}"
+            )
+            log.info(f"Generated re-authorization URL for user {user.id}")
+
+            raise HTTPException(
+                status_code=201,
+                detail={
+                    "error": "token_expired_no_refresh",
+                    "message": "Atlassian token is expired and no valid refresh token is available. Re-authorization required.",
+                    "reauth_url": atlassian_auth_url,
+                    "action_required": "redirect_to_atlassian_auth",
+                    "user_id": str(user.id),
+                    "provider": "atlassian",
+                    "reason": "no_refresh_token" if not token_entry.encrypted_refresh_token else "invalid_refresh_token"
+                }
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            log.error(f"Failed to generate re-authorization URL for user {user.id}: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "reauth_generation_failed",
+                    "message": "Atlassian token is expired and re-authorization flow could not be initiated. Please manually re-authorize your Atlassian integration.",
+                    "user_id": str(user.id)
+                }
+            )
+
+    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+        raise HTTPException(
+            status_code=500,
+            detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
+        )
+
+    try:
+        log.info(f"Starting scheduled/manual Atlassian sync for user {user.id}")
+
+        background_tasks.add_task(
+            initiate_atlassian_sync,
+            user_id=user.id,
+            token=sync_token,
+            creds=GCS_SERVICE_ACCOUNT_BASE64,
+            gcs_bucket_name=GCS_BUCKET_NAME
+        )
+
+        await update_data_source_sync_status(user.id, 'atlassian', 'syncing')
+
+        return {
+            "message": "Atlassian data sync initiated successfully.",
+            "user_id": user.id,
+            "status": "success"
+        }
+
+    except Exception as sync_error:
+        log.error(f"Atlassian sync failed for user {user.id}: {str(sync_error)}", exc_info=True)
+        if "invalid_grant" in str(sync_error).lower() or "invalid_token" in str(sync_error).lower():
+            log.warning(f"Atlassian sync for user {user.id} failed due to invalid token. User may need to re-authorize.")
+            raise HTTPException(
+                status_code=401,
+                detail="Atlassian token invalid or expired. Please re-authorize your Atlassian integration."
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Atlassian sync failed: {str(sync_error)}"
+        )
+
+@router.delete("/atlassian/disconnect")
+async def disconnect_atlassian(user=Depends(get_verified_user),
+    atlassian_cloud_id: Optional[str] = None # Atlassian uses cloud_id to identify specific sites
+):
+    """
+    Disconnects a user's Atlassian integration, removing tokens, deleting credentials,
+    cleaning up GCS files and updating the data source sync status.
+    """
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    user_id = user.id
+    log.info(f"Initiating Atlassian integration disconnection for user: {user_id}"
+             f"{f' (Cloud ID: {atlassian_cloud_id})' if atlassian_cloud_id else ''}"
+             f", GCS cleanup")
+
+    overall_success = True
+    messages = []
+
+    # --- Step 1: Token Revocation ---
+    # Atlassian OAuth 2.0 (3LO) tokens are managed at the app level.
+    # There's no direct API to "revoke a single refresh token" for a user's app grant.
+    # Revocation typically happens when a user removes the app's consent via their Atlassian account settings.
+    # We primarily focus on removing the token from our DB.
+    atlassian_tokens_to_remove: List[OAuthTokenModel] = []
+    if atlassian_cloud_id:
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user_id,
+            provider_name="Atlassian",
+            provider_team_id=atlassian_cloud_id # Assuming provider_team_id stores cloud_id
+        )
+        if token_entry:
+            atlassian_tokens_to_remove.append(token_entry)
+    else:
+        all_user_tokens = OAuthTokens.get_all_tokens_for_user(user_id=user_id)
+        atlassian_tokens_to_remove = [
+            token for token in all_user_tokens if token.provider_name == "Atlassian"
+        ]
+
+    if not atlassian_tokens_to_remove:
+        msg = f"No Atlassian tokens found for user {user_id}{f' (Cloud ID: {atlassian_cloud_id})' if atlassian_cloud_id else ''}. Skipping token revocation attempt."
+        log.warning(msg)
+        messages.append(msg)
+    else:
+        for token_entry in atlassian_tokens_to_remove:
+            msg = (f"Atlassian token ID: {token_entry.id} for user {user_id}"
+                   f" (Cloud ID: {token_entry.provider_team_id or 'N/A'}) will be removed from DB.")
+            log.info(msg)
+            messages.append(msg)
+            # You could optionally include a link for the user to revoke permissions manually:
+            # "https://id.atlassian.com/manage-profile/profile-and-visibility" or "https://id.atlassian.com/manage-profile/apps-and-services"
+
+    # --- Step 2: Remove stored Atlassian credentials (OAuthToken entry) from DB ---
+    try:
+        if atlassian_cloud_id:
+            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
+                user_id=user_id,
+                provider_name="Atlassian",
+                provider_team_id=atlassian_cloud_id
+            )
+        else:
+            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
+                user_id=user_id,
+                provider_name="Atlassian"
+            )
+
+        if db_delete_success:
+            msg = f"Successfully deleted Atlassian OAuth token(s) from DB for user {user_id}{f' (Cloud ID: {atlassian_cloud_id})' if atlassian_cloud_id else ''}."
+            log.info(msg)
+            messages.append(msg)
+        else:
+            msg = f"Failed to delete Atlassian OAuth token(s) from DB for user {user_id}{f' (Cloud ID: {atlassian_cloud_id})' if atlassian_cloud_id else ''}. It might have already been deleted or not found."
+            log.error(msg)
+            messages.append(msg)
+            overall_success = False
+    except Exception as e:
+        msg = f"Error deleting Atlassian OAuth token(s) from DB for user {user_id}: {e}"
+        log.exception(msg)
+        messages.append(msg)
+        overall_success = False
+
+    # --- Step 3: Update Atlassian Data Source Sync Status ---
+    atlassian_data_source_found: Optional[DataSourceModel] = None
+    user_data_sources: List[DataSourceModel] = DataSources.get_data_sources_by_user_id(user_id)
+    for ds in user_data_sources:
+        if ds.action == "atlassian": # Assuming 'atlassian' as the action type
+            atlassian_data_source_found = ds
+            break
+
+    if atlassian_data_source_found:
+        try:
+            updated_ds = DataSources.update_data_source_sync_status_by_name(
+                user_id=user_id,
+                source_name=atlassian_data_source_found.name,
+                sync_status="unsynced",
+                last_sync=int(time.time())
+            )
+            if updated_ds:
+                msg = f"Successfully updated Atlassian data source status to 'unsynced' for user {user_id} (Data Source Name: {updated_ds.name})."
+                log.info(msg)
+                messages.append(msg)
+            else:
+                msg = f"Failed to update Atlassian data source status to 'unsynced' for user {user_id} (Data Source Name: {atlassian_data_source_found.name})."
+                log.error(msg)
+                messages.append(msg)
+                overall_success = False
+        except Exception as e:
+            msg = f"Error updating Atlassian data source status for user {user_id}: {e}"
+            log.exception(msg)
+            messages.append(msg)
+            overall_success = False
+    else:
+        msg = f"Atlassian data source not found for user {user_id}. Cannot update sync status."
+        log.warning(msg)
+        messages.append(msg)
+
+    # --- Step 4: Delete user data from GCS Bucket ---
+    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+        msg = ("GCS configuration missing (GCS_BUCKET_NAME or GCS_SERVICE_ACCOUNT_BASE64). "
+                "Cannot perform GCS data cleanup as requested.")
+        log.error(msg)
+        messages.append(msg)
+        overall_success = False
+    else:
+        atlassian_folder_path = f"{user_id}/Atlassian/" # Assuming this GCS path
+        try:
+            gcs_cleanup_success = await delete_gcs_folder(
+                folder_path=atlassian_folder_path,
+                service_account_base64=GCS_SERVICE_ACCOUNT_BASE64,
+                GCS_BUCKET_NAME=GCS_BUCKET_NAME
+            )
+            if gcs_cleanup_success:
+                msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Atlassian folder."
+                log.info(msg)
+                messages.append(msg)
+            else:
+                msg = f"Failed to delete GCS data for user {user_id}'s Atlassian folder."
+                log.error(msg)
+                messages.append(msg)
+                overall_success = False
+        except Exception as e:
+            msg = f"Error during GCS data cleanup for user {user_id}'s Atlassian folder: {e}"
+            log.exception(msg)
+            messages.append(msg)
+            overall_success = False
+
+    if overall_success:
+        log.info(f"Atlassian integration disconnection process completed successfully for user: {user_id}")
+        return {"message": "Atlassian integration disconnected successfully.", "details": messages}
+    else:
+        log.warning(f"Atlassian integration disconnection process completed with some failures for user: {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": "Failed to fully disconnect Atlassian integration. See details.", "details": messages}
         )

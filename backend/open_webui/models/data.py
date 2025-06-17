@@ -11,6 +11,42 @@ from sqlalchemy import BigInteger, Column, String, Text, JSON
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MODELS"])
 
+from open_webui.env import (
+    SLACK_CLIENT_ID,
+    SLACK_CLIENT_SECRET,
+    SLACK_REDIRECT_URI,
+
+    SLACK_AUTHORIZE_URL,
+    SLACK_TOKEN_URL,
+    SLACK_AUTH_REVOKE_URL,
+
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI,
+
+    GOOGLE_AUTHORIZE_URL,
+    GOOGLE_TOKEN_URL,
+    GOOGLE_AUTH_REVOKE_URL,
+
+    MICROSOFT_CLIENT_ID,
+    MICROSOFT_CLIENT_SECRET,
+    MICROSOFT_REDIRECT_URI,
+
+    MICROSOFT_AUTHORIZE_URL,
+    MICROSOFT_TOKEN_URL,
+
+    ATLASSIAN_API_GATEWAY,
+    ATLASSIAN_AUTHORIZE_URL,
+    ATLASSIAN_TOKEN_URL, 
+
+    ATLASSIAN_CLIENT_ID,
+    ATLASSIAN_CLIENT_SECRET,
+    ATLASSIAN_REDIRECT_URL,
+
+    GCS_BUCKET_NAME,
+    GCS_SERVICE_ACCOUNT_BASE64
+)
+
 ####################
 # Data Sources DB Schema
 ####################
@@ -86,21 +122,32 @@ class DataSourcesTable:
             "context": "Google Drive",
             "sync_status": "unsynced",
             "icon": "Google",
-            "action": "google"
+            "action": "google",
+            "config_status": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI and GOOGLE_AUTHORIZE_URL and GOOGLE_TOKEN_URL and GOOGLE_AUTH_REVOKE_URL)
         },
         { 
             "name": "Microsoft Office 365 File Storage",
             "context": "OneDrive & SharePoint",
             "sync_status": "unsynced",
             "icon": "Microsoft",
-            "action": "microsoft"
+            "action": "microsoft",
+            "config_status": bool( MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET and MICROSOFT_REDIRECT_URI and MICROSOFT_AUTHORIZE_URL and MICROSOFT_TOKEN_URL)
         },
         {
             "name": "Slack",
             "context": "Direct Messages, Channels, Group Chats, Files & Canvases",
             "sync_status": "unsynced",
             "icon": "Slack",
-            "action": "slack"
+            "action": "slack",
+            "config_status": bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_REDIRECT_URI and SLACK_AUTHORIZE_URL and SLACK_TOKEN_URL and SLACK_AUTH_REVOKE_URL)
+        },
+        {
+            "name": "Atlassian",
+            "context": "JIRA projects & issues, Confluence Pages",
+            "sync_status": "unsynced",
+            "icon": "Atlassian",
+            "action": "atlassian",
+            "config_status": bool(ATLASSIAN_API_GATEWAY and ATLASSIAN_AUTHORIZE_URL and ATLASSIAN_TOKEN_URL and ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET and ATLASSIAN_REDIRECT_URL)
         }
     ]
 
@@ -114,6 +161,9 @@ class DataSourcesTable:
         for default_source in self.DEFAULT_DATA_SOURCES:
             # Skip if this default source already exists for the user
             if default_source["name"] in existing_source_names:
+                continue
+
+            if default_source["config_status"] is not True:
                 continue
                 
             # Create unique ID for this user's data source
@@ -238,9 +288,10 @@ class DataSourcesTable:
 
                     # Always update the `updated_at` timestamp
                     data_source.updated_at = int(time.time())
-
                     db.commit()
                     db.refresh(data_source) # Refresh to get latest data from DB
+
+
                     log.info(f"Successfully updated sync status for data source '{source_name}' to '{sync_status}' for user {user_id}.")
                     return DataSourceModel.model_validate(data_source)
                 else:

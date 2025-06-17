@@ -349,6 +349,7 @@ from open_webui.env import (
     OFFLINE_MODE,
     ENABLE_OTEL,
     EXTERNAL_PWA_MANIFEST_URL,
+    ENABLE_SSO_DATA_SYNC
 )
 
 
@@ -1263,6 +1264,8 @@ async def get_app_config(request: Request):
     if user is None:
         onboarding = user_count == 0
 
+    log.info(f"ENABLE_SSO_DATA_SYNC: {ENABLE_SSO_DATA_SYNC}")
+
     return {
         **({"onboarding": True} if onboarding else {}),
         "status": True,
@@ -1284,6 +1287,7 @@ async def get_app_config(request: Request):
             "enable_login_form": app.state.config.ENABLE_LOGIN_FORM,
             "enable_upstream_ui": app.state.config.NH_ENABLE_UPSTREAM_UI,
             "enable_websocket": ENABLE_WEBSOCKET_SUPPORT,
+            "enable_file_ingestion": ENABLE_SSO_DATA_SYNC.lower() == 'true',
             **(
                 {
                     "enable_direct_connections": app.state.config.ENABLE_DIRECT_CONNECTIONS,

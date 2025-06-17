@@ -13,6 +13,10 @@ from urllib.parse import urlencode, quote
 from typing import Optional, List
 from open_webui.env import SRC_LOG_LEVELS
 
+from open_webui.socket.main import (
+    send_user_notification
+)
+
 from open_webui.models.data import DataSources, DataSourceModel
 
 log = logging.getLogger(__name__)
@@ -57,7 +61,7 @@ def parse_date(date_str):
     """Helper to parse date strings"""
     return datetime.fromisoformat(date_str.replace('Z', '+00:00')) if date_str else None
 
-def make_api_request(url, method='GET', headers=None, params=None, data=None, stream=False, auth_token=None):
+def make_api_request(url, method='GET', headers=None, params=None, data=None, stream=False, auth_token=None, auth=None):
     """
     Helper function to make API requests with error handling and retry logic.
 
@@ -108,7 +112,8 @@ def make_api_request(url, method='GET', headers=None, params=None, data=None, st
             headers=headers,
             params=params,
             data=data,
-            stream=stream
+            stream=stream,
+            auth=auth
         )
         response.raise_for_status() # Raises an HTTPError for bad responses (4xx or 5xx)
 
@@ -387,7 +392,7 @@ def create_jwt(service_account_info):
     
     return token
 
-def update_data_source_sync_status(
+async def update_data_source_sync_status(
     user_id: str,
     source_action: str, # This maps to the 'action' field in your DataSource model
     status: str
@@ -431,7 +436,20 @@ def update_data_source_sync_status(
         )
         
         if updated_source:
-            log.info(f"Successfully updated sync status for data source '{source_action}' (Name: '{updated_source.name}') to '{status}' for user {user_id}.")
+
+            # After successful sync
+            await send_user_notification(
+                user_id=user_id,
+                event_name="data-source-updated",
+                data={
+                    "source": updated_source.name,
+                    "status": updated_source.sync_status,
+                    "message": f"{updated_source.name} sync status updated!",
+                    "timestamp": int(time.time())
+                }
+            )
+
+            log.info(f"Successfully updated sync status for data source '{source_action}' (Name: '{updated_source}') to '{status}' for user {user_id}.")
             return updated_source
         else:
             log.error(f"Failed to update sync status for data source '{source_action}' for user {user_id} using its name '{target_data_source_name}'.")

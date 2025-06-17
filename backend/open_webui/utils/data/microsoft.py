@@ -501,7 +501,7 @@ def download_and_upload_sharepoint_file(file, auth_token, service_account_base64
         print(f"Error processing SharePoint file {file['fullPath']}: {str(e)}")
         return None
 
-def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
+async def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
     """Main function to sync OneDrive to Google Cloud Storage"""
     global total_api_calls
     global USER_ID
@@ -616,7 +616,7 @@ def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
         }
     
     except Exception as error:
-        update_data_source_sync_status(USER_ID, 'microsoft', 'error')
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'error')
         print(f'OneDrive sync failed: {str(error)}')
         # Log the full error for debugging
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
@@ -624,7 +624,7 @@ def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
         raise error
 
 
-def sync_sharepoint_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
+async def sync_sharepoint_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
     """Main function to sync SharePoint to Google Cloud Storage"""
     global total_api_calls
     global USER_ID
@@ -775,7 +775,7 @@ def sync_sharepoint_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NAME):
         }
     
     except Exception as error:
-        update_data_source_sync_status(USER_ID, 'microsoft', 'error')
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'error')
         print(f'SharePoint sync failed: {str(error)}')
         # Log the full error for debugging
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
@@ -804,7 +804,7 @@ def process_sharepoint_folder(site_id, drive_id, folder_id, auth_token, site_dri
         return collected_files
 
 # Main execution function 
-def initiate_microsoft_sync(user_id, auth_token, service_account_base64, gcs_bucket_name, sync_onedrive=True, sync_sharepoint=True):
+async def initiate_microsoft_sync(user_id, auth_token, service_account_base64, gcs_bucket_name, sync_onedrive=True, sync_sharepoint=True):
     """
     Main entry point to sync both OneDrive and SharePoint to GCS
     
@@ -840,16 +840,16 @@ def initiate_microsoft_sync(user_id, auth_token, service_account_base64, gcs_buc
         'sharepoint': None
     }
 
-    update_data_source_sync_status(USER_ID, 'microsoft', 'syncing')
+    await update_data_source_sync_status(USER_ID, 'microsoft', 'syncing')
     
     # Sync OneDrive if requested
     if sync_onedrive:
-        results['onedrive'] = sync_onedrive_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
+        results['onedrive'] = await sync_onedrive_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
     
     # Sync SharePoint if requested
     if sync_sharepoint:
-        results['sharepoint'] = sync_sharepoint_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
+        results['sharepoint'] = await sync_sharepoint_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
 
-    update_data_source_sync_status(USER_ID, 'microsoft', 'synced')
+    await update_data_source_sync_status(USER_ID, 'microsoft', 'synced')
     
     return results

@@ -353,7 +353,7 @@ def process_folder(folder_id, folder_name, auth_token, all_files, drive_name=Non
         # ADD THIS:
         log.error(f"Error in process_folder for {folder_id}:", exc_info=True)
 
-def sync_drive_to_gcs(auth_token, service_account_base64):
+async def sync_drive_to_gcs(auth_token, service_account_base64):
     """Main function to sync Google Drive to Google Cloud Storage using a bearer token"""
     global total_api_calls
     global GCS_BUCKET_NAME
@@ -541,10 +541,10 @@ def sync_drive_to_gcs(auth_token, service_account_base64):
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
         
-        update_data_source_sync_status(USER_ID, 'google', 'synced')
+        await update_data_source_sync_status(USER_ID, 'google', 'synced')
     
     except Exception as error:
-        update_data_source_sync_status(USER_ID, 'google', 'error')
+        await update_data_source_sync_status(USER_ID, 'google', 'error')
         # Log the full error for debugging
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
         print(traceback.format_exc())
@@ -585,7 +585,7 @@ def download_and_upload_file(file, auth_token, service_account_base64, GCS_BUCKE
         return None # Ensure None is returned on error
 
 # Main Execution Function
-def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str):
+async def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str):
     log.info(f'Sync Google Drive to Google Cloud Storage')
     log.info(f'User Open WebUI ID: {user_id}')
     log.info(f'GCS Bucket Name: {gcs_bucket_name}')
@@ -601,7 +601,7 @@ def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bucket_n
     total_api_calls = 0
     script_start_time = time.time()
 
-    update_data_source_sync_status(USER_ID, 'google', 'syncing')
+    await update_data_source_sync_status(USER_ID, 'google', 'syncing')
 
     # Run the sync process
-    sync_drive_to_gcs(token, creds)
+    await sync_drive_to_gcs(token, creds)

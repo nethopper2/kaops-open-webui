@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount, getContext } from 'svelte';
-	import { WEBUI_NAME } from '$lib/stores';
+	import { onMount, getContext, onDestroy } from 'svelte';
+	import { WEBUI_NAME, socket } from '$lib/stores';
 	import Search from '../icons/Search.svelte';
 	import Spinner from '../common/Spinner.svelte';
 	import Google from '../icons/Google.svelte';
@@ -14,6 +14,7 @@
 		manualDataSync,
 		disconnectDataSync
 	} from '$lib/apis/data';
+	import Atlassian from '../icons/Atlassian.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -67,7 +68,8 @@
 		const iconMap = {
 			Google: Google,
 			Microsoft: Microsoft,
-			Slack: Slack
+			Slack: Slack,
+			Atlassian: Atlassian
 		} as const;
 		return iconMap[iconName as keyof typeof iconMap];
 	};
@@ -85,6 +87,24 @@
 		}
 	};
 
+	const updateDataSourceSyncStatus = (sourceData: {
+		source: string;
+		status: 'synced' | 'syncing' | 'error' | 'unsynced';
+		message: string;
+		timestamp: string;
+	}) => {
+		dataSources = dataSources.map((ds) => {
+			if (ds.name === sourceData.source) {
+				return {
+					...ds,
+					sync_status: sourceData.status,
+					last_sync: sourceData.timestamp
+				};
+			}
+			return ds;
+		});
+	};
+
 	const initializeSync = async (action: string) => {
 		console.log('Initializing sync for:', action);
 
@@ -100,7 +120,11 @@
 	const updateSync = async (action: string) => {
 		console.log('Manual sync initiated for:', action);
 
-		await manualDataSync(localStorage.token, action);
+		let syncDetails = await manualDataSync(localStorage.token, action);
+
+		if (syncDetails.detail?.reauth_url) {
+			return window.open(syncDetails.detail.reauth_url, '_blank');
+		}
 
 		dataSources = await getDataSources(localStorage.token);
 	};
@@ -158,9 +182,17 @@
 	};
 
 	onMount(async () => {
-		// Initialize your data here
 		dataSources = await getDataSources(localStorage.token);
+		$socket?.on('data-source-updated', async (data) => {
+			updateDataSourceSyncStatus(data);
+		});
 		loaded = true;
+	});
+
+	onDestroy(() => {
+		if ($socket) {
+			$socket.off('data-source-updated'); // Remove the listener
+		}
 	});
 </script>
 

@@ -10,18 +10,11 @@ import base64
 
 from open_webui.internal.db import Base, JSONField, get_db
 
-from open_webui.utils.data.google import initiate_google_file_sync
-from open_webui.utils.data.microsoft import initiate_microsoft_sync
-from open_webui.utils.data.encryption import encrypt_data
+
 from open_webui.models.datatokens import OAuthTokens
 
 from open_webui.models.chats import Chats
 from open_webui.models.groups import Groups, GroupModel, GroupUpdateForm, GroupForm
-
-from open_webui.env import (
-    GCS_BUCKET_NAME,
-    GCS_SERVICE_ACCOUNT_BASE64
-)
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import BigInteger, Column, String, Text
@@ -360,18 +353,6 @@ class UsersTable:
             else:
                 log.error(f"Failed to fetch user data: {response.status_code} {response}")
                 return None
-        except Exception as e:
-            log.error(f"Error fetching user data: {e}")
-            return None
-
-    def get_user_file_data_from_sso_provider(self, user_id: str, provider: str, token: str):
-        try:
-            match provider:
-                case 'google':
-                    initiate_google_file_sync(user_id, token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME)
-                case 'microsoft':
-                    initiate_microsoft_sync(user_id, token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
-                
         except Exception as e:
             log.error(f"Error fetching user data: {e}")
             return None

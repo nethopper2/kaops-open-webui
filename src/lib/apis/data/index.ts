@@ -323,7 +323,7 @@ export const getDataSourceStatus = async (token: string): Promise<SlackStatusRes
 	return res;
 };
 
-export const manualDataSync = async (token: string, action: string): Promise<SlackSyncResponse> => {
+export const manualDataSync = async (token: string, action: string): Promise<any> => {
 	let error = null;
 
 	const res = await fetch(`${DATA_API_BASE_URL}/${action}/sync`, {

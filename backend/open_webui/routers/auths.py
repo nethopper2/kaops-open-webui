@@ -20,7 +20,10 @@ from open_webui.models.auths import (
 )
 from open_webui.models.users import Users
 from open_webui.models.data import DataSources
-from open_webui.models.datatokens import OAuthToken
+
+from open_webui.utils.data.google import initiate_google_file_sync
+from open_webui.utils.data.microsoft import initiate_microsoft_sync
+from open_webui.utils.data.encryption import encrypt_data
 
 from open_webui.constants import ERROR_MESSAGES, WEBHOOK_MESSAGES
 from open_webui.env import (
@@ -52,6 +55,11 @@ from open_webui.utils.auth import (
 from open_webui.utils.webhook import post_webhook
 from open_webui.utils.access_control import get_permissions
 
+from open_webui.env import (
+    GCS_BUCKET_NAME,
+    GCS_SERVICE_ACCOUNT_BASE64
+)
+
 from typing import Optional, List
 
 from ssl import CERT_REQUIRED, PROTOCOL_TLS
@@ -64,6 +72,7 @@ router = APIRouter()
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
+
 
 ############################
 # GetSessionUser
@@ -403,7 +412,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
             if ENABLE_SSO_DATA_SYNC:
                 # Add background tasks to sync user file data from the SSO provider
                 background_tasks.add_task(
-                    Users.get_user_file_data_from_sso_provider,
+                    get_user_file_data_from_sso_provider,
                     user_id,
                     sso_provider,
                     token
@@ -946,3 +955,16 @@ async def get_api_key(user=Depends(get_current_user)):
         }
     else:
         raise HTTPException(404, detail=ERROR_MESSAGES.API_KEY_NOT_FOUND)
+
+# User file sync, placed here to avoid a circular dependecy when using socket
+async def get_user_file_data_from_sso_provider(self, user_id: str, provider: str, token: str):
+        try:
+            match provider:
+                case 'google':
+                    await initiate_google_file_sync(user_id, token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME)
+                case 'microsoft':
+                    await initiate_microsoft_sync(user_id, token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
+                
+        except Exception as e:
+            log.error(f"Error fetching user data: {e}")
+            return None

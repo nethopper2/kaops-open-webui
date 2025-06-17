@@ -214,7 +214,8 @@ type Config = {
 		enable_admin_chat_access: boolean;
 		enable_community_sharing: boolean;
 		enable_autocomplete_generation: boolean;
-		enable_upstream_ui: boolean
+		enable_upstream_ui: boolean;
+		enable_file_ingestion: boolean;
 	};
 	oauth: {
 		providers: {

@@ -660,7 +660,7 @@ def upload_file_to_gcs(file_data, service_account_base64, gcs_bucket_name):
         print(f"Error uploading file {file_data['path']}: {str(error)}")
         return None
 
-def sync_slack_to_gcs(auth_token, service_account_base64):
+async def sync_slack_to_gcs(auth_token, service_account_base64):
     """Main function to sync Slack data to Google Cloud Storage"""
     global total_api_calls
     global GCS_BUCKET_NAME
@@ -850,7 +850,7 @@ def sync_slack_to_gcs(auth_token, service_account_base64):
         
         total_runtime = int((time.time() - script_start_time) * 1000)
 
-        update_data_source_sync_status(USER_ID, 'slack', 'synced')
+        await update_data_source_sync_status(USER_ID, 'slack', 'synced')
 
         print("\nAccounting Metrics:")
         print(f"⏱️  Total Runtime: {(total_runtime/1000):.2f} seconds")
@@ -864,7 +864,7 @@ def sync_slack_to_gcs(auth_token, service_account_base64):
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
     
     except Exception as error:
-        update_data_source_sync_status(USER_ID, 'slack', 'error')
+        await update_data_source_sync_status(USER_ID, 'slack', 'error')
         print(f'Slack Sync failed: {str(error)}')
         # Log the full error for debugging
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
@@ -904,9 +904,9 @@ def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_name: s
     # Start the sync process in a separate thread/process
     import threading
     
-    def run_sync():
+    async def run_sync():
         try:
-            sync_slack_to_gcs(token, creds)
+            await sync_slack_to_gcs(token, creds)
         except Exception as e:
             log.error(f"Sync process failed: {str(e)}")
     
