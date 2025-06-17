@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { confirm } from 'devextreme/ui/dialog';
 import { DxForm, DxItem as DxFormItem } from 'devextreme-vue/form';
 import { DxPopup, DxToolbarItem } from 'devextreme-vue/popup';
 import 'devextreme-vue/tag-box';
 import 'devextreme-vue/text-area';
-import { computed, onBeforeMount, ref, toRef, useHost, watch } from 'vue';
+import { computed, onBeforeMount, ref, useHost, watch } from 'vue';
 import { toast } from 'svelte-sonner';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
 import { apiFetch } from '$lib/apis/private-ai/fetchClients';
@@ -25,22 +26,12 @@ const localVisible = defineModel<boolean>('visible', { default: false })
 
 const loadingVisible = ref(false);
 const tagChoices = ref([] as Array<string>);
-const metaDataToEdit = ref(getEmptyMetadata());
+const metadataExists = ref(false);
+const metadataToEdit = ref(getEmptyMetadata());
 
 const fileOrDirectoryName = computed(() => {
 	return (props.fileItem?.path ?? '').split('/').pop() ?? '';
 });
-
-const commonButtonOptions = {
-	type: 'default',
-	stylingMode: 'contained'
-};
-
-const saveButtonOptions = {
-	...commonButtonOptions,
-	text: 'Save',
-	onClick: saveMetadata
-};
 
 async function saveMetadata() {
 	try {
@@ -49,8 +40,8 @@ async function saveMetadata() {
 				method: 'PUT',
 				body: {
 					filePath: props.fileItem.path,
-					tags: metaDataToEdit.value.tags,
-					contextData: metaDataToEdit.value.contextData
+					tags: metadataToEdit.value.tags,
+					contextData: metadataToEdit.value.contextData
 				}
 			});
 
@@ -70,6 +61,42 @@ async function saveMetadata() {
 	}
 }
 
+async function deleteMetadata() {
+	try {
+		if (props.fileItem) {
+			const response = await apiFetch(`/storage/metadata`, {
+				method: 'DELETE',
+				query: {
+					filePath: props.fileItem.path
+				}
+			});
+
+			if (response.success) {
+				toast.success(props.i18n.t(`Metadata deleted`));
+				localVisible.value = false;
+			} else {
+				throw new Error(response.message);
+			}
+		} else {
+			console.warn('No current file item');
+		}
+	} catch (err) {
+		console.error('Error deleting metadata:', err);
+		toast.error(props.i18n.t(`Failed to delete metadata`));
+	}
+}
+
+async function showConfirmDeleteDialog() {
+	try {
+		let result = await confirm(props.i18n.t("Are you sure you want to delete this metadata?"), props.i18n.t("Confirm Deletion"));
+		if (result) {
+			deleteMetadata();
+		}
+	} catch (err) {
+		console.error(err);
+	}
+}
+
 function getEmptyMetadata() {
 	return {
 		contextData: '',
@@ -80,6 +107,7 @@ function getEmptyMetadata() {
 async function loadMetadata() {
 	if (props.fileItem) {
 		try {
+			metadataExists.value = false
 			const { metadata } = await apiFetch('/storage/metadata', {
 				query: {
 					filePath: props.fileItem.path
@@ -87,14 +115,17 @@ async function loadMetadata() {
 			});
 
 			if (metadata) {
-				metaDataToEdit.value = structuredClone(metadata);
+				metadataToEdit.value = structuredClone(metadata);
+				metadataExists.value = true
 			} else {
 				console.warn('No metadata found for file: ', props.fileItem.path);
-				metaDataToEdit.value = getEmptyMetadata();
+				metadataToEdit.value = getEmptyMetadata();
+				metadataExists.value = false
 			}
 		} catch (err) {
 			console.error(err);
-			metaDataToEdit.value = getEmptyMetadata();
+			metadataToEdit.value = getEmptyMetadata();
+			metadataExists.value = false
 		}
 	}
 }
@@ -129,12 +160,10 @@ async function handleDialogShowing() {
 
 function handleDialogShown() {
 	// Could be used for additional initialization if needed
-	console.log('@@ i18n is --> ',props.i18n);
-	console.log('@@ i18n.t is --> ',props.i18n.t);
 }
 
 function handleDialogHidden() {
-	metaDataToEdit.value = getEmptyMetadata();
+	metadataToEdit.value = getEmptyMetadata();
 	emit('cancelled');
 }
 
@@ -228,7 +257,7 @@ onBeforeMount(() => {
 		@shown="handleDialogShown"
 		@hidden="handleDialogHidden"
 	>
-		<dx-load-panel  v-model:visible="loadingVisible"/>
+		<dx-load-panel v-model:visible="loadingVisible" />
 
 		<div class="text-xs p-4 mb-4 border border-black/20 dark:border-white/20 rounded">
 			<div class="grid grid-cols-none gap-1">
@@ -245,7 +274,7 @@ onBeforeMount(() => {
 		</div>
 
 		<form>
-			<dx-form v-model:form-data="metaDataToEdit">
+			<dx-form v-model:form-data="metadataToEdit">
 				<dx-form-item
 					data-field="tags"
 					editor-type="dxTagBox"
@@ -274,6 +303,19 @@ onBeforeMount(() => {
 		<dx-toolbar-item
 			widget="dxButton"
 			toolbar="bottom"
+			location="before"
+			:visible="metadataExists"
+			:options="{
+				text: 'Delete',
+				type: 'danger',
+				stylingMode: 'outlined',
+				onClick: showConfirmDeleteDialog
+			}"
+		/>
+
+		<dx-toolbar-item
+			widget="dxButton"
+			toolbar="bottom"
 			location="after"
 			:options="{
 				text: 'Cancel',
@@ -289,7 +331,12 @@ onBeforeMount(() => {
 			widget="dxButton"
 			toolbar="bottom"
 			location="after"
-			:options="saveButtonOptions"
+			:options="{
+				text: 'Save',
+				type: 'default',
+				stylingMode: 'contained',
+				onClick: saveMetadata
+			}"
 		/>
 	</dx-popup>
 </template>
