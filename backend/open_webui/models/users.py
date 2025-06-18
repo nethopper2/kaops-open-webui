@@ -6,12 +6,15 @@ from typing import Optional
 
 import jwt
 
+import base64
+
 from open_webui.internal.db import Base, JSONField, get_db
 
 
+from open_webui.models.datatokens import OAuthTokens
+
 from open_webui.models.chats import Chats
 from open_webui.models.groups import Groups, GroupModel, GroupUpdateForm, GroupForm
-
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import BigInteger, Column, String, Text
@@ -218,35 +221,6 @@ class UsersTable:
         except Exception:
             return None
         
-    def get_user_profile_data_from_sso_provider(self, provider: str, token: str):
-        try:
-            match provider:
-                case 'google':
-                    response = requests.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
-        
-                case 'okta':
-                    decoded = jwt.decode(token, options={"verify_signature": False})
-                    oktaDomain = decoded["iss"]
-                    response = requests.get(f"{oktaDomain}/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
-
-            if response.status_code == 200:
-                data = response.json()
-                trusted_email = data.get('email', None)
-                trusted_name = data.get('name', None)
-                trusted_profile_image_url = data.get('picture', "/user.png")
-
-                return {
-                    'trusted_email': trusted_email,
-                    'trusted_name': trusted_name,
-                    'trusted_profile_image_url': trusted_profile_image_url
-                }
-            else:
-                log.error(f"Failed to fetch user data: {response.status_code}")
-                return None
-        except Exception as e:
-            log.error(f"Error fetching user data: {e}")
-            return None
-
     def update_user_role_by_id(self, id: str, role: str) -> Optional[UserModel]:
         try:
             with get_db() as db:
@@ -339,11 +313,22 @@ class UsersTable:
                 )
                 Groups.update_group_by_id(id=group_model.id, form_data=update_form, overwrite=False)
     
-    def get_user_data_from_sso_provider(self, provider: str, token: str):
+    def get_user_profile_data_from_sso_provider(self, provider: str, token: str):
         try:
             match provider:
                 case 'google':
                     response = requests.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
+
+                case 'microsoft':
+                    response = requests.get("https://graph.microsoft.com/v1.0/me", headers={"Authorization": f"Bearer {token}"})
+                    photo_response = requests.get("https://graph.microsoft.com/v1.0/me/photo/$value", headers={"Authorization": f"Bearer {token}"})
+
+                    if photo_response.status_code == 200:
+                        encoded_image = base64.b64encode(photo_response.content).decode('utf-8')
+                        user_image = f"data:image/jpeg;base64,{encoded_image}"
+                    else:
+                        user_image = "/user.png"  # Default image if fetching fails
+        
                 case 'okta':
                     decoded = jwt.decode(token, options={"verify_signature": False})
                     oktaDomain = decoded["iss"]
@@ -351,9 +336,14 @@ class UsersTable:
 
             if response.status_code == 200:
                 data = response.json()
-                trusted_email = data.get('email', None)
-                trusted_name = data.get('name', None)
-                trusted_profile_image_url = data.get('picture', "/user.png")
+                if provider == 'microsoft':
+                    trusted_email =  data.get('mail', None)
+                    trusted_name =  data.get('displayName', None)
+                    trusted_profile_image_url = user_image
+                else: 
+                    trusted_email = data.get('email', None) 
+                    trusted_name = data.get('name', None) 
+                    trusted_profile_image_url = data.get('picture') 
 
                 return {
                     'trusted_email': trusted_email,
@@ -361,14 +351,47 @@ class UsersTable:
                     'trusted_profile_image_url': trusted_profile_image_url
                 }
             else:
-                log.error(f"Failed to fetch user data: {response.status_code}")
-                log.error(f"Failed with token: {token}")
-                log.error(f"Full response: {response}")
+                log.error(f"Failed to fetch user data: {response.status_code} {response}")
                 return None
         except Exception as e:
             log.error(f"Error fetching user data: {e}")
             return None
+        
+    def fetch_and_save_user_oauth_tokens(self, user_id: str, provider: str, token: str):
+        try:
+            match provider:
+                case 'google':
+                    response = requests.get("https://oauth2.googleapis.com/tokeninfo", headers={"Authorization": f"Bearer {token}"})
 
+                case 'microsoft':
+                    response = requests.get("https://graph.microsoft.com/v1.0/me", headers={"Authorization": f"Bearer {token}"})
+        
+            if response.status_code == 200:
+                data = response.json()
+                log.info(f"Response: {data}")
+                encrypted_access_token = encrypt_data(token)
+                encrypted_refresh_token = encrypt_data(data.get("refresh_token", ""))
+                expires_in = int(data.get("expires_in", 3600))
+                access_token_expires_at = int(time.time()) + expires_in
+                provider_name = provider.capitalize()
+
+                OAuthTokens.insert_new_token(
+                    user_id=user_id,
+                    provider_name=provider_name,
+                    provider_user_id=user_id,
+                    encrypted_access_token=encrypted_access_token,
+                    encrypted_refresh_token=encrypted_refresh_token,
+                    access_token_expires_at=access_token_expires_at,
+                    scopes=data.get("scope"), # Space-separated string of granted scopes
+                )
+                log.info(f"Stored/Updated {provider} OAuth tokens for user {user_id}")
+            else:
+                log.error(f"Failed to fetch user oauth tokens: {response.status_code} {response}")
+                return None
+        except Exception as e:
+            log.error(f"Error fetching user oauth tokens: {e}")
+            return None
+    
     def update_user_last_active_by_id(self, id: str) -> Optional[UserModel]:
         try:
             with get_db() as db:

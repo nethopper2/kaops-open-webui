@@ -76,6 +76,7 @@ from open_webui.routers import (
     tools,
     users,
     utils,
+    data
 )
 
 from open_webui.routers.retrieval import (
@@ -352,6 +353,7 @@ from open_webui.env import (
     OFFLINE_MODE,
     ENABLE_OTEL,
     EXTERNAL_PWA_MANIFEST_URL,
+    ENABLE_SSO_DATA_SYNC
 )
 
 
@@ -985,6 +987,7 @@ app.include_router(
     evaluations.router, prefix="/api/v1/evaluations", tags=["evaluations"]
 )
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
+app.include_router(data.router, prefix="/api/v1/data", tags=["data"])
 
 
 try:
@@ -1274,6 +1277,8 @@ async def get_app_config(request: Request):
     if user is None:
         onboarding = user_count == 0
 
+    log.info(f"ENABLE_SSO_DATA_SYNC: {ENABLE_SSO_DATA_SYNC}")
+
     return {
         **({"onboarding": True} if onboarding else {}),
         "status": True,
@@ -1294,6 +1299,7 @@ async def get_app_config(request: Request):
             "enable_signup": app.state.config.ENABLE_SIGNUP,
             "enable_login_form": app.state.config.ENABLE_LOGIN_FORM,
             "enable_websocket": ENABLE_WEBSOCKET_SUPPORT,
+            "enable_file_ingestion": ENABLE_SSO_DATA_SYNC.lower() == 'true',
             **(
                 {
                     "enable_direct_connections": app.state.config.ENABLE_DIRECT_CONNECTIONS,

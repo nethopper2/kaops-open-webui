@@ -103,6 +103,34 @@ else:
     USAGE_POOL = {}
     aquire_func = release_func = renew_func = lambda: True
 
+async def send_user_notification(user_id: str, event_name: str, data: dict):
+    """
+    Sends a WebSocket event to all active sessions of a specific user.
+
+    Args:
+        user_id (str): The ID of the user to send the notification to.
+        event_name (str): The name of the WebSocket event (e.g., "data-source-updated").
+        data (dict): The data payload for the event.
+    """
+    if user_id not in USER_POOL:
+        log.debug(f"User {user_id} not found in USER_POOL. Cannot send notification.")
+        return
+
+    # Get all active session IDs for this user
+    session_ids_for_user = USER_POOL.get(user_id, [])
+    
+    if not session_ids_for_user:
+        log.debug(f"No active sessions found for user {user_id}.")
+        return
+
+    log.info(f"Sending '{event_name}' event to user {user_id} across {len(session_ids_for_user)} sessions.")
+
+    for sid in session_ids_for_user:
+        try:
+            await sio.emit(event_name, data, to=sid)
+            log.debug(f"Event '{event_name}' sent to sid {sid} for user {user_id}.")
+        except Exception as e:
+            log.error(f"Failed to send event '{event_name}' to sid {sid} for user {user_id}: {e}")
 
 async def periodic_usage_pool_cleanup():
     if not aquire_func():

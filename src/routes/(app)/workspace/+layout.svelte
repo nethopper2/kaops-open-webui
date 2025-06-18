@@ -12,6 +12,7 @@
 		tools
 	} from '$lib/stores';
 	import { page } from '$app/stores';
+	import { config } from '$lib/stores';
 	import { goto } from '$app/navigation';
 
 	import MenuLines from '$lib/components/icons/MenuLines.svelte';
@@ -19,6 +20,8 @@
 	const i18n = getContext('i18n');
 
 	let loaded = false;
+
+	let enableFileIngestion: boolean = false;
 
 	onMount(async () => {
 		if ($user?.role !== 'admin') {
@@ -37,6 +40,10 @@
 			} else if ($page.url.pathname.includes('/tools') && !$user?.permissions?.workspace?.tools) {
 				goto('/');
 			}
+		}
+
+		if ($config) {
+			enableFileIngestion = $config.features.enable_file_ingestion;
 		}
 
 		loaded = true;
@@ -119,6 +126,19 @@
 								href="/workspace/tools"
 							>
 								{$i18n.t('Tools')}
+							</a>
+						{/if}
+
+						{#if enableFileIngestion}
+							<a
+								class="min-w-fit rounded-full p-1.5 {$page.url.pathname.includes(
+									'/workspace/data-sources'
+								)
+									? ''
+									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
+								href="/workspace/data-sources"
+							>
+								{$i18n.t('Data Sources')}
 							</a>
 						{/if}
 					</div>

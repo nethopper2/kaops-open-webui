@@ -214,6 +214,8 @@ type Config = {
 		enable_admin_chat_access: boolean;
 		enable_community_sharing: boolean;
 		enable_autocomplete_generation: boolean;
+		enable_upstream_ui: boolean;
+		enable_file_ingestion: boolean;
 	};
 	oauth: {
 		providers: {
@@ -222,15 +224,15 @@ type Config = {
 	};
 	private_ai: {
 		// citation_document_url is likely temporary until we have multiple sources for rag data.
-		citation_document_url: string
+		citation_document_url: string;
 		// If true, some original open web ui interfaces are shown instead of Private AI.
-		enable_upstream_ui: boolean
-		rest_api_base_url: string
+		enable_upstream_ui: boolean;
+		rest_api_base_url: string;
 		webui_custom?: {
-			logo?: string
-			bgImageAuth?: string
-		}
-	}
+			logo?: string;
+			bgImageAuth?: string;
+		};
+	};
 };
 
 type PromptSuggestion = {

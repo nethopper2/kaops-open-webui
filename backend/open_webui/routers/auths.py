@@ -19,6 +19,11 @@ from open_webui.models.auths import (
     UserResponse,
 )
 from open_webui.models.users import Users
+from open_webui.models.data import DataSources
+
+from open_webui.utils.data.google import initiate_google_file_sync
+from open_webui.utils.data.microsoft import initiate_microsoft_sync
+from open_webui.utils.data.encryption import encrypt_data
 
 from open_webui.constants import ERROR_MESSAGES, WEBHOOK_MESSAGES
 from open_webui.env import (
@@ -27,12 +32,13 @@ from open_webui.env import (
     WEBUI_AUTH_TRUSTED_NAME_HEADER,
     WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER,
     OAUTH_PROVIDER_NAME,
+    ENABLE_SSO_DATA_SYNC,
     WEBUI_AUTH_TRUSTED_GROUPS_HEADER,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
     SRC_LOG_LEVELS,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
 from fastapi.responses import RedirectResponse, Response
 from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP, DEFAULT_USER_PERMISSIONS, OAUTH_PROVIDER_NAME
 from pydantic import BaseModel
@@ -49,6 +55,11 @@ from open_webui.utils.auth import (
 from open_webui.utils.webhook import post_webhook
 from open_webui.utils.access_control import get_permissions
 
+from open_webui.env import (
+    GCS_BUCKET_NAME,
+    GCS_SERVICE_ACCOUNT_BASE64
+)
+
 from typing import Optional, List
 
 from ssl import CERT_REQUIRED, PROTOCOL_TLS
@@ -61,6 +72,7 @@ router = APIRouter()
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
+
 
 ############################
 # GetSessionUser
@@ -335,7 +347,7 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
 
 
 @router.post("/signin", response_model=SessionUserResponse)
-async def signin(request: Request, response: Response, form_data: SigninForm):
+async def signin(request: Request, response: Response, form_data: SigninForm, background_tasks: BackgroundTasks):
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
@@ -346,8 +358,8 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         token = request.headers.get(
                 'X-Forwarded-Access-Token', None
             )
-        
-         #Retrieve the trusted email from the headers and set trusted name and profile image URL to default values
+
+        #Retrieve the trusted email from the headers and set trusted name and profile image URL to default values
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
         trusted_name = trusted_email
         trusted_profile_image_url = "/user.png"
@@ -359,7 +371,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                 WEBUI_AUTH_TRUSTED_NAME_HEADER, trusted_email
             )
 
-        # If the SSO provider is present, use it to fetch user profile data
+        # If an SSO provider is present, use it to fetch user profile data
         # and update the trusted email, name, and profile image URL 
         if sso_provider:
             sso_response = Users.get_user_profile_data_from_sso_provider(sso_provider, token)
@@ -371,6 +383,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         # Check if the user already exists in the database
         user_exists = Users.get_user_by_email(trusted_email)
 
+        # If the user does not exist, create a new user with the trusted email, profile image url, name and default data sources
         if not user_exists:
             await signup(
                 request,
@@ -379,16 +392,32 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
                     email=trusted_email, password=str(uuid.uuid4()), name=trusted_name, profile_image_url=trusted_profile_image_url
                 ),
             )
-        
-        # If the user exists and the SSO provider is present, update the user's profile image URL and name
-        # and fetch user file data from the SSO provider
-        if sso_provider and user_exists:
-            # Update the user's profile image URL and name in the database
-            # This is done to ensure that the user's profile image URL and name are always up to date
-            # with the data fetched from the SSO provider
-            if user_exists.profile_image_url != trusted_profile_image_url:
-                Users.update_user_by_id(user_exists.id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
-    
+            
+        if sso_provider:
+            user_id = user_exists.id if user_exists else Users.get_user_by_email(trusted_email).id
+
+            # Fetch and save the user's OAuth tokens from the SSO provider
+            Users.fetch_and_save_user_oauth_tokens(
+                user_id, sso_provider, token
+            )
+
+            # If an SSO provider is present and the user exists, 
+            # update their profile image URL and name with the latest data 
+            # from the SSO provider
+            if user_exists:
+                Users.update_user_by_id(user_id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
+
+
+            # For existing and new users, trigger user file data sync from the SSO provider if enabled
+            if ENABLE_SSO_DATA_SYNC:
+                # Add background tasks to sync user file data from the SSO provider
+                background_tasks.add_task(
+                    get_user_file_data_from_sso_provider,
+                    user_id,
+                    sso_provider,
+                    token
+                )
+
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER:
             trusted_groups = request.headers.get(
                 WEBUI_AUTH_TRUSTED_GROUPS_HEADER, ''
@@ -397,8 +426,8 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             log.info(f"User {user.name}, in groups: {trusted_groups}")
 
             Users.update_user_groups_from_header(user, trusted_groups, DEFAULT_USER_PERMISSIONS)
-
-        # Authenticate the user using the trusted email
+            
+         # Authenticate the user using the trusted email
         user = Auths.authenticate_user_by_trusted_header(trusted_email)
 
     elif WEBUI_AUTH == False:
@@ -565,6 +594,9 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
             user_permissions = get_permissions(
                 user.id, request.app.state.config.USER_PERMISSIONS
             )
+
+            # Create default data sources for the new user
+            DataSources.create_default_data_sources_for_user(user.id)
 
             return {
                 "token": token,
@@ -923,3 +955,16 @@ async def get_api_key(user=Depends(get_current_user)):
         }
     else:
         raise HTTPException(404, detail=ERROR_MESSAGES.API_KEY_NOT_FOUND)
+
+# User file sync, placed here to avoid a circular dependecy when using socket
+async def get_user_file_data_from_sso_provider(self, user_id: str, provider: str, token: str):
+        try:
+            match provider:
+                case 'google':
+                    await initiate_google_file_sync(user_id, token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME)
+                case 'microsoft':
+                    await initiate_microsoft_sync(user_id, token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
+                
+        except Exception as e:
+            log.error(f"Error fetching user data: {e}")
+            return None

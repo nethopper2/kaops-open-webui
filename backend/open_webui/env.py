@@ -354,6 +354,77 @@ WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER = os.environ.get("WEBUI_AUTH_TRUSTED
 WEBUI_AUTH_TRUSTED_GROUPS_HEADER = os.environ.get("WEBUI_AUTH_TRUSTED_GROUPS_HEADER", None)
 OAUTH_PROVIDER_NAME = os.environ.get("OAUTH_PROVIDER_NAME", None)
 
+####################################
+# DATA_INGESTION
+####################################
+ENABLE_SSO_DATA_SYNC = os.environ.get("ENABLE_SSO_DATA_SYNC", None)
+GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", None)
+GCS_SERVICE_ACCOUNT_BASE64 = os.environ.get("GCS_SERVICE_ACCOUNT_BASE64", None)
+
+SLACK_CLIENT_ID = os.environ.get("SLACK_CLIENT_ID", None)
+SLACK_CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET", None)
+SLACK_REDIRECT_URI = os.environ.get("SLACK_REDIRECT_URI", None)
+
+SLACK_AUTHORIZE_URL = os.environ.get(
+    "SLACK_AUTHORIZE_URL",
+    "https://slack.com/oauth/v2/authorize",
+)
+SLACK_TOKEN_URL = os.environ.get(
+    "SLACK_TOKEN_URL",  "https://slack.com/api/oauth.v2.access"
+)
+SLACK_AUTH_REVOKE_URL = os.environ.get(
+    "SLACK_AUTH_REVOKE_URL", "https://slack.com/api/auth.revoke"
+)   
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None) 
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", None)
+GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", None)
+
+GOOGLE_AUTHORIZE_URL = os.environ.get(
+    "GOOGLE_AUTHORIZE_URL",
+    "https://accounts.google.com/o/oauth2/v2/auth",
+)
+GOOGLE_TOKEN_URL = os.environ.get(
+    "GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token"
+)
+GOOGLE_AUTH_REVOKE_URL = os.environ.get(
+    "GOOGLE_LOGOUT_URL", "https://accounts.google.com/o/oauth2/revoke"
+)
+
+MICROSOFT_CLIENT_ID = os.environ.get("MICROSOFT_CLIENT_ID", None)
+MICROSOFT_CLIENT_SECRET = os.environ.get("MICROSOFT_CLIENT_SECRET", None)
+MICROSOFT_REDIRECT_URI = os.environ.get("MICROSOFT_REDIRECT_URI", None) 
+MICROSOFT_TENANT_ID = os.environ.get("MICROSOFT_TENANT_ID", None)
+
+MICROSOFT_AUTHORIZE_URL = os.environ.get(
+    "MICROSOFT_AUTHORIZE_URL",
+    f"https://login.microsoftonline.com/{MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize",
+)
+MICROSOFT_TOKEN_URL = os.environ.get(
+    "MICROSOFT_TOKEN_URL", 
+    f"https://login.microsoftonline.com/{MICROSOFT_TENANT_ID}/oauth2/v2.0/token"
+)   
+MICROSOFT_LOGOUT_URL = os.environ.get(
+    "MICROSOFT_LOGOUT_URL", 
+    f"https://login.microsoftonline.com/{MICROSOFT_TENANT_ID}/oauth2/v2.0/logout"
+)
+MICROSOFT_INTROSPECT_URL = os.environ.get(
+    "MICROSOFT_INTROSPECT_URL",
+    f"https://login.microsoftonline.com/{MICROSOFT_TENANT_ID}/oauth2/v2.0/introspect"
+)
+
+ATLASSIAN_CLIENT_ID = os.environ.get("ATLASSIAN_CLIENT_ID", None)
+ATLASSIAN_CLIENT_SECRET = os.environ.get("ATLASSIAN_CLIENT_SECRET", None)
+ATLASSIAN_REDIRECT_URL = os.environ.get("ATLASSIAN_REDIRECT_URL", None)
+
+ATLASSIAN_AUTH_SERVER =  os.environ.get("ATLASSIAN_AUTH_SERVER", "https://auth.atlassian.com") 
+ATLASSIAN_API_GATEWAY = os.environ.get("ATLASSIAN_API_GATEWAY", "https://api.atlassian.com")  
+ATLASSIAN_TOKEN_URL = os.environ.get("ATLASSIAN_TOKEN_URL", f"{ATLASSIAN_AUTH_SERVER}/oauth/token") 
+ATLASSIAN_AUTHORIZE_URL = os.environ.get("ATLASSIAN_AUTHORIZE_URL", f"{ATLASSIAN_AUTH_SERVER}/authorize")  
+ATLASSIAN_ACCESSIBLE_RESOURCES_URL = os.environ.get("ATLASSIAN_ACCESSIBLE_RESOURCES_URL", f"{ATLASSIAN_API_GATEWAY}/oauth/token/accessible-resources")   
+
+
+
 BYPASS_MODEL_ACCESS_CONTROL = (
     os.environ.get("BYPASS_MODEL_ACCESS_CONTROL", "False").lower() == "true"
 )
