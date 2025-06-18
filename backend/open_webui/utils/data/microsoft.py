@@ -133,7 +133,7 @@ def list_onedrive_files_recursively(folder_id, auth_token, current_path='', all_
                 global USER_ID
                 
                 # Include USER_ID in the path
-                file_info['fullPath'] = f"{USER_ID}/OneDrive/{current_path}{file['name']}"
+                file_info['fullPath'] = f"userResources/{USER_ID}/OneDrive/{current_path}{file['name']}"
                 
                 all_files.append(file_info)
     
@@ -363,7 +363,7 @@ def list_sharepoint_files_recursively(site_id, drive_id, folder_id, auth_token, 
                 global USER_ID
                 
                 # Include USER_ID and site name in the path
-                file_info['fullPath'] = f"{USER_ID}/SharePoint/{site_name}/{current_path}{file['name']}"
+                file_info['fullPath'] = f"userResources/{USER_ID}/SharePoint/{site_name}/{current_path}{file['name']}"
                 
                 all_files.append(file_info)
     
@@ -523,7 +523,7 @@ async def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NA
         onedrive_file_paths = {file['fullPath'] for file in all_files}
         
         # Delete orphaned GCS files that belong to this user
-        user_prefix = f"{USER_ID}/OneDrive/"
+        user_prefix = f"userResources/{USER_ID}/OneDrive/"
         for gcs_name, gcs_file in gcs_file_map.items():
             # Only consider files that belong to this user's OneDrive folder
             if gcs_name.startswith(user_prefix) and gcs_name not in onedrive_file_paths:

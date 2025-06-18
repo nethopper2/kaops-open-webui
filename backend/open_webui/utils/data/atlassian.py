@@ -144,7 +144,7 @@ def list_jira_projects_and_issues(site_url, all_items=None):
                     issue_key = issue.get('key')
                     issue_summary = issue.get('fields', {}).get('summary', 'no_summary').replace('/', '_') # Sanitize for path
                     
-                    full_path = f"{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Jira/{project_key}/{issue_key}-{issue_summary}.json"
+                    full_path = f"userResources/{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Jira/{project_key}/{issue_key}-{issue_summary}.json"
                     
                     issue_info = {
                         'id': issue.get('id'),
@@ -167,7 +167,7 @@ def list_jira_projects_and_issues(site_url, all_items=None):
                         attachment_mime_type = attachment.get('mimeType')
                         attachment_size = attachment.get('size')
                         
-                        attachment_path = f"{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Jira/{project_key}/{issue_key}/attachments/{attachment_filename}"
+                        attachment_path = f"userResources/{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Jira/{project_key}/{issue_key}/attachments/{attachment_filename}"
                         
                         attachment_info = {
                             'id': attachment_id,
@@ -249,7 +249,7 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=N
                     page_id = page.get('id')
                     page_title = page.get('title', 'no_title').replace('/', '_') # Sanitize for path
 
-                    full_path = f"{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Confluence/{space_key}/{page_title}-{page_id}.html"
+                    full_path = f"userResources/{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Confluence/{space_key}/{page_title}-{page_id}.html"
                     
                     page_info = {
                         'id': page_id,
@@ -274,7 +274,7 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=N
                         if attachment_download_url and attachment_download_url.startswith('/'):
                             attachment_download_url = f"{site_url}{attachment_download_url}" # Make absolute URL
 
-                        attachment_path = f"{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Confluence/{space_key}/{page_title}-{page_id}/attachments/{attachment_filename}"
+                        attachment_path = f"userResources/{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Confluence/{space_key}/{page_title}-{page_id}/attachments/{attachment_filename}"
 
                         attachment_info = {
                             'id': attachment_id,
@@ -450,7 +450,7 @@ async def sync_atlassian_to_gcs(auth_token, service_account_base64):
         atlassian_item_paths = {item['fullPath'] for item in all_atlassian_items}
 
         # Delete orphaned GCS files that belong to this user's Atlassian data
-        user_prefix = f"{USER_ID}/Atlassian/"
+        user_prefix = f"userResources/{USER_ID}/Atlassian/"
         for gcs_name, gcs_file in gcs_file_map.items():
             if gcs_name.startswith(user_prefix) and gcs_name not in atlassian_item_paths:
                 delete_gcs_file(gcs_name, service_account_base64, GCS_BUCKET_NAME)

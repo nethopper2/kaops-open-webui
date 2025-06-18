@@ -561,13 +561,13 @@ def process_conversation(conversation, auth_token, slack_user_id, user_info_map)
             # For DMs, use the other user's name or ID
             other_user = conversation.get('user', 'unknown_user')
             other_user_name = user_info_map.get(other_user, other_user)
-            file_path = f"{USER_ID}/Slack/Direct Messages/{other_user_name}.json"
+            file_path = f"userResources/{USER_ID}/Slack/Direct Messages/{other_user_name}.json"
         elif conversation.get('is_mpim'):
             # For multi-person DMs
-            file_path = f"{USER_ID}/Slack/Group Messages/{conversation_name}.json"
+            file_path = f"userResources/{USER_ID}/Slack/Group Messages/{conversation_name}.json"
         else:
             # For channels
-            file_path = f"{USER_ID}/Slack/Channels/{conversation_name}.json"
+            file_path = f"userResources/{USER_ID}/Slack/Channels/{conversation_name}.json"
         
         # Get the most recent message timestamp for comparison, using safe_parse_date
         message_dates = []
@@ -605,7 +605,7 @@ def process_file(file_info, auth_token):
             return None
         
         # Create file path
-        file_path = f"{USER_ID}/Slack/Files/{file_name}"
+        file_path = f"userResources/{USER_ID}/Slack/Files/{file_name}"
         
         # Use safe_parse_date for file timestamp
         file_timestamp = file_info.get('timestamp')
@@ -823,7 +823,7 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
                     print(f"Error processing file {file_info.get('name', 'unknown')}: {str(e)}")
         
         # Delete orphaned GCS files that belong to this user's Slack data
-        user_prefix = f"{USER_ID}/Slack/"
+        user_prefix = f"userResources/{USER_ID}/Slack/"
         all_current_paths = conversation_paths | file_paths
         
         for gcs_name, gcs_file in gcs_file_map.items():

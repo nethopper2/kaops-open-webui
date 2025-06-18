@@ -124,9 +124,9 @@ def list_files_recursively(folder_id, auth_token, current_path='', all_files=Non
                 
                 # Include USER_ID and "Google Drive" folder in the path
                 if drive_name:
-                    file_info['fullPath'] = f"{USER_ID}/Google Drive/{drive_name}/{current_path}{file['name']}"
+                    file_info['fullPath'] = f"userResources/{USER_ID}/Google Drive/{drive_name}/{current_path}{file['name']}"
                 else:
-                    file_info['fullPath'] = f"{USER_ID}/Google Drive/{current_path}{file['name']}"
+                    file_info['fullPath'] = f"userResources/{USER_ID}/Google Drive/{current_path}{file['name']}"
                 
                 all_files.append(file_info)
     
@@ -456,7 +456,7 @@ async def sync_drive_to_gcs(auth_token, service_account_base64):
         global USER_ID
         
         # Delete orphaned GCS files that belong to this user
-        user_prefix = f"{USER_ID}/Google Drive/"
+        user_prefix = f"userResources/{USER_ID}/Google Drive/"
         for gcs_name, gcs_file in gcs_file_map.items():
             # Only consider files that belong to this user's Google Drive folder
             if gcs_name.startswith(user_prefix) and gcs_name not in drive_file_paths:
