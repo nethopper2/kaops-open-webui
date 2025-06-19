@@ -56,7 +56,7 @@ async def update_config(
     }
 
 
-class FeedbackUserReponse(BaseModel):
+class UserResponse(BaseModel):
     id: str
     name: str
     email: str
@@ -68,54 +68,23 @@ class FeedbackUserReponse(BaseModel):
 
 
 class FeedbackUserResponse(FeedbackResponse):
-    user: Optional[FeedbackUserReponse] = None
+    user: Optional[UserResponse] = None
 
 
 @router.get("/feedbacks/all", response_model=list[FeedbackUserResponse])
 async def get_all_feedbacks(user=Depends(get_admin_user)):
     feedbacks = Feedbacks.get_all_feedbacks()
-    responses = []
+
+    feedback_list = []
     for feedback in feedbacks:
-        user_obj = Users.get_user_by_id(feedback.user_id)
-        if user_obj is not None:
-            user_response = FeedbackUserReponse(**user_obj.model_dump())
-        else:
-            user_response = None  # Or a placeholder/dummy user object
-        responses.append(
+        user = Users.get_user_by_id(feedback.user_id)
+        feedback_list.append(
             FeedbackUserResponse(
                 **feedback.model_dump(),
-                user=user_response,
+                user=UserResponse(**user.model_dump()) if user else None,
             )
         )
-    return responses
-
-# PROPOSED FIX: upstreadm push?
-
-# Original endpoint
-# Responds with 500 error with this `all` endpoint.
-# Here are the steps to reproduce the issue:
-#     - clean database
-#     - create first admin user
-#     - create a second regular user
-#     - login as the regular user
-#     - do a search with the regular user
-#     - on the search response, give it feedback: thumbs up, rating of 7, anything for the other field and some text for the free-form text field.
-#     - go to the evaluations admin tab and see that both the feedbacks and leaderboard pages render without problem
-#     - delete that regular user
-#     - notice that the feedbacks page files now because we get a 500 error in the API response
-
-# @router.get("/feedbacks/all", response_model=list[FeedbackUserResponse])
-# async def get_all_feedbacks(user=Depends(get_admin_user)):
-#     feedbacks = Feedbacks.get_all_feedbacks()
-#     return [
-#         FeedbackUserResponse(
-#             **feedback.model_dump(),
-#             user=FeedbackUserReponse(
-#                 **Users.get_user_by_id(feedback.user_id).model_dump()
-#             ),
-#         )
-#         for feedback in feedbacks
-#     ]
+    return feedback_list
 
 
 @router.delete("/feedbacks/all")
@@ -127,12 +96,7 @@ async def delete_all_feedbacks(user=Depends(get_admin_user)):
 @router.get("/feedbacks/all/export", response_model=list[FeedbackModel])
 async def get_all_feedbacks(user=Depends(get_admin_user)):
     feedbacks = Feedbacks.get_all_feedbacks()
-    return [
-        FeedbackModel(
-            **feedback.model_dump(), user=Users.get_user_by_id(feedback.user_id)
-        )
-        for feedback in feedbacks
-    ]
+    return feedbacks
 
 
 @router.get("/feedbacks/user", response_model=list[FeedbackUserResponse])

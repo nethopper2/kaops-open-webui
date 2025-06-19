@@ -65,6 +65,7 @@ export const banners: Writable<Banner[]> = writable([]);
 export const settings: Writable<Settings> = writable({});
 
 export const showSidebar = writable(false);
+export const showSearch = writable(false);
 export const showSettings = writable(false);
 export const showArchivedChats = writable(false);
 export const showChangelog = writable(false);
@@ -73,6 +74,8 @@ export const showControls = writable(false);
 export const showOverview = writable(false);
 export const showArtifacts = writable(false);
 export const showCallOverlay = writable(false);
+
+export const artifactCode = writable(null);
 
 export const temporaryChatEnabled = writable(false);
 export const scrollPaginationEnabled = writable(false);
@@ -139,6 +142,7 @@ type Settings = {
 	audio?: AudioSettings;
 	showUsername?: boolean;
 	notificationEnabled?: boolean;
+	highContrastMode?: boolean;
 	title?: TitleSettings;
 	splitLargeDeltas?: boolean;
 	chatDirection: 'LTR' | 'RTL' | 'auto';
@@ -146,8 +150,6 @@ type Settings = {
 	showUpdateToast?: boolean;
 
 	system?: string;
-	requestFormat?: string;
-	keepAlive?: string;
 	seed?: number;
 	temperature?: string;
 	repeat_penalty?: string;
@@ -214,6 +216,7 @@ type Config = {
 		enable_admin_chat_access: boolean;
 		enable_community_sharing: boolean;
 		enable_autocomplete_generation: boolean;
+		enable_direct_connections: boolean;
 		enable_upstream_ui: boolean;
 		enable_file_ingestion: boolean;
 	};
@@ -221,6 +224,10 @@ type Config = {
 		providers: {
 			[key: string]: string;
 		};
+	};
+	ui?: {
+		pending_user_overlay_title?: string;
+		pending_user_overlay_description?: string;
 	};
 	private_ai: {
 		// citation_document_url is likely temporary until we have multiple sources for rag data.

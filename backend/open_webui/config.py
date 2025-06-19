@@ -107,241 +107,11 @@ if os.path.exists(f"{DATA_DIR}/config.json"):
     save_to_db(data)
     os.rename(f"{DATA_DIR}/config.json", f"{DATA_DIR}/old_config.json")
 
-INVESTMENT_BANKER_PROMPT_SUGGESTIONS_DATA = [
-    {
-        "title": ["Deal Execution", ""],
-        "content": "Deal Execution",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(118, 208, 235)' fill='none'><path d='M2 21H22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 18L4 15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 14L8 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M12 11L12 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M16 11L16 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M20 5L20 3' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "List the essential legal and financial documents required for closing a technology sector M&A transaction, and outline best practices for efficient deal execution.",
-          "Summarize the primary risks and mitigation strategies in technology M&A agreements, with a focus on intellectual property, data privacy, and change-of-control provisions.",
-          "Provide a step-by-step timeline for executing a technology sector acquisition, from initial engagement to closing, highlighting key milestones and decision points.",
-          "What are the most common post-closing issues in technology M&A transactions, and how can they be proactively addressed during the deal process?"
-        ]
-    },
-    {
-        "title": [
-            "Client & Opportunity Presentation",
-            ""
-        ],
-        "content": "Client & Opportunity Presentation",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(234, 132, 68)' fill='none'><path d='M17.5619 9.22239L17.0356 10.15C16.5405 11.0225 16.293 11.4588 15.7539 11.4969C15.2147 11.535 14.9862 11.2231 14.5291 10.5994C14.019 9.90316 13.6959 9.08502 13.5814 8.22954C13.4744 7.43025 13.4209 7.03061 13.2914 6.83438C13.0847 6.52117 12.6695 6.34887 12.3591 6.16651C11.5417 5.68624 11.1329 5.4461 11.0256 5.03847C10.9183 4.63085 11.1542 4.21492 11.6262 3.38306C12.0982 2.5512 12.3342 2.13527 12.7347 2.02604C13.1353 1.91682 13.5441 2.15696 14.3615 2.63723C14.6719 2.81959 15.0262 3.09935 15.3961 3.12486C15.6278 3.14085 15.9947 2.98817 16.7284 2.68281C17.5137 2.35598 18.3715 2.23165 19.2191 2.33314C19.9785 2.42406 20.3582 2.46953 20.5953 2.96369C20.8325 3.45785 20.585 3.89411 20.0899 4.76664L19.5643 5.69311M17.5619 9.22239L17.9961 9.47749C18.9538 10.0402 20.1784 9.70625 20.7314 8.73166C21.2843 7.75708 20.9562 6.51088 19.9985 5.94821L19.5643 5.69311M17.5619 9.22239L19.5643 5.69311' stroke='currentColor' stroke-width='1.5' /><path d='M7 13C7 14.1046 6.10457 15 5 15C3.89543 15 3 14.1046 3 13C3 11.8954 3.89543 11 5 11C6.10457 11 7 11.8954 7 13Z' stroke='currentColor' stroke-width='1.5' /><path d='M6 12L13 7' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round' /><path d='M7 22H14' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M6 15L11 22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "Suggest key data visualizations or charts that best illustrate a technology company’s growth story and market potential in a pitch presentation.",
-          "Reveal trends in client engagement letters and onboarding documents that correlate with successful, long-term client relationships.",
-          "Identify common characteristics of clients who have engaged for multiple opportunities or repeat transactions.",
-          "Highlight effective communication strategies documented in executive summaries that led to high client satisfaction."
-        ]
-    },
-    {
-        "title": [
-            "Market & Competitive Intelligence",
-            ""
-        ],
-        "content": "Market Positioning & Sector Trends",
-        # "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(226, 197, 65)' fill='none'><path d='M2 21H22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 18L4 15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 14L8 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M12 11L12 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M16 11L16 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M20 5L20 3' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(157,0,255)' fill='none'><path d='M17 10.8045C17 10.4588 17 10.286 17.052 10.132C17.2032 9.68444 17.6018 9.51076 18.0011 9.32888C18.45 9.12442 18.6744 9.02219 18.8968 9.0042C19.1493 8.98378 19.4022 9.03818 19.618 9.15929C19.9041 9.31984 20.1036 9.62493 20.3079 9.87302C21.2513 11.0188 21.7229 11.5918 21.8955 12.2236C22.0348 12.7334 22.0348 13.2666 21.8955 13.7764C21.6438 14.6979 20.8485 15.4704 20.2598 16.1854C19.9587 16.5511 19.8081 16.734 19.618 16.8407C19.4022 16.9618 19.1493 17.0162 18.8968 16.9958C18.6744 16.9778 18.45 16.8756 18.0011 16.6711C17.6018 16.4892 17.2032 16.3156 17.052 15.868C17 15.714 17 15.5412 17 15.1955V10.8045Z' stroke='currentColor' stroke-width='1.5' /><path d='M7 10.8046C7 10.3694 6.98778 9.97821 6.63591 9.6722C6.50793 9.5609 6.33825 9.48361 5.99891 9.32905C5.55001 9.12458 5.32556 9.02235 5.10316 9.00436C4.43591 8.9504 4.07692 9.40581 3.69213 9.87318C2.74875 11.019 2.27706 11.5919 2.10446 12.2237C1.96518 12.7336 1.96518 13.2668 2.10446 13.7766C2.3562 14.6981 3.15152 15.4705 3.74021 16.1856C4.11129 16.6363 4.46577 17.0475 5.10316 16.996C5.32556 16.978 5.55001 16.8757 5.99891 16.6713C6.33825 16.5167 6.50793 16.4394 6.63591 16.3281C6.98778 16.0221 7 15.631 7 15.1957V10.8046Z' stroke='currentColor' stroke-width='1.5' /><path d='M5 9C5 5.68629 8.13401 3 12 3C15.866 3 19 5.68629 19 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='square' stroke-linejoin='round' /><path d='M19 17V17.8C19 19.5673 17.2091 21 15 21H13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "Highlight the top five technology sub-sectors experiencing the fastest revenue growth in the past year, and summarize the key competitive dynamics in each.",
-          "Compare a private fintech company to leading public peers using metrics such as revenue growth, capital raised, and market positioning.",
-          "Summarize the competitive landscape for a specific technology vertical (e.g., cybersecurity, fintech, AI), including major players and recent market shifts.",
-          "Compare internal company data to external competitors to identify unique strengths or gaps in market positioning.",
-          "Highlight non-obvious correlations between keywords in company files and successful market entries or expansions."
-        ]
-    },
-    {
-        "title": [
-            "Financial Performance & Valuation Analysis",
-            ""
-        ],
-        "content": "Financial Performance & Valuation Analysis",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(203, 139, 208)' fill='none'><path d='M11 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V10C2 6.22876 2 4.34315 3.17157 3.17157C4.34315 2 6.22876 2 10 2H12C15.7712 2 17.6569 2 18.8284 3.17157C20 4.34315 20 6.22876 20 10V10.5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M17.4069 14.4036C17.6192 13.8655 18.3808 13.8655 18.5931 14.4036L18.6298 14.4969C19.1482 15.8113 20.1887 16.8518 21.5031 17.3702L21.5964 17.4069C22.1345 17.6192 22.1345 18.3808 21.5964 18.5931L21.5031 18.6298C20.1887 19.1482 19.1482 20.1887 18.6298 21.5031L18.5931 21.5964C18.3808 22.1345 17.6192 22.1345 17.4069 21.5964L17.3702 21.5031C16.8518 20.1887 15.8113 19.1482 14.4969 18.6298L14.4036 18.5931C13.8655 18.3808 13.8655 17.6192 14.4036 17.4069L14.4969 17.3702C15.8113 16.8518 16.8518 15.8113 17.3702 14.4969L17.4069 14.4036Z' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M7 7H15M7 11.5H15M7 16H11' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "What are the key financial indicators that signal a technology company is a strong candidate for acquisition or investment?",
-          "Analyze the relationship between gross profit margin and valuation multiples in recent technology sector transactions.",
-          "Evaluate the impact of different ownership structures (private equity, venture-backed, public) on a technology company’s valuation and growth trajectory.",
-          "What financial metrics are most predictive of long-term success for early-stage technology companies, and how should they be weighted in an investment analysis?"
-        ]
-    },
-    {
-        "title": [
-            "Pitch Decks",
-            ""
-        ],
-        "content": "Pitch Decks",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(255,0,0)' fill='none'><path d='M6.08938 14.9992C5.71097 14.1486 5.5 13.2023 5.5 12.2051C5.5 8.50154 8.41015 5.49921 12 5.49921C15.5899 5.49921 18.5 8.50154 18.5 12.2051C18.5 13.2023 18.289 14.1486 17.9106 14.9992' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /><path d='M12 1.99921V2.99921' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M22 11.9992H21' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M3 11.9992H2' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M19.0704 4.92792L18.3633 5.63503' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M5.6368 5.636L4.92969 4.92889' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M14.517 19.3056C15.5274 18.9788 15.9326 18.054 16.0466 17.1238C16.0806 16.8459 15.852 16.6154 15.572 16.6154L8.47685 16.6156C8.18725 16.6156 7.95467 16.8614 7.98925 17.1489C8.1009 18.0773 8.3827 18.7555 9.45345 19.3056M14.517 19.3056C14.517 19.3056 9.62971 19.3056 9.45345 19.3056M14.517 19.3056C14.3955 21.2506 13.8338 22.0209 12.0068 21.9993C10.0526 22.0354 9.60303 21.0833 9.45345 19.3056' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "Uncover which pitch deck elements or data points most frequently appear in winning proposals or successful capital raises.",
-          "Analyze the evolution of pitch materials over time to identify shifts in what resonates with technology investors.",
-          "Identify underutilized sections or insights in past overview decks that contributed to positive investor feedback."
-        ]
-    },    
-    {
-        "title": [
-            "Investment Universe & Ownership Structures",
-            ""
-        ],
-        "content": "Investment Universe & Ownership Structures",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(11,218,81)' fill='none'><path d='M18 11L20.3458 8.84853C20.7819 8.44853 21 8.24853 21 8M18 5L20.3458 7.15147C20.7819 7.55147 21 7.75147 21 8M21 8C3 8 3 21 3 21' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><circle cx='5.5' cy='5.5' r='2.5' stroke='currentColor' stroke-width='1.5' /><path d='M13 21L18 16M18 21L13 16' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /></svg>",
-        "prompts": [
-          "Reveal trends in ownership status (e.g., venture-backed, private equity, public) that align with higher deal success rates.",
-          "Identify which types of investment universes (VC, PE, debt financed, etc.) are most frequently associated with rapid growth or exits.",
-          "Analyze the impact of parent company relationships on transaction structure and outcomes."
-        ]
-    },
-    {
-        "title": [
-            "Transaction Pipeline & Deal Tracking",
-            ""
-        ],
-        "content": "Transaction Pipeline & Deal Tracking",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(234, 132, 68)' fill='none'><path d='M12 5V22M12 22H9M12 22H15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M21 13L18.5 8L16 13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 13L5.5 8L3 13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 8H5.0482C6.31166 8 7.5375 7.471 8.5241 6.5C10.5562 4.5 13.4438 4.5 15.4759 6.5C16.4625 7.471 17.6883 8 18.9518 8H20' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M18.5 17C19.8547 17 21.0344 16.1663 21.6473 14.9349C21.978 14.2702 22.1434 13.9379 21.8415 13.469C21.5396 13 21.04 13 20.0407 13H16.9593C15.96 13 15.4604 13 15.1585 13.469C14.8566 13.9379 15.022 14.2702 15.3527 14.9349C15.9656 16.1663 17.1453 17 18.5 17Z' stroke='currentColor' stroke-width='1.5' /><path d='M5.5 17C6.85471 17 8.03442 16.1663 8.64726 14.9349C8.97802 14.2702 9.14339 13.9379 8.84151 13.469C8.53962 13 8.04 13 7.04075 13H3.95925C2.96 13 2.46038 13 2.15849 13.469C1.85661 13.9379 2.02198 14.2702 2.35273 14.9349C2.96558 16.1663 4.14528 17 5.5 17Z' stroke='currentColor' stroke-width='1.5' /><path d='M13.5 3.5C13.5 4.32843 12.8284 5 12 5C11.1716 5 10.5 4.32843 10.5 3.5C10.5 2.67157 11.1716 2 12 2C12.8284 2 13.5 2.67157 13.5 3.5Z' stroke='currentColor' stroke-width='1.5' /></svg>",
-        "prompts": [
-          "Highlight stages in the transaction pipeline where deals are most likely to stall, based on historical client tracking data.",
-          "Identify the most common attributes of deals that progress quickly from initial contact to closing.",
-          "Analyze deal pipeline data to uncover hidden opportunities for process improvement or resource allocation."
-        ]
-    },   
-        {
-        "title": [
-            "Strategic Advisory & Client Outcomes",
-            ""
-        ],
-        "content": "Strategic Advisory & Client Outcomes",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(255,215,0)' fill='none'><path d='M18 11L20.3458 8.84853C20.7819 8.44853 21 8.24853 21 8M18 5L20.3458 7.15147C20.7819 7.55147 21 7.75147 21 8M21 8C3 8 3 21 3 21' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><circle cx='5.5' cy='5.5' r='2.5' stroke='currentColor' stroke-width='1.5' /><path d='M13 21L18 16M18 21L13 16' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /></svg>",
-        "prompts": [
-          "Surface strategic recommendations from past advisory engagements that led to measurable value creation for technology clients.",
-          "Identify advisory approaches that have been most effective in preparing clients for acquisition or capital raising.",
-          "Analyze post-deal documentation to detect themes in client outcomes and satisfaction following major transactions."
-        ]
-    }  
-]
-
-PRIVATE_AI_PROMPT_SUGGESTIONS_DATA = [
-    {
-        "title": ["Data Insights", ""],
-        "content": "Data Insights",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(118, 208, 235)' fill='none'><path d='M6.08938 14.9992C5.71097 14.1486 5.5 13.2023 5.5 12.2051C5.5 8.50154 8.41015 5.49921 12 5.49921C15.5899 5.49921 18.5 8.50154 18.5 12.2051C18.5 13.2023 18.289 14.1486 17.9106 14.9992' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /><path d='M12 1.99921V2.99921' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M22 11.9992H21' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M3 11.9992H2' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M19.0704 4.92792L18.3633 5.63503' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M5.6368 5.636L4.92969 4.92889' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M14.517 19.3056C15.5274 18.9788 15.9326 18.054 16.0466 17.1238C16.0806 16.8459 15.852 16.6154 15.572 16.6154L8.47685 16.6156C8.18725 16.6156 7.95467 16.8614 7.98925 17.1489C8.1009 18.0773 8.3827 18.7555 9.45345 19.3056M14.517 19.3056C14.517 19.3056 9.62971 19.3056 9.45345 19.3056M14.517 19.3056C14.3955 21.2506 13.8338 22.0209 12.0068 21.9993C10.0526 22.0354 9.60303 21.0833 9.45345 19.3056' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-            "Analyze our quarterly sales data and provide key insights on revenue trends, top-performing products, and areas for improvement",
-            "Generate a financial forecast for the next quarter based on our historical data and current market conditions"
-        ]
-    },
-    {
-        "title": [
-            "Market Research",
-            ""
-        ],
-        "content": "Market Research",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(108, 113, 255)' fill='none'><path d='M17.5619 9.22239L17.0356 10.15C16.5405 11.0225 16.293 11.4588 15.7539 11.4969C15.2147 11.535 14.9862 11.2231 14.5291 10.5994C14.019 9.90316 13.6959 9.08502 13.5814 8.22954C13.4744 7.43025 13.4209 7.03061 13.2914 6.83438C13.0847 6.52117 12.6695 6.34887 12.3591 6.16651C11.5417 5.68624 11.1329 5.4461 11.0256 5.03847C10.9183 4.63085 11.1542 4.21492 11.6262 3.38306C12.0982 2.5512 12.3342 2.13527 12.7347 2.02604C13.1353 1.91682 13.5441 2.15696 14.3615 2.63723C14.6719 2.81959 15.0262 3.09935 15.3961 3.12486C15.6278 3.14085 15.9947 2.98817 16.7284 2.68281C17.5137 2.35598 18.3715 2.23165 19.2191 2.33314C19.9785 2.42406 20.3582 2.46953 20.5953 2.96369C20.8325 3.45785 20.585 3.89411 20.0899 4.76664L19.5643 5.69311M17.5619 9.22239L17.9961 9.47749C18.9538 10.0402 20.1784 9.70625 20.7314 8.73166C21.2843 7.75708 20.9562 6.51088 19.9985 5.94821L19.5643 5.69311M17.5619 9.22239L19.5643 5.69311' stroke='currentColor' stroke-width='1.5' /><path d='M7 13C7 14.1046 6.10457 15 5 15C3.89543 15 3 14.1046 3 13C3 11.8954 3.89543 11 5 11C6.10457 11 7 11.8954 7 13Z' stroke='currentColor' stroke-width='1.5' /><path d='M6 12L13 7' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round' /><path d='M7 22H14' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M6 15L11 22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "Identify emerging trends in our industry that could impact our business strategy over the next 12-18 months",
-          "Compare our product offerings to our top three competitors and highlight our unique selling points"
-        ]
-    },
-    {
-        "title": ["Process Optimization", ""],
-        "content": "Process Optimization",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(226, 197, 65)' fill='none'><path d='M2 21H22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 18L4 15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 14L8 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M12 11L12 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M16 11L16 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M20 5L20 3' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "Suggest ways to streamline our customer onboarding process to improve efficiency and reduce time-to-value",
-          "Analyze our current supply chain and recommend optimizations to reduce costs and improve delivery times",
-          "Analyze a specific corporate process to identify bottlenecks and propose solutions to improve efficiency"
-        ]
-    },
-    {
-        "title": [
-            "Content Creation",
-            ""
-        ],
-        "content": "Content Creation",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(203, 139, 208)' fill='none'><path d='M11 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V10C2 6.22876 2 4.34315 3.17157 3.17157C4.34315 2 6.22876 2 10 2H12C15.7712 2 17.6569 2 18.8284 3.17157C20 4.34315 20 6.22876 20 10V10.5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M17.4069 14.4036C17.6192 13.8655 18.3808 13.8655 18.5931 14.4036L18.6298 14.4969C19.1482 15.8113 20.1887 16.8518 21.5031 17.3702L21.5964 17.4069C22.1345 17.6192 22.1345 18.3808 21.5964 18.5931L21.5031 18.6298C20.1887 19.1482 19.1482 20.1887 18.6298 21.5031L18.5931 21.5964C18.3808 22.1345 17.6192 22.1345 17.4069 21.5964L17.3702 21.5031C16.8518 20.1887 15.8113 19.1482 14.4969 18.6298L14.4036 18.5931C13.8655 18.3808 13.8655 17.6192 14.4036 17.4069L14.4969 17.3702C15.8113 16.8518 16.8518 15.8113 17.3702 14.4969L17.4069 14.4036Z' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M7 7H15M7 11.5H15M7 16H11' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "Draft a compelling email campaign to promote our new product launch to existing customers",
-          "Create an outline for a white paper on the benefits of our enterprise software solution for large corporations"
-        ]
-    },
-    {
-        "title": [
-            "Customer Insights",
-            ""
-        ],
-        "content": "Customer Insights",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(157,0,255)' fill='none'><path d='M17 10.8045C17 10.4588 17 10.286 17.052 10.132C17.2032 9.68444 17.6018 9.51076 18.0011 9.32888C18.45 9.12442 18.6744 9.02219 18.8968 9.0042C19.1493 8.98378 19.4022 9.03818 19.618 9.15929C19.9041 9.31984 20.1036 9.62493 20.3079 9.87302C21.2513 11.0188 21.7229 11.5918 21.8955 12.2236C22.0348 12.7334 22.0348 13.2666 21.8955 13.7764C21.6438 14.6979 20.8485 15.4704 20.2598 16.1854C19.9587 16.5511 19.8081 16.734 19.618 16.8407C19.4022 16.9618 19.1493 17.0162 18.8968 16.9958C18.6744 16.9778 18.45 16.8756 18.0011 16.6711C17.6018 16.4892 17.2032 16.3156 17.052 15.868C17 15.714 17 15.5412 17 15.1955V10.8045Z' stroke='currentColor' stroke-width='1.5' /><path d='M7 10.8046C7 10.3694 6.98778 9.97821 6.63591 9.6722C6.50793 9.5609 6.33825 9.48361 5.99891 9.32905C5.55001 9.12458 5.32556 9.02235 5.10316 9.00436C4.43591 8.9504 4.07692 9.40581 3.69213 9.87318C2.74875 11.019 2.27706 11.5919 2.10446 12.2237C1.96518 12.7336 1.96518 13.2668 2.10446 13.7766C2.3562 14.6981 3.15152 15.4705 3.74021 16.1856C4.11129 16.6363 4.46577 17.0475 5.10316 16.996C5.32556 16.978 5.55001 16.8757 5.99891 16.6713C6.33825 16.5167 6.50793 16.4394 6.63591 16.3281C6.98778 16.0221 7 15.631 7 15.1957V10.8046Z' stroke='currentColor' stroke-width='1.5' /><path d='M5 9C5 5.68629 8.13401 3 12 3C15.866 3 19 5.68629 19 9' stroke='currentColor' stroke-width='1.5' stroke-linecap='square' stroke-linejoin='round' /><path d='M19 17V17.8C19 19.5673 17.2091 21 15 21H13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "Analyze customer feedback from the past quarter and identify the top 5 areas for improvement in our product",
-          "Generate a list of potential questions for a customer satisfaction survey focused on our recent service upgrades",
-          "Predict future customer buying trends and provide actionable insights for our marketing team"
-        ]
-    },
-    {
-        "title": ["Risk Assessment", ""],
-        "content": "Risk Assessment",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(234, 132, 68)' fill='none'><path d='M17.5619 9.22239L17.0356 10.15C16.5405 11.0225 16.293 11.4588 15.7539 11.4969C15.2147 11.535 14.9862 11.2231 14.5291 10.5994C14.019 9.90316 13.6959 9.08502 13.5814 8.22954C13.4744 7.43025 13.4209 7.03061 13.2914 6.83438C13.0847 6.52117 12.6695 6.34887 12.3591 6.16651C11.5417 5.68624 11.1329 5.4461 11.0256 5.03847C10.9183 4.63085 11.1542 4.21492 11.6262 3.38306C12.0982 2.5512 12.3342 2.13527 12.7347 2.02604C13.1353 1.91682 13.5441 2.15696 14.3615 2.63723C14.6719 2.81959 15.0262 3.09935 15.3961 3.12486C15.6278 3.14085 15.9947 2.98817 16.7284 2.68281C17.5137 2.35598 18.3715 2.23165 19.2191 2.33314C19.9785 2.42406 20.3582 2.46953 20.5953 2.96369C20.8325 3.45785 20.585 3.89411 20.0899 4.76664L19.5643 5.69311M17.5619 9.22239L17.9961 9.47749C18.9538 10.0402 20.1784 9.70625 20.7314 8.73166C21.2843 7.75708 20.9562 6.51088 19.9985 5.94821L19.5643 5.69311M17.5619 9.22239L19.5643 5.69311' stroke='currentColor' stroke-width='1.5' /><path d='M7 13C7 14.1046 6.10457 15 5 15C3.89543 15 3 14.1046 3 13C3 11.8954 3.89543 11 5 11C6.10457 11 7 11.8954 7 13Z' stroke='currentColor' stroke-width='1.5' /><path d='M6 12L13 7' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round' /><path d='M7 22H14' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M6 15L11 22' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>",
-        "prompts": [
-          "Evaluate potential risks in our upcoming merger and acquisition, considering financial, legal, and operational factors",
-          "Assess the cybersecurity vulnerabilities in our current IT infrastructure and suggest mitigation strategies"
-        ]
-    },
-    {
-        "title": [
-            "Strategy Development",
-            ""
-        ],
-        "content": "Strategy Development",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(11,218,81)' fill='none'><path d='M18 11L20.3458 8.84853C20.7819 8.44853 21 8.24853 21 8M18 5L20.3458 7.15147C20.7819 7.55147 21 7.75147 21 8M21 8C3 8 3 21 3 21' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><circle cx='5.5' cy='5.5' r='2.5' stroke='currentColor' stroke-width='1.5' /><path d='M13 21L18 16M18 21L13 16' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /></svg>",
-        "prompts": [
-          "Propose a market entry strategy for our product in the Asia-Pacific region, considering cultural and regulatory factors",
-          "Develop a 5-year roadmap for integrating AI and machine learning capabilities into our core product offerings"
-        ]
-    },
-    {
-        "title": [
-            "Compliance & Legal",
-            ""
-        ],
-        "content": "Compliance & Legal",
-        "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='18' height='18' color='rgb(234, 132, 68)' fill='none'><path d='M12 5V22M12 22H9M12 22H15' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M21 13L18.5 8L16 13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M8 13L5.5 8L3 13' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M4 8H5.0482C6.31166 8 7.5375 7.471 8.5241 6.5C10.5562 4.5 13.4438 4.5 15.4759 6.5C16.4625 7.471 17.6883 8 18.9518 8H20' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /><path d='M18.5 17C19.8547 17 21.0344 16.1663 21.6473 14.9349C21.978 14.2702 22.1434 13.9379 21.8415 13.469C21.5396 13 21.04 13 20.0407 13H16.9593C15.96 13 15.4604 13 15.1585 13.469C14.8566 13.9379 15.022 14.2702 15.3527 14.9349C15.9656 16.1663 17.1453 17 18.5 17Z' stroke='currentColor' stroke-width='1.5' /><path d='M5.5 17C6.85471 17 8.03442 16.1663 8.64726 14.9349C8.97802 14.2702 9.14339 13.9379 8.84151 13.469C8.53962 13 8.04 13 7.04075 13H3.95925C2.96 13 2.46038 13 2.15849 13.469C1.85661 13.9379 2.02198 14.2702 2.35273 14.9349C2.96558 16.1663 4.14528 17 5.5 17Z' stroke='currentColor' stroke-width='1.5' /><path d='M13.5 3.5C13.5 4.32843 12.8284 5 12 5C11.1716 5 10.5 4.32843 10.5 3.5C10.5 2.67157 11.1716 2 12 2C12.8284 2 13.5 2.67157 13.5 3.5Z' stroke='currentColor' stroke-width='1.5' /></svg>",
-        "prompts": [
-          "Using the knowledge base, list Nethopper's suppliers.",
-          "Summarize the key points of the new industry regulations and their potential impact on our business operations",
-          "Draft a template for updating our privacy policy to comply with recent data protection laws"
-        ]
-    }
-]
-
-INVESTMENT_BANKER_CONFIG = {
+DEFAULT_CONFIG = {
     "version": 0,
-    "ui": {
-        "default_locale": "",
-        "prompt_suggestions": INVESTMENT_BANKER_PROMPT_SUGGESTIONS_DATA
-    },
+    "ui": {},
 }
 
-PRIVATE_AI_CONFIG = {
-    "version": 0,
-    "ui": {
-        "default_locale": "",
-        "prompt_suggestions": PRIVATE_AI_PROMPT_SUGGESTIONS_DATA,
-    },
-}
-
-SECTOR_CONFIGS = {
-    "default": PRIVATE_AI_CONFIG,
-    "investmentBanking": INVESTMENT_BANKER_CONFIG,
-}
-
-SECTOR_PROMPT_DATA = {
-    "default": PRIVATE_AI_PROMPT_SUGGESTIONS_DATA,
-    "investmentBanking": INVESTMENT_BANKER_PROMPT_SUGGESTIONS_DATA,
-}
-
-# Parse the JSON string into a dictionary
-NH_WEBUI_CUSTOM = os.getenv("NH_WEBUI_CUSTOM", '{}')
-NH_CUSTOM_DATA = json.loads(NH_WEBUI_CUSTOM)
-SECTOR_NAME = NH_CUSTOM_DATA.get("sector", "default")
-
-DEFAULT_CONFIG = SECTOR_CONFIGS.get(SECTOR_NAME, PRIVATE_AI_CONFIG)
 
 def get_config():
     with get_db() as db:
@@ -577,6 +347,24 @@ MICROSOFT_CLIENT_TENANT_ID = PersistentConfig(
     os.environ.get("MICROSOFT_CLIENT_TENANT_ID", ""),
 )
 
+MICROSOFT_CLIENT_LOGIN_BASE_URL = PersistentConfig(
+    "MICROSOFT_CLIENT_LOGIN_BASE_URL",
+    "oauth.microsoft.login_base_url",
+    os.environ.get(
+        "MICROSOFT_CLIENT_LOGIN_BASE_URL", "https://login.microsoftonline.com"
+    ),
+)
+
+MICROSOFT_CLIENT_PICTURE_URL = PersistentConfig(
+    "MICROSOFT_CLIENT_PICTURE_URL",
+    "oauth.microsoft.picture_url",
+    os.environ.get(
+        "MICROSOFT_CLIENT_PICTURE_URL",
+        "https://graph.microsoft.com/v1.0/me/photo/$value",
+    ),
+)
+
+
 MICROSOFT_OAUTH_SCOPE = PersistentConfig(
     "MICROSOFT_OAUTH_SCOPE",
     "oauth.microsoft.scope",
@@ -692,6 +480,19 @@ ENABLE_OAUTH_GROUP_MANAGEMENT = PersistentConfig(
     os.environ.get("ENABLE_OAUTH_GROUP_MANAGEMENT", "False").lower() == "true",
 )
 
+ENABLE_OAUTH_GROUP_CREATION = PersistentConfig(
+    "ENABLE_OAUTH_GROUP_CREATION",
+    "oauth.enable_group_creation",
+    os.environ.get("ENABLE_OAUTH_GROUP_CREATION", "False").lower() == "true",
+)
+
+
+OAUTH_BLOCKED_GROUPS = PersistentConfig(
+    "OAUTH_BLOCKED_GROUPS",
+    "oauth.blocked_groups",
+    os.environ.get("OAUTH_BLOCKED_GROUPS", "[]"),
+)
+
 OAUTH_ROLES_CLAIM = PersistentConfig(
     "OAUTH_ROLES_CLAIM",
     "oauth.roles_claim",
@@ -720,6 +521,12 @@ OAUTH_ALLOWED_DOMAINS = PersistentConfig(
         domain.strip()
         for domain in os.environ.get("OAUTH_ALLOWED_DOMAINS", "*").split(",")
     ],
+)
+
+OAUTH_UPDATE_PICTURE_ON_LOGIN = PersistentConfig(
+    "OAUTH_UPDATE_PICTURE_ON_LOGIN",
+    "oauth.update_picture_on_login",
+    os.environ.get("OAUTH_UPDATE_PICTURE_ON_LOGIN", "False").lower() == "true",
 )
 
 
@@ -753,7 +560,7 @@ def load_oauth_providers():
                 name="microsoft",
                 client_id=MICROSOFT_CLIENT_ID.value,
                 client_secret=MICROSOFT_CLIENT_SECRET.value,
-                server_metadata_url=f"https://login.microsoftonline.com/{MICROSOFT_CLIENT_TENANT_ID.value}/v2.0/.well-known/openid-configuration?appid={MICROSOFT_CLIENT_ID.value}",
+                server_metadata_url=f"{MICROSOFT_CLIENT_LOGIN_BASE_URL.value}/{MICROSOFT_CLIENT_TENANT_ID.value}/v2.0/.well-known/openid-configuration?appid={MICROSOFT_CLIENT_ID.value}",
                 client_kwargs={
                     "scope": MICROSOFT_OAUTH_SCOPE.value,
                 },
@@ -762,7 +569,7 @@ def load_oauth_providers():
 
         OAUTH_PROVIDERS["microsoft"] = {
             "redirect_uri": MICROSOFT_REDIRECT_URI.value,
-            "picture_url": "https://graph.microsoft.com/v1.0/me/photo/$value",
+            "picture_url": MICROSOFT_CLIENT_PICTURE_URL.value,
             "register": microsoft_oauth_register,
         }
 
@@ -931,9 +738,10 @@ S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME", None)
 S3_KEY_PREFIX = os.environ.get("S3_KEY_PREFIX", None)
 S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", None)
 S3_USE_ACCELERATE_ENDPOINT = (
-    os.environ.get("S3_USE_ACCELERATE_ENDPOINT", "False").lower() == "true"
+    os.environ.get("S3_USE_ACCELERATE_ENDPOINT", "false").lower() == "true"
 )
 S3_ADDRESSING_STYLE = os.environ.get("S3_ADDRESSING_STYLE", None)
+S3_ENABLE_TAGGING = os.getenv("S3_ENABLE_TAGGING", "false").lower() == "true"
 
 GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", None)
 GOOGLE_APPLICATION_CREDENTIALS_JSON = os.environ.get(
@@ -1091,11 +899,19 @@ OPENAI_API_BASE_URL = "https://api.openai.com/v1"
 # TOOL_SERVERS
 ####################################
 
+try:
+    tool_server_connections = json.loads(
+        os.environ.get("TOOL_SERVER_CONNECTIONS", "[]")
+    )
+except Exception as e:
+    log.exception(f"Error loading TOOL_SERVER_CONNECTIONS: {e}")
+    tool_server_connections = []
+
 
 TOOL_SERVER_CONNECTIONS = PersistentConfig(
     "TOOL_SERVER_CONNECTIONS",
     "tool_server.connections",
-    [],
+    tool_server_connections,
 )
 
 ####################################
@@ -1103,9 +919,7 @@ TOOL_SERVER_CONNECTIONS = PersistentConfig(
 ####################################
 
 
-WEBUI_URL = PersistentConfig(
-    "WEBUI_URL", "webui.url", os.environ.get("WEBUI_URL", "http://localhost:3000")
-)
+WEBUI_URL = PersistentConfig("WEBUI_URL", "webui.url", os.environ.get("WEBUI_URL", ""))
 
 
 ENABLE_SIGNUP = PersistentConfig(
@@ -1135,14 +949,49 @@ DEFAULT_MODELS = PersistentConfig(
     "DEFAULT_MODELS", "ui.default_models", os.environ.get("DEFAULT_MODELS", None)
 )
 
-PROMPT_DATA = SECTOR_PROMPT_DATA.get(SECTOR_NAME, PRIVATE_AI_PROMPT_SUGGESTIONS_DATA)
+try:
+    default_prompt_suggestions = json.loads(
+        os.environ.get("DEFAULT_PROMPT_SUGGESTIONS", "[]")
+    )
+except Exception as e:
+    log.exception(f"Error loading DEFAULT_PROMPT_SUGGESTIONS: {e}")
+    default_prompt_suggestions = []
+if default_prompt_suggestions == []:
+    default_prompt_suggestions = [
+        {
+            "title": ["Help me study", "vocabulary for a college entrance exam"],
+            "content": "Help me study vocabulary: write a sentence for me to fill in the blank, and I'll try to pick the correct option.",
+        },
+        {
+            "title": ["Give me ideas", "for what to do with my kids' art"],
+            "content": "What are 5 creative things I could do with my kids' art? I don't want to throw them away, but it's also so much clutter.",
+        },
+        {
+            "title": ["Tell me a fun fact", "about the Roman Empire"],
+            "content": "Tell me a random fun fact about the Roman Empire",
+        },
+        {
+            "title": ["Show me a code snippet", "of a website's sticky header"],
+            "content": "Show me a code snippet of a website's sticky header in CSS and JavaScript.",
+        },
+        {
+            "title": [
+                "Explain options trading",
+                "if I'm familiar with buying and selling stocks",
+            ],
+            "content": "Explain options trading in simple terms if I'm familiar with buying and selling stocks.",
+        },
+        {
+            "title": ["Overcome procrastination", "give me tips"],
+            "content": "Could you start by asking me about instances when I procrastinate the most and then give me some suggestions to overcome it?",
+        },
+    ]
+
 DEFAULT_PROMPT_SUGGESTIONS = PersistentConfig(
     "DEFAULT_PROMPT_SUGGESTIONS",
     "ui.prompt_suggestions",
-    PROMPT_DATA
+    default_prompt_suggestions,
 )
-# Bypass the persistent store and force the value to be fresh on every server restart
-DEFAULT_PROMPT_SUGGESTIONS.value = PROMPT_DATA
 
 MODEL_ORDER_LIST = PersistentConfig(
     "MODEL_ORDER_LIST",
@@ -1155,6 +1004,26 @@ DEFAULT_USER_ROLE = PersistentConfig(
     "ui.default_user_role",
     os.getenv("DEFAULT_USER_ROLE", "pending"),
 )
+
+PENDING_USER_OVERLAY_TITLE = PersistentConfig(
+    "PENDING_USER_OVERLAY_TITLE",
+    "ui.pending_user_overlay_title",
+    os.environ.get("PENDING_USER_OVERLAY_TITLE", ""),
+)
+
+PENDING_USER_OVERLAY_CONTENT = PersistentConfig(
+    "PENDING_USER_OVERLAY_CONTENT",
+    "ui.pending_user_overlay_content",
+    os.environ.get("PENDING_USER_OVERLAY_CONTENT", ""),
+)
+
+
+RESPONSE_WATERMARK = PersistentConfig(
+    "RESPONSE_WATERMARK",
+    "ui.watermark",
+    os.environ.get("RESPONSE_WATERMARK", ""),
+)
+
 
 USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS = (
     os.environ.get("USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS", "False").lower()
@@ -1208,6 +1077,10 @@ USER_PERMISSIONS_CHAT_CONTROLS = (
     os.environ.get("USER_PERMISSIONS_CHAT_CONTROLS", "True").lower() == "true"
 )
 
+USER_PERMISSIONS_CHAT_SYSTEM_PROMPT = (
+    os.environ.get("USER_PERMISSIONS_CHAT_SYSTEM_PROMPT", "True").lower() == "true"
+)
+
 USER_PERMISSIONS_CHAT_FILE_UPLOAD = (
     os.environ.get("USER_PERMISSIONS_CHAT_FILE_UPLOAD", "True").lower() == "true"
 )
@@ -1218,6 +1091,14 @@ USER_PERMISSIONS_CHAT_DELETE = (
 
 USER_PERMISSIONS_CHAT_EDIT = (
     os.environ.get("USER_PERMISSIONS_CHAT_EDIT", "True").lower() == "true"
+)
+
+USER_PERMISSIONS_CHAT_SHARE = (
+    os.environ.get("USER_PERMISSIONS_CHAT_SHARE", "True").lower() == "true"
+)
+
+USER_PERMISSIONS_CHAT_EXPORT = (
+    os.environ.get("USER_PERMISSIONS_CHAT_EXPORT", "True").lower() == "true"
 )
 
 USER_PERMISSIONS_CHAT_STT = (
@@ -1265,6 +1146,10 @@ USER_PERMISSIONS_FEATURES_CODE_INTERPRETER = (
     == "true"
 )
 
+USER_PERMISSIONS_FEATURES_NOTES = (
+    os.environ.get("USER_PERMISSIONS_FEATURES_NOTES", "True").lower() == "true"
+)
+
 
 DEFAULT_USER_PERMISSIONS = {
     "workspace": {
@@ -1281,9 +1166,12 @@ DEFAULT_USER_PERMISSIONS = {
     },
     "chat": {
         "controls": USER_PERMISSIONS_CHAT_CONTROLS,
+        "system_prompt": USER_PERMISSIONS_CHAT_SYSTEM_PROMPT,
         "file_upload": USER_PERMISSIONS_CHAT_FILE_UPLOAD,
         "delete": USER_PERMISSIONS_CHAT_DELETE,
         "edit": USER_PERMISSIONS_CHAT_EDIT,
+        "share": USER_PERMISSIONS_CHAT_SHARE,
+        "export": USER_PERMISSIONS_CHAT_EXPORT,
         "stt": USER_PERMISSIONS_CHAT_STT,
         "tts": USER_PERMISSIONS_CHAT_TTS,
         "call": USER_PERMISSIONS_CHAT_CALL,
@@ -1296,6 +1184,7 @@ DEFAULT_USER_PERMISSIONS = {
         "web_search": USER_PERMISSIONS_FEATURES_WEB_SEARCH,
         "image_generation": USER_PERMISSIONS_FEATURES_IMAGE_GENERATION,
         "code_interpreter": USER_PERMISSIONS_FEATURES_CODE_INTERPRETER,
+        "notes": USER_PERMISSIONS_FEATURES_NOTES,
     },
 }
 
@@ -1311,6 +1200,11 @@ ENABLE_CHANNELS = PersistentConfig(
     os.environ.get("ENABLE_CHANNELS", "False").lower() == "true",
 )
 
+ENABLE_NOTES = PersistentConfig(
+    "ENABLE_NOTES",
+    "notes.enable",
+    os.environ.get("ENABLE_NOTES", "True").lower() == "true",
+)
 
 ENABLE_EVALUATION_ARENA_MODELS = PersistentConfig(
     "ENABLE_EVALUATION_ARENA_MODELS",
@@ -1361,11 +1255,17 @@ ENABLE_USER_WEBHOOKS = PersistentConfig(
     os.environ.get("ENABLE_USER_WEBHOOKS", "True").lower() == "true",
 )
 
+# FastAPI / AnyIO settings
+THREAD_POOL_SIZE = os.getenv("THREAD_POOL_SIZE", None)
 
-def validate_cors_origins(origins):
-    for origin in origins:
-        if origin != "*":
-            validate_cors_origin(origin)
+if THREAD_POOL_SIZE is not None and isinstance(THREAD_POOL_SIZE, str):
+    try:
+        THREAD_POOL_SIZE = int(THREAD_POOL_SIZE)
+    except ValueError:
+        log.warning(
+            f"THREAD_POOL_SIZE is not a valid integer: {THREAD_POOL_SIZE}. Defaulting to None."
+        )
+        THREAD_POOL_SIZE = None
 
 
 def validate_cors_origin(origin):
@@ -1389,12 +1289,15 @@ def validate_cors_origin(origin):
 # in your .env file depending on your frontend port, 5173 in this case.
 CORS_ALLOW_ORIGIN = os.environ.get("CORS_ALLOW_ORIGIN", "*").split(";")
 
-if "*" in CORS_ALLOW_ORIGIN:
+if CORS_ALLOW_ORIGIN == ["*"]:
     log.warning(
         "\n\nWARNING: CORS_ALLOW_ORIGIN IS SET TO '*' - NOT RECOMMENDED FOR PRODUCTION DEPLOYMENTS.\n"
     )
-
-validate_cors_origins(CORS_ALLOW_ORIGIN)
+else:
+    # You have to pick between a single wildcard or a list of origins.
+    # Doing both will result in CORS errors in the browser.
+    for origin in CORS_ALLOW_ORIGIN:
+        validate_cors_origin(origin)
 
 
 class BannerModel(BaseModel):
@@ -1459,6 +1362,9 @@ Generate a concise, 3-5 word title with an emoji summarizing the chat history.
 - Use emojis that enhance understanding of the topic, but avoid quotation marks or special formatting.
 - Write the title in the chat's primary language; default to English if multilingual.
 - Prioritize accuracy over excessive creativity; keep it clear and simple.
+- Your entire response must consist solely of the JSON object, without any introductory or concluding text.
+- The output must be a single, raw JSON object, without any markdown code fences or other encapsulating text.
+- Ensure no conversational text, affirmations, or explanations precede or follow the raw JSON output, as this will cause direct parsing failure.
 ### Output:
 JSON format: { "title": "your concise title here" }
 ### Examples:
@@ -1523,6 +1429,35 @@ Strictly return in JSON format:
 {{MESSAGES:END:6}}
 </chat_history>"""
 
+
+FOLLOW_UP_GENERATION_PROMPT_TEMPLATE = PersistentConfig(
+    "FOLLOW_UP_GENERATION_PROMPT_TEMPLATE",
+    "task.follow_up.prompt_template",
+    os.environ.get("FOLLOW_UP_GENERATION_PROMPT_TEMPLATE", ""),
+)
+
+DEFAULT_FOLLOW_UP_GENERATION_PROMPT_TEMPLATE = """### Task:
+Suggest 3-5 relevant follow-up questions or prompts that the user might naturally ask next in this conversation as a **user**, based on the chat history, to help continue or deepen the discussion.
+### Guidelines:
+- Write all follow-up questions from the user’s point of view, directed to the assistant.
+- Make questions concise, clear, and directly related to the discussed topic(s).
+- Only suggest follow-ups that make sense given the chat content and do not repeat what was already covered.
+- If the conversation is very short or not specific, suggest more general (but relevant) follow-ups the user might ask.
+- Use the conversation's primary language; default to English if multilingual.
+- Response must be a JSON array of strings, no extra text or formatting.
+### Output:
+JSON format: { "follow_ups": ["Question 1?", "Question 2?", "Question 3?"] }
+### Chat History:
+<chat_history>
+{{MESSAGES:END:6}}
+</chat_history>"""
+
+ENABLE_FOLLOW_UP_GENERATION = PersistentConfig(
+    "ENABLE_FOLLOW_UP_GENERATION",
+    "task.follow_up.enable",
+    os.environ.get("ENABLE_FOLLOW_UP_GENERATION", "True").lower() == "true",
+)
+
 ENABLE_TAGS_GENERATION = PersistentConfig(
     "ENABLE_TAGS_GENERATION",
     "task.tags.enable",
@@ -1568,7 +1503,7 @@ Analyze the chat history to determine the necessity of generating search queries
 - Always prioritize providing actionable and broad queries that maximize informational coverage.
 
 ### Output:
-Strictly return in JSON format:
+Strictly return in JSON format: 
 {
   "queries": ["query1", "query2"]
 }
@@ -1599,44 +1534,44 @@ AUTOCOMPLETE_GENERATION_PROMPT_TEMPLATE = PersistentConfig(
 
 
 DEFAULT_AUTOCOMPLETE_GENERATION_PROMPT_TEMPLATE = """### Task:
-You are an autocompletion system. Continue the text in `<text>` based on the **completion type** in `<type>` and the given language.
+You are an autocompletion system. Continue the text in `<text>` based on the **completion type** in `<type>` and the given language.  
 
 ### **Instructions**:
-1. Analyze `<text>` for context and meaning.
-2. Use `<type>` to guide your output:
-   - **General**: Provide a natural, concise continuation.
-   - **Search Query**: Complete as if generating a realistic search query.
-3. Start as if you are directly continuing `<text>`. Do **not** repeat, paraphrase, or respond as a model. Simply complete the text.
+1. Analyze `<text>` for context and meaning.  
+2. Use `<type>` to guide your output:  
+   - **General**: Provide a natural, concise continuation.  
+   - **Search Query**: Complete as if generating a realistic search query.  
+3. Start as if you are directly continuing `<text>`. Do **not** repeat, paraphrase, or respond as a model. Simply complete the text.  
 4. Ensure the continuation:
-   - Flows naturally from `<text>`.
-   - Avoids repetition, overexplaining, or unrelated ideas.
-5. If unsure, return: `{ "text": "" }`.
+   - Flows naturally from `<text>`.  
+   - Avoids repetition, overexplaining, or unrelated ideas.  
+5. If unsure, return: `{ "text": "" }`.  
 
 ### **Output Rules**:
 - Respond only in JSON format: `{ "text": "<your_completion>" }`.
 
 ### **Examples**:
-#### Example 1:
-Input:
-<type>General</type>
-<text>The sun was setting over the horizon, painting the sky</text>
-Output:
+#### Example 1:  
+Input:  
+<type>General</type>  
+<text>The sun was setting over the horizon, painting the sky</text>  
+Output:  
 { "text": "with vibrant shades of orange and pink." }
 
-#### Example 2:
-Input:
-<type>Search Query</type>
-<text>Top-rated restaurants in</text>
-Output:
-{ "text": "New York City for Italian cuisine." }
+#### Example 2:  
+Input:  
+<type>Search Query</type>  
+<text>Top-rated restaurants in</text>  
+Output:  
+{ "text": "New York City for Italian cuisine." }  
 
 ---
 ### Context:
 <chat_history>
 {{MESSAGES:END:6}}
 </chat_history>
-<type>{{TYPE}}</type>
-<text>{{PROMPT}}</text>
+<type>{{TYPE}}</type>  
+<text>{{PROMPT}}</text>  
 #### Output:
 """
 
@@ -1653,7 +1588,7 @@ Your task is to choose and return the correct tool(s) from the list of available
 
 - Return only the JSON object, without any additional text or explanation.
 
-- If no tools match the query, return an empty array:
+- If no tools match the query, return an empty array: 
    {
      "tool_calls": []
    }
@@ -1801,10 +1736,11 @@ DEFAULT_CODE_INTERPRETER_PROMPT = """
 1. **Code Interpreter**: `<code_interpreter type="code" lang="python"></code_interpreter>`
    - You have access to a Python shell that runs directly in the user's browser, enabling fast execution of code for analysis, calculations, or problem-solving.  Use it in this response.
    - The Python code you write can incorporate a wide array of libraries, handle data manipulation or visualization, perform API calls for web-related tasks, or tackle virtually any computational challenge. Use this flexibility to **think outside the box, craft elegant solutions, and harness Python's full potential**.
-   - To use it, **you must enclose your code within `<code_interpreter type="code" lang="python">` XML tags** and stop right away. If you don't, the code won't execute. Do NOT use triple backticks.
-   - When coding, **always aim to print meaningful outputs** (e.g., results, tables, summaries, or visuals) to better interpret and verify the findings. Avoid relying on implicit outputs; prioritize explicit and clear print statements so the results are effectively communicated to the user.
-   - After obtaining the printed output, **always provide a concise analysis, interpretation, or next steps to help the user understand the findings or refine the outcome further.**
-   - If the results are unclear, unexpected, or require validation, refine the code and execute it again as needed. Always aim to deliver meaningful insights from the results, iterating if necessary.
+   - To use it, **you must enclose your code within `<code_interpreter type="code" lang="python">` XML tags** and stop right away. If you don't, the code won't execute. 
+   - When writing code in the code_interpreter XML tag, Do NOT use the triple backticks code block for markdown formatting, example: ```py # python code ``` will cause an error because it is markdown formatting, it is not python code.
+   - When coding, **always aim to print meaningful outputs** (e.g., results, tables, summaries, or visuals) to better interpret and verify the findings. Avoid relying on implicit outputs; prioritize explicit and clear print statements so the results are effectively communicated to the user.  
+   - After obtaining the printed output, **always provide a concise analysis, interpretation, or next steps to help the user understand the findings or refine the outcome further.**  
+   - If the results are unclear, unexpected, or require validation, refine the code and execute it again as needed. Always aim to deliver meaningful insights from the results, iterating if necessary.  
    - **If a link to an image, audio, or any file is provided in markdown format in the output, ALWAYS regurgitate word for word, explicitly display it as part of the response to ensure the user can access it easily, do NOT change the link.**
    - All responses should be communicated in the chat's primary language, ensuring seamless understanding. If the chat is multilingual, default to English for clarity.
 
@@ -1848,9 +1784,21 @@ MILVUS_URI = os.environ.get("MILVUS_URI", f"{DATA_DIR}/vector_db/milvus.db")
 MILVUS_DB = os.environ.get("MILVUS_DB", "default")
 MILVUS_TOKEN = os.environ.get("MILVUS_TOKEN", None)
 
+MILVUS_INDEX_TYPE = os.environ.get("MILVUS_INDEX_TYPE", "HNSW")
+MILVUS_METRIC_TYPE = os.environ.get("MILVUS_METRIC_TYPE", "COSINE")
+MILVUS_HNSW_M = int(os.environ.get("MILVUS_HNSW_M", "16"))
+MILVUS_HNSW_EFCONSTRUCTION = int(os.environ.get("MILVUS_HNSW_EFCONSTRUCTION", "100"))
+MILVUS_IVF_FLAT_NLIST = int(os.environ.get("MILVUS_IVF_FLAT_NLIST", "128"))
+
 # Qdrant
 QDRANT_URI = os.environ.get("QDRANT_URI", None)
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY", None)
+QDRANT_ON_DISK = os.environ.get("QDRANT_ON_DISK", "false").lower() == "true"
+QDRANT_PREFER_GRPC = os.environ.get("QDRANT_PREFER_GRPC", "False").lower() == "true"
+QDRANT_GRPC_PORT = int(os.environ.get("QDRANT_GRPC_PORT", "6334"))
+ENABLE_QDRANT_MULTITENANCY_MODE = (
+    os.environ.get("ENABLE_QDRANT_MULTITENANCY_MODE", "false").lower() == "true"
+)
 
 # OpenSearch
 OPENSEARCH_URI = os.environ.get("OPENSEARCH_URI", "https://localhost:9200")
@@ -1881,6 +1829,21 @@ if VECTOR_DB == "pgvector" and not PGVECTOR_DB_URL.startswith("postgres"):
 PGVECTOR_INITIALIZE_MAX_VECTOR_LENGTH = int(
     os.environ.get("PGVECTOR_INITIALIZE_MAX_VECTOR_LENGTH", "1536")
 )
+
+PGVECTOR_PGCRYPTO = os.getenv("PGVECTOR_PGCRYPTO", "false").lower() == "true"
+PGVECTOR_PGCRYPTO_KEY = os.getenv("PGVECTOR_PGCRYPTO_KEY", None)
+if PGVECTOR_PGCRYPTO and not PGVECTOR_PGCRYPTO_KEY:
+    raise ValueError(
+        "PGVECTOR_PGCRYPTO is enabled but PGVECTOR_PGCRYPTO_KEY is not set. Please provide a valid key."
+    )
+
+# Pinecone
+PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY", None)
+PINECONE_ENVIRONMENT = os.environ.get("PINECONE_ENVIRONMENT", None)
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "open-webui-index")
+PINECONE_DIMENSION = int(os.getenv("PINECONE_DIMENSION", 1536))  # or 3072, 1024, 768
+PINECONE_METRIC = os.getenv("PINECONE_METRIC", "cosine")
+PINECONE_CLOUD = os.getenv("PINECONE_CLOUD", "aws")  # or "gcp" or "azure"
 
 ####################################
 # Information Retrieval (RAG)
@@ -1918,11 +1881,90 @@ ONEDRIVE_CLIENT_ID = PersistentConfig(
     os.environ.get("ONEDRIVE_CLIENT_ID", ""),
 )
 
+ONEDRIVE_SHAREPOINT_URL = PersistentConfig(
+    "ONEDRIVE_SHAREPOINT_URL",
+    "onedrive.sharepoint_url",
+    os.environ.get("ONEDRIVE_SHAREPOINT_URL", ""),
+)
+
+ONEDRIVE_SHAREPOINT_TENANT_ID = PersistentConfig(
+    "ONEDRIVE_SHAREPOINT_TENANT_ID",
+    "onedrive.sharepoint_tenant_id",
+    os.environ.get("ONEDRIVE_SHAREPOINT_TENANT_ID", ""),
+)
+
 # RAG Content Extraction
 CONTENT_EXTRACTION_ENGINE = PersistentConfig(
     "CONTENT_EXTRACTION_ENGINE",
     "rag.CONTENT_EXTRACTION_ENGINE",
     os.environ.get("CONTENT_EXTRACTION_ENGINE", "").lower(),
+)
+
+DATALAB_MARKER_API_KEY = PersistentConfig(
+    "DATALAB_MARKER_API_KEY",
+    "rag.datalab_marker_api_key",
+    os.environ.get("DATALAB_MARKER_API_KEY", ""),
+)
+
+DATALAB_MARKER_LANGS = PersistentConfig(
+    "DATALAB_MARKER_LANGS",
+    "rag.datalab_marker_langs",
+    os.environ.get("DATALAB_MARKER_LANGS", ""),
+)
+
+DATALAB_MARKER_USE_LLM = PersistentConfig(
+    "DATALAB_MARKER_USE_LLM",
+    "rag.DATALAB_MARKER_USE_LLM",
+    os.environ.get("DATALAB_MARKER_USE_LLM", "false").lower() == "true",
+)
+
+DATALAB_MARKER_SKIP_CACHE = PersistentConfig(
+    "DATALAB_MARKER_SKIP_CACHE",
+    "rag.datalab_marker_skip_cache",
+    os.environ.get("DATALAB_MARKER_SKIP_CACHE", "false").lower() == "true",
+)
+
+DATALAB_MARKER_FORCE_OCR = PersistentConfig(
+    "DATALAB_MARKER_FORCE_OCR",
+    "rag.datalab_marker_force_ocr",
+    os.environ.get("DATALAB_MARKER_FORCE_OCR", "false").lower() == "true",
+)
+
+DATALAB_MARKER_PAGINATE = PersistentConfig(
+    "DATALAB_MARKER_PAGINATE",
+    "rag.datalab_marker_paginate",
+    os.environ.get("DATALAB_MARKER_PAGINATE", "false").lower() == "true",
+)
+
+DATALAB_MARKER_STRIP_EXISTING_OCR = PersistentConfig(
+    "DATALAB_MARKER_STRIP_EXISTING_OCR",
+    "rag.datalab_marker_strip_existing_ocr",
+    os.environ.get("DATALAB_MARKER_STRIP_EXISTING_OCR", "false").lower() == "true",
+)
+
+DATALAB_MARKER_DISABLE_IMAGE_EXTRACTION = PersistentConfig(
+    "DATALAB_MARKER_DISABLE_IMAGE_EXTRACTION",
+    "rag.datalab_marker_disable_image_extraction",
+    os.environ.get("DATALAB_MARKER_DISABLE_IMAGE_EXTRACTION", "false").lower()
+    == "true",
+)
+
+DATALAB_MARKER_OUTPUT_FORMAT = PersistentConfig(
+    "DATALAB_MARKER_OUTPUT_FORMAT",
+    "rag.datalab_marker_output_format",
+    os.environ.get("DATALAB_MARKER_OUTPUT_FORMAT", "markdown"),
+)
+
+EXTERNAL_DOCUMENT_LOADER_URL = PersistentConfig(
+    "EXTERNAL_DOCUMENT_LOADER_URL",
+    "rag.external_document_loader_url",
+    os.environ.get("EXTERNAL_DOCUMENT_LOADER_URL", ""),
+)
+
+EXTERNAL_DOCUMENT_LOADER_API_KEY = PersistentConfig(
+    "EXTERNAL_DOCUMENT_LOADER_API_KEY",
+    "rag.external_document_loader_api_key",
+    os.environ.get("EXTERNAL_DOCUMENT_LOADER_API_KEY", ""),
 )
 
 TIKA_SERVER_URL = PersistentConfig(
@@ -1936,6 +1978,58 @@ DOCLING_SERVER_URL = PersistentConfig(
     "rag.docling_server_url",
     os.getenv("DOCLING_SERVER_URL", "http://docling:5001"),
 )
+
+DOCLING_OCR_ENGINE = PersistentConfig(
+    "DOCLING_OCR_ENGINE",
+    "rag.docling_ocr_engine",
+    os.getenv("DOCLING_OCR_ENGINE", "tesseract"),
+)
+
+DOCLING_OCR_LANG = PersistentConfig(
+    "DOCLING_OCR_LANG",
+    "rag.docling_ocr_lang",
+    os.getenv("DOCLING_OCR_LANG", "eng,fra,deu,spa"),
+)
+
+DOCLING_DO_PICTURE_DESCRIPTION = PersistentConfig(
+    "DOCLING_DO_PICTURE_DESCRIPTION",
+    "rag.docling_do_picture_description",
+    os.getenv("DOCLING_DO_PICTURE_DESCRIPTION", "False").lower() == "true",
+)
+
+DOCLING_PICTURE_DESCRIPTION_MODE = PersistentConfig(
+    "DOCLING_PICTURE_DESCRIPTION_MODE",
+    "rag.docling_picture_description_mode",
+    os.getenv("DOCLING_PICTURE_DESCRIPTION_MODE", ""),
+)
+
+
+docling_picture_description_local = os.getenv("DOCLING_PICTURE_DESCRIPTION_LOCAL", "")
+try:
+    docling_picture_description_local = json.loads(docling_picture_description_local)
+except json.JSONDecodeError:
+    docling_picture_description_local = {}
+
+
+DOCLING_PICTURE_DESCRIPTION_LOCAL = PersistentConfig(
+    "DOCLING_PICTURE_DESCRIPTION_LOCAL",
+    "rag.docling_picture_description_local",
+    docling_picture_description_local,
+)
+
+docling_picture_description_api = os.getenv("DOCLING_PICTURE_DESCRIPTION_API", "")
+try:
+    docling_picture_description_api = json.loads(docling_picture_description_api)
+except json.JSONDecodeError:
+    docling_picture_description_api = {}
+
+
+DOCLING_PICTURE_DESCRIPTION_API = PersistentConfig(
+    "DOCLING_PICTURE_DESCRIPTION_API",
+    "rag.docling_picture_description_api",
+    docling_picture_description_api,
+)
+
 
 DOCUMENT_INTELLIGENCE_ENDPOINT = PersistentConfig(
     "DOCUMENT_INTELLIGENCE_ENDPOINT",
@@ -1975,6 +2069,11 @@ RAG_RELEVANCE_THRESHOLD = PersistentConfig(
     "rag.relevance_threshold",
     float(os.environ.get("RAG_RELEVANCE_THRESHOLD", "0.0")),
 )
+RAG_HYBRID_BM25_WEIGHT = PersistentConfig(
+    "RAG_HYBRID_BM25_WEIGHT",
+    "rag.hybrid_bm25_weight",
+    float(os.environ.get("RAG_HYBRID_BM25_WEIGHT", "0.5")),
+)
 
 ENABLE_RAG_HYBRID_SEARCH = PersistentConfig(
     "ENABLE_RAG_HYBRID_SEARCH",
@@ -2006,6 +2105,37 @@ RAG_FILE_MAX_SIZE = PersistentConfig(
         if os.environ.get("RAG_FILE_MAX_SIZE")
         else None
     ),
+)
+
+FILE_IMAGE_COMPRESSION_WIDTH = PersistentConfig(
+    "FILE_IMAGE_COMPRESSION_WIDTH",
+    "file.image_compression_width",
+    (
+        int(os.environ.get("FILE_IMAGE_COMPRESSION_WIDTH"))
+        if os.environ.get("FILE_IMAGE_COMPRESSION_WIDTH")
+        else None
+    ),
+)
+
+FILE_IMAGE_COMPRESSION_HEIGHT = PersistentConfig(
+    "FILE_IMAGE_COMPRESSION_HEIGHT",
+    "file.image_compression_height",
+    (
+        int(os.environ.get("FILE_IMAGE_COMPRESSION_HEIGHT"))
+        if os.environ.get("FILE_IMAGE_COMPRESSION_HEIGHT")
+        else None
+    ),
+)
+
+
+RAG_ALLOWED_FILE_EXTENSIONS = PersistentConfig(
+    "RAG_ALLOWED_FILE_EXTENSIONS",
+    "rag.file.allowed_extensions",
+    [
+        ext.strip()
+        for ext in os.environ.get("RAG_ALLOWED_FILE_EXTENSIONS", "").split(",")
+        if ext.strip()
+    ],
 )
 
 RAG_EMBEDDING_ENGINE = PersistentConfig(
@@ -2053,6 +2183,12 @@ RAG_EMBEDDING_PREFIX_FIELD_NAME = os.environ.get(
     "RAG_EMBEDDING_PREFIX_FIELD_NAME", None
 )
 
+RAG_RERANKING_ENGINE = PersistentConfig(
+    "RAG_RERANKING_ENGINE",
+    "rag.reranking_engine",
+    os.environ.get("RAG_RERANKING_ENGINE", ""),
+)
+
 RAG_RERANKING_MODEL = PersistentConfig(
     "RAG_RERANKING_MODEL",
     "rag.reranking_model",
@@ -2061,6 +2197,7 @@ RAG_RERANKING_MODEL = PersistentConfig(
 if RAG_RERANKING_MODEL.value != "":
     log.info(f"Reranking model set: {RAG_RERANKING_MODEL.value}")
 
+
 RAG_RERANKING_MODEL_AUTO_UPDATE = (
     not OFFLINE_MODE
     and os.environ.get("RAG_RERANKING_MODEL_AUTO_UPDATE", "True").lower() == "true"
@@ -2068,6 +2205,18 @@ RAG_RERANKING_MODEL_AUTO_UPDATE = (
 
 RAG_RERANKING_MODEL_TRUST_REMOTE_CODE = (
     os.environ.get("RAG_RERANKING_MODEL_TRUST_REMOTE_CODE", "True").lower() == "true"
+)
+
+RAG_EXTERNAL_RERANKER_URL = PersistentConfig(
+    "RAG_EXTERNAL_RERANKER_URL",
+    "rag.external_reranker_url",
+    os.environ.get("RAG_EXTERNAL_RERANKER_URL", ""),
+)
+
+RAG_EXTERNAL_RERANKER_API_KEY = PersistentConfig(
+    "RAG_EXTERNAL_RERANKER_API_KEY",
+    "rag.external_reranker_api_key",
+    os.environ.get("RAG_EXTERNAL_RERANKER_API_KEY", ""),
 )
 
 
@@ -2142,6 +2291,22 @@ RAG_OPENAI_API_KEY = PersistentConfig(
     os.getenv("RAG_OPENAI_API_KEY", OPENAI_API_KEY),
 )
 
+RAG_AZURE_OPENAI_BASE_URL = PersistentConfig(
+    "RAG_AZURE_OPENAI_BASE_URL",
+    "rag.azure_openai.base_url",
+    os.getenv("RAG_AZURE_OPENAI_BASE_URL", ""),
+)
+RAG_AZURE_OPENAI_API_KEY = PersistentConfig(
+    "RAG_AZURE_OPENAI_API_KEY",
+    "rag.azure_openai.api_key",
+    os.getenv("RAG_AZURE_OPENAI_API_KEY", ""),
+)
+RAG_AZURE_OPENAI_API_VERSION = PersistentConfig(
+    "RAG_AZURE_OPENAI_API_VERSION",
+    "rag.azure_openai.api_version",
+    os.getenv("RAG_AZURE_OPENAI_API_VERSION", ""),
+)
+
 RAG_OLLAMA_BASE_URL = PersistentConfig(
     "RAG_OLLAMA_BASE_URL",
     "rag.ollama.url",
@@ -2195,6 +2360,12 @@ BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL = PersistentConfig(
 )
 
 
+BYPASS_WEB_SEARCH_WEB_LOADER = PersistentConfig(
+    "BYPASS_WEB_SEARCH_WEB_LOADER",
+    "rag.web.search.bypass_web_loader",
+    os.getenv("BYPASS_WEB_SEARCH_WEB_LOADER", "False").lower() == "true",
+)
+
 WEB_SEARCH_RESULT_COUNT = PersistentConfig(
     "WEB_SEARCH_RESULT_COUNT",
     "rag.web.search.result_count",
@@ -2220,6 +2391,7 @@ WEB_SEARCH_CONCURRENT_REQUESTS = PersistentConfig(
     int(os.getenv("WEB_SEARCH_CONCURRENT_REQUESTS", "10")),
 )
 
+
 WEB_LOADER_ENGINE = PersistentConfig(
     "WEB_LOADER_ENGINE",
     "rag.web.loader.engine",
@@ -2243,6 +2415,24 @@ SEARXNG_QUERY_URL = PersistentConfig(
     "SEARXNG_QUERY_URL",
     "rag.web.search.searxng_query_url",
     os.getenv("SEARXNG_QUERY_URL", ""),
+)
+
+YACY_QUERY_URL = PersistentConfig(
+    "YACY_QUERY_URL",
+    "rag.web.search.yacy_query_url",
+    os.getenv("YACY_QUERY_URL", ""),
+)
+
+YACY_USERNAME = PersistentConfig(
+    "YACY_USERNAME",
+    "rag.web.search.yacy_username",
+    os.getenv("YACY_USERNAME", ""),
+)
+
+YACY_PASSWORD = PersistentConfig(
+    "YACY_PASSWORD",
+    "rag.web.search.yacy_password",
+    os.getenv("YACY_PASSWORD", ""),
 )
 
 GOOGLE_PSE_API_KEY = PersistentConfig(
@@ -2361,6 +2551,18 @@ PERPLEXITY_API_KEY = PersistentConfig(
     os.getenv("PERPLEXITY_API_KEY", ""),
 )
 
+PERPLEXITY_MODEL = PersistentConfig(
+    "PERPLEXITY_MODEL",
+    "rag.web.search.perplexity_model",
+    os.getenv("PERPLEXITY_MODEL", "sonar"),
+)
+
+PERPLEXITY_SEARCH_CONTEXT_USAGE = PersistentConfig(
+    "PERPLEXITY_SEARCH_CONTEXT_USAGE",
+    "rag.web.search.perplexity_search_context_usage",
+    os.getenv("PERPLEXITY_SEARCH_CONTEXT_USAGE", "medium"),
+)
+
 SOUGOU_API_SID = PersistentConfig(
     "SOUGOU_API_SID",
     "rag.web.search.sougou_api_sid",
@@ -2409,6 +2611,29 @@ FIRECRAWL_API_BASE_URL = PersistentConfig(
     os.environ.get("FIRECRAWL_API_BASE_URL", "https://api.firecrawl.dev"),
 )
 
+EXTERNAL_WEB_SEARCH_URL = PersistentConfig(
+    "EXTERNAL_WEB_SEARCH_URL",
+    "rag.web.search.external_web_search_url",
+    os.environ.get("EXTERNAL_WEB_SEARCH_URL", ""),
+)
+
+EXTERNAL_WEB_SEARCH_API_KEY = PersistentConfig(
+    "EXTERNAL_WEB_SEARCH_API_KEY",
+    "rag.web.search.external_web_search_api_key",
+    os.environ.get("EXTERNAL_WEB_SEARCH_API_KEY", ""),
+)
+
+EXTERNAL_WEB_LOADER_URL = PersistentConfig(
+    "EXTERNAL_WEB_LOADER_URL",
+    "rag.web.loader.external_web_loader_url",
+    os.environ.get("EXTERNAL_WEB_LOADER_URL", ""),
+)
+
+EXTERNAL_WEB_LOADER_API_KEY = PersistentConfig(
+    "EXTERNAL_WEB_LOADER_API_KEY",
+    "rag.web.loader.external_web_loader_api_key",
+    os.environ.get("EXTERNAL_WEB_LOADER_API_KEY", ""),
+)
 
 ####################################
 # Images
@@ -2668,6 +2893,7 @@ WHISPER_VAD_FILTER = PersistentConfig(
     os.getenv("WHISPER_VAD_FILTER", "False").lower() == "true",
 )
 
+WHISPER_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "").lower() or None
 
 # Add Deepgram configuration
 DEEPGRAM_API_KEY = PersistentConfig(
@@ -2701,6 +2927,18 @@ AUDIO_STT_MODEL = PersistentConfig(
     os.getenv("AUDIO_STT_MODEL", ""),
 )
 
+AUDIO_STT_SUPPORTED_CONTENT_TYPES = PersistentConfig(
+    "AUDIO_STT_SUPPORTED_CONTENT_TYPES",
+    "audio.stt.supported_content_types",
+    [
+        content_type.strip()
+        for content_type in os.environ.get(
+            "AUDIO_STT_SUPPORTED_CONTENT_TYPES", ""
+        ).split(",")
+        if content_type.strip()
+    ],
+)
+
 AUDIO_STT_AZURE_API_KEY = PersistentConfig(
     "AUDIO_STT_AZURE_API_KEY",
     "audio.stt.azure.api_key",
@@ -2717,6 +2955,18 @@ AUDIO_STT_AZURE_LOCALES = PersistentConfig(
     "AUDIO_STT_AZURE_LOCALES",
     "audio.stt.azure.locales",
     os.getenv("AUDIO_STT_AZURE_LOCALES", ""),
+)
+
+AUDIO_STT_AZURE_BASE_URL = PersistentConfig(
+    "AUDIO_STT_AZURE_BASE_URL",
+    "audio.stt.azure.base_url",
+    os.getenv("AUDIO_STT_AZURE_BASE_URL", ""),
+)
+
+AUDIO_STT_AZURE_MAX_SPEAKERS = PersistentConfig(
+    "AUDIO_STT_AZURE_MAX_SPEAKERS",
+    "audio.stt.azure.max_speakers",
+    os.getenv("AUDIO_STT_AZURE_MAX_SPEAKERS", ""),
 )
 
 AUDIO_TTS_OPENAI_API_BASE_URL = PersistentConfig(
@@ -2764,7 +3014,13 @@ AUDIO_TTS_SPLIT_ON = PersistentConfig(
 AUDIO_TTS_AZURE_SPEECH_REGION = PersistentConfig(
     "AUDIO_TTS_AZURE_SPEECH_REGION",
     "audio.tts.azure.speech_region",
-    os.getenv("AUDIO_TTS_AZURE_SPEECH_REGION", "eastus"),
+    os.getenv("AUDIO_TTS_AZURE_SPEECH_REGION", ""),
+)
+
+AUDIO_TTS_AZURE_SPEECH_BASE_URL = PersistentConfig(
+    "AUDIO_TTS_AZURE_SPEECH_BASE_URL",
+    "audio.tts.azure.speech_base_url",
+    os.getenv("AUDIO_TTS_AZURE_SPEECH_BASE_URL", ""),
 )
 
 AUDIO_TTS_AZURE_SPEECH_OUTPUT_FORMAT = PersistentConfig(
@@ -2848,8 +3104,33 @@ LDAP_CA_CERT_FILE = PersistentConfig(
     os.environ.get("LDAP_CA_CERT_FILE", ""),
 )
 
+LDAP_VALIDATE_CERT = PersistentConfig(
+    "LDAP_VALIDATE_CERT",
+    "ldap.server.validate_cert",
+    os.environ.get("LDAP_VALIDATE_CERT", "True").lower() == "true",
+)
+
 LDAP_CIPHERS = PersistentConfig(
     "LDAP_CIPHERS", "ldap.server.ciphers", os.environ.get("LDAP_CIPHERS", "ALL")
+)
+
+# For LDAP Group Management
+ENABLE_LDAP_GROUP_MANAGEMENT = PersistentConfig(
+    "ENABLE_LDAP_GROUP_MANAGEMENT",
+    "ldap.group.enable_management",
+    os.environ.get("ENABLE_LDAP_GROUP_MANAGEMENT", "False").lower() == "true",
+    )
+
+ENABLE_LDAP_GROUP_CREATION = PersistentConfig(
+    "ENABLE_LDAP_GROUP_CREATION",
+    "ldap.group.enable_creation",
+    os.environ.get("ENABLE_LDAP_GROUP_CREATION", "False").lower() == "true",
+    )
+
+LDAP_ATTRIBUTE_FOR_GROUPS = PersistentConfig(
+    "LDAP_ATTRIBUTE_FOR_GROUPS",
+    "ldap.server.attribute_for_groups",
+    os.environ.get("LDAP_ATTRIBUTE_FOR_GROUPS", "memberOf"),
 )
 
 ####################################

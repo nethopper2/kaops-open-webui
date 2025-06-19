@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { getBackendConfig } from '$lib/apis';
-	import { setDefaultPromptSuggestions } from '$lib/apis/configs';
 	import { config, models, settings, user } from '$lib/stores';
 	import { createEventDispatcher, onMount, getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
@@ -19,6 +17,7 @@
 
 	// Addons
 	let titleAutoGenerate = true;
+	let autoFollowUps = true;
 	let autoTags = true;
 
 	let responseAutoCopy = false;
@@ -30,7 +29,11 @@
 	// Interface
 	let defaultModelId = '';
 	let showUsername = false;
+
 	let notificationSound = true;
+	let notificationSoundAlways = false;
+
+	let highContrastMode = false;
 
 	let detectArtifacts = true;
 
@@ -53,6 +56,9 @@
 		width: '',
 		height: ''
 	};
+
+	// chat export
+	let stylizedPdfExport = true;
 
 	// Admin - Show Update Available Toast
 	let showUpdateToast = true;
@@ -80,6 +86,11 @@
 	const toggleSplitLargeChunks = async () => {
 		splitLargeChunks = !splitLargeChunks;
 		saveSettings({ splitLargeChunks: splitLargeChunks });
+	};
+
+	const toggleHighContrastMode = async () => {
+		highContrastMode = !highContrastMode;
+		saveSettings({ highContrastMode: highContrastMode });
 	};
 
 	const togglePromptAutocomplete = async () => {
@@ -117,6 +128,11 @@
 		saveSettings({ notificationSound: notificationSound });
 	};
 
+	const toggleNotificationSoundAlways = async () => {
+		notificationSoundAlways = !notificationSoundAlways;
+		saveSettings({ notificationSoundAlways: notificationSoundAlways });
+	};
+
 	const toggleShowChangelog = async () => {
 		showChangelog = !showChangelog;
 		saveSettings({ showChangelog: showChangelog });
@@ -147,6 +163,11 @@
 		saveSettings({ hapticFeedback: hapticFeedback });
 	};
 
+	const toggleStylizedPdfExport = async () => {
+		stylizedPdfExport = !stylizedPdfExport;
+		saveSettings({ stylizedPdfExport: stylizedPdfExport });
+	};
+
 	const toggleUserLocation = async () => {
 		userLocation = !userLocation;
 
@@ -175,6 +196,11 @@
 				auto: titleAutoGenerate
 			}
 		});
+	};
+
+	const toggleAutoFollowUps = async () => {
+		autoFollowUps = !autoFollowUps;
+		saveSettings({ autoFollowUps });
 	};
 
 	const toggleAutoTags = async () => {
@@ -266,53 +292,63 @@
 
 	onMount(async () => {
 		titleAutoGenerate = $settings?.title?.auto ?? true;
-		autoTags = $settings.autoTags ?? true;
+		autoTags = $settings?.autoTags ?? true;
+		autoFollowUps = $settings?.autoFollowUps ?? true;
 
-		detectArtifacts = $settings.detectArtifacts ?? true;
-		responseAutoCopy = $settings.responseAutoCopy ?? false;
+		highContrastMode = $settings?.highContrastMode ?? false;
 
-		showUsername = $settings.showUsername ?? false;
-		showUpdateToast = $settings.showUpdateToast ?? true;
-		showChangelog = $settings.showChangelog ?? true;
+		detectArtifacts = $settings?.detectArtifacts ?? true;
+		responseAutoCopy = $settings?.responseAutoCopy ?? false;
 
-		showEmojiInCall = $settings.showEmojiInCall ?? false;
-		voiceInterruption = $settings.voiceInterruption ?? false;
+		showUsername = $settings?.showUsername ?? false;
+		showUpdateToast = $settings?.showUpdateToast ?? true;
+		showChangelog = $settings?.showChangelog ?? true;
 
-		richTextInput = $settings.richTextInput ?? true;
-		promptAutocomplete = $settings.promptAutocomplete ?? false;
-		largeTextAsFile = $settings.largeTextAsFile ?? false;
-		copyFormatted = $settings.copyFormatted ?? false;
+		showEmojiInCall = $settings?.showEmojiInCall ?? false;
+		voiceInterruption = $settings?.voiceInterruption ?? false;
 
-		collapseCodeBlocks = $settings.collapseCodeBlocks ?? false;
-		expandDetails = $settings.expandDetails ?? false;
+		richTextInput = $settings?.richTextInput ?? true;
+		promptAutocomplete = $settings?.promptAutocomplete ?? false;
+		largeTextAsFile = $settings?.largeTextAsFile ?? false;
+		copyFormatted = $settings?.copyFormatted ?? false;
 
-		landingPageMode = $settings.landingPageMode ?? '';
-		chatBubble = $settings.chatBubble ?? true;
-		widescreenMode = $settings.widescreenMode ?? false;
-		splitLargeChunks = $settings.splitLargeChunks ?? false;
-		scrollOnBranchChange = $settings.scrollOnBranchChange ?? true;
-		chatDirection = $settings.chatDirection ?? 'auto';
-		userLocation = $settings.userLocation ?? false;
+		collapseCodeBlocks = $settings?.collapseCodeBlocks ?? false;
+		expandDetails = $settings?.expandDetails ?? false;
 
-		notificationSound = $settings.notificationSound ?? true;
+		landingPageMode = $settings?.landingPageMode ?? '';
+		chatBubble = $settings?.chatBubble ?? true;
+		widescreenMode = $settings?.widescreenMode ?? false;
+		splitLargeChunks = $settings?.splitLargeChunks ?? false;
+		scrollOnBranchChange = $settings?.scrollOnBranchChange ?? true;
+		chatDirection = $settings?.chatDirection ?? 'auto';
+		userLocation = $settings?.userLocation ?? false;
 
-		hapticFeedback = $settings.hapticFeedback ?? false;
-		ctrlEnterToSend = $settings.ctrlEnterToSend ?? false;
+		notificationSound = $settings?.notificationSound ?? true;
+		notificationSoundAlways = $settings?.notificationSoundAlways ?? false;
 
-		imageCompression = $settings.imageCompression ?? false;
-		imageCompressionSize = $settings.imageCompressionSize ?? { width: '', height: '' };
+		iframeSandboxAllowSameOrigin = $settings?.iframeSandboxAllowSameOrigin ?? false;
+		iframeSandboxAllowForms = $settings?.iframeSandboxAllowForms ?? false;
+
+		stylizedPdfExport = $settings?.stylizedPdfExport ?? true;
+
+		hapticFeedback = $settings?.hapticFeedback ?? false;
+		ctrlEnterToSend = $settings?.ctrlEnterToSend ?? false;
+
+		imageCompression = $settings?.imageCompression ?? false;
+		imageCompressionSize = $settings?.imageCompressionSize ?? { width: '', height: '' };
 
 		defaultModelId = $settings?.models?.at(0) ?? '';
 		if ($config?.default_models) {
 			defaultModelId = $config.default_models.split(',')[0];
 		}
 
-		backgroundImageUrl = $settings.backgroundImageUrl ?? null;
-		webSearch = $settings.webSearch ?? null;
+		backgroundImageUrl = $settings?.backgroundImageUrl ?? null;
+		webSearch = $settings?.webSearch ?? null;
 	});
 </script>
 
 <form
+	id="tab-interface"
 	class="flex flex-col h-full justify-between space-y-3 text-sm"
 	on:submit|preventDefault={() => {
 		updateInterfaceHandler();
@@ -349,13 +385,39 @@
 
 	<div class=" space-y-3 overflow-y-scroll max-h-[28rem] lg:max-h-full">
 		<div>
-			<div class=" mb-1.5 text-sm font-medium">{$i18n.t('UI')}</div>
+			<h1 class=" mb-1.5 text-sm font-medium">{$i18n.t('UI')}</h1>
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Landing Page Mode')}</div>
+					<div id="high-contrast-mode-label" class=" self-center text-xs">
+						{$i18n.t('High Contrast Mode')} ({$i18n.t('Beta')})
+					</div>
 
 					<button
+						aria-labelledby="high-contrast-mode-label"
+						class="p-1 px-3 text-xs flex rounded-sm transition"
+						on:click={() => {
+							toggleHighContrastMode();
+						}}
+						type="button"
+					>
+						{#if highContrastMode === true}
+							<span class="ml-2 self-center">{$i18n.t('On')}</span>
+						{:else}
+							<span class="ml-2 self-center">{$i18n.t('Off')}</span>
+						{/if}
+					</button>
+				</div>
+			</div>
+
+			<div>
+				<div class=" py-0.5 flex w-full justify-between">
+					<div id="landing-page-mode-label" class=" self-center text-xs">
+						{$i18n.t('Landing Page Mode')}
+					</div>
+
+					<button
+						aria-labelledby="landing-page-mode-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleLandingPageMode();
@@ -373,9 +435,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Chat Bubble UI')}</div>
+					<div id="chat-bubble-ui-label" class=" self-center text-xs">
+						{$i18n.t('Chat Bubble UI')}
+					</div>
 
 					<button
+						aria-labelledby="chat-bubble-ui-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleChatBubble();
@@ -394,11 +459,12 @@
 			{#if !$settings.chatBubble}
 				<div>
 					<div class=" py-0.5 flex w-full justify-between">
-						<div class=" self-center text-xs">
+						<div id="chat-bubble-username-label" class=" self-center text-xs">
 							{$i18n.t('Display the username instead of You in the Chat')}
 						</div>
 
 						<button
+							aria-labelledby="chat-bubble-username-label"
 							class="p-1 px-3 text-xs flex rounded-sm transition"
 							on:click={() => {
 								toggleShowUsername();
@@ -417,13 +483,16 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Widescreen Mode')}</div>
+					<div id="widescreen-mode-label" class=" self-center text-xs">
+						{$i18n.t('Widescreen Mode')}
+					</div>
 
 					<button
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleWidescreenMode();
 						}}
+						aria-labelledby="widescreen-mode-label"
 						type="button"
 					>
 						{#if widescreenMode === true}
@@ -437,9 +506,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Chat direction')}</div>
+					<div id="chat-direction-label" class=" self-center text-xs">
+						{$i18n.t('Chat direction')}
+					</div>
 
 					<button
+						aria-labelledby="chat-direction-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={toggleChangeChatDirection}
 						type="button"
@@ -456,12 +528,13 @@
 			</div>
 
 			<div>
-				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+				<div class="py-0.5 flex w-full justify-between">
+					<div id="notification-sound-label" class=" self-center text-xs">
 						{$i18n.t('Notification Sound')}
 					</div>
 
 					<button
+						aria-labelledby="notification-sound-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleNotificationSound();
@@ -477,38 +550,65 @@
 				</div>
 			</div>
 
+			{#if notificationSound}
+				<div>
+					<div class=" py-0.5 flex w-full justify-between">
+						<div id="play-notification-sound-label" class=" self-center text-xs">
+							{$i18n.t('Always Play Notification Sound')}
+						</div>
+
+						<button
+							aria-labelledby="play-notification-sound-label"
+							class="p-1 px-3 text-xs flex rounded-sm transition"
+							on:click={() => {
+								toggleNotificationSoundAlways();
+							}}
+							type="button"
+						>
+							{#if notificationSoundAlways === true}
+								<span class="ml-2 self-center">{$i18n.t('On')}</span>
+							{:else}
+								<span class="ml-2 self-center">{$i18n.t('Off')}</span>
+							{/if}
+						</button>
+					</div>
+				</div>
+			{/if}
+
 			{#if $user?.role === 'admin'}
 				{#if $config?.private_ai?.enable_upstream_ui}
-					<div>
-						<div class=" py-0.5 flex w-full justify-between">
-							<div class=" self-center text-xs">
-								{$i18n.t('Toast notifications for new updates')}
-							</div>
-
-							<button
-								class="p-1 px-3 text-xs flex rounded-sm transition"
-								on:click={() => {
-									toggleShowUpdateToast();
-								}}
-								type="button"
-							>
-								{#if showUpdateToast === true}
-									<span class="ml-2 self-center">{$i18n.t('On')}</span>
-								{:else}
-									<span class="ml-2 self-center">{$i18n.t('Off')}</span>
-								{/if}
-							</button>
+				<div>
+					<div class=" py-0.5 flex w-full justify-between">
+						<div id="toast-notifications-label" class=" self-center text-xs">
+							{$i18n.t('Toast notifications for new updates')}
 						</div>
+
+						<button
+							aria-labelledby="toast-notifications-label"
+							class="p-1 px-3 text-xs flex rounded-sm transition"
+							on:click={() => {
+								toggleShowUpdateToast();
+							}}
+							type="button"
+						>
+							{#if showUpdateToast === true}
+								<span class="ml-2 self-center">{$i18n.t('On')}</span>
+							{:else}
+								<span class="ml-2 self-center">{$i18n.t('Off')}</span>
+							{/if}
+						</button>
 					</div>
+				</div>
 				{/if}
 
 				<div>
 					<div class=" py-0.5 flex w-full justify-between">
-						<div class=" self-center text-xs">
+						<div id="whats-new-label" class=" self-center text-xs">
 							{$i18n.t(`Show "What's New" modal on login`)}
 						</div>
 
 						<button
+							aria-labelledby="whats-new-label"
 							class="p-1 px-3 text-xs flex rounded-sm transition"
 							on:click={() => {
 								toggleShowChangelog();
@@ -529,9 +629,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Title Auto-Generation')}</div>
+					<div id="auto-generation-label" class=" self-center text-xs">
+						{$i18n.t('Title Auto-Generation')}
+					</div>
 
 					<button
+						aria-labelledby="auto-generation-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleTitleAutoGenerate();
@@ -549,9 +652,33 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Chat Tags Auto-Generation')}</div>
+					<div class=" self-center text-xs">{$i18n.t('Follow-Up Auto-Generation')}</div>
 
 					<button
+						aria-labelledby="auto-generation-label"
+						class="p-1 px-3 text-xs flex rounded-sm transition"
+						on:click={() => {
+							toggleAutoFollowUps();
+						}}
+						type="button"
+					>
+						{#if autoFollowUps === true}
+							<span class="ml-2 self-center">{$i18n.t('On')}</span>
+						{:else}
+							<span class="ml-2 self-center">{$i18n.t('Off')}</span>
+						{/if}
+					</button>
+				</div>
+			</div>
+
+			<div>
+				<div class=" py-0.5 flex w-full justify-between">
+					<div id="chat-tags-label" class=" self-center text-xs">
+						{$i18n.t('Chat Tags Auto-Generation')}
+					</div>
+
+					<button
+						aria-labelledby="chat-tags-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleAutoTags();
@@ -569,11 +696,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+					<div id="detect-artifacts-label" class=" self-center text-xs">
 						{$i18n.t('Detect Artifacts Automatically')}
 					</div>
 
 					<button
+						aria-labelledby="detect-artifacts-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleDetectArtifacts();
@@ -591,11 +719,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+					<div id="auto-copy-label" class=" self-center text-xs">
 						{$i18n.t('Auto-Copy Response to Clipboard')}
 					</div>
 
 					<button
+						aria-labelledby="auto-copy-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleResponseAutoCopy();
@@ -613,11 +742,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+					<div id="rich-input-label" class=" self-center text-xs">
 						{$i18n.t('Rich Text Input for Chat')}
 					</div>
 
 					<button
+						aria-labelledby="rich-input-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleRichTextInput();
@@ -636,11 +766,12 @@
 			{#if $config?.features?.enable_autocomplete_generation && richTextInput}
 				<div>
 					<div class=" py-0.5 flex w-full justify-between">
-						<div class=" self-center text-xs">
+						<div id="prompt-autocompletion-label" class=" self-center text-xs">
 							{$i18n.t('Prompt Autocompletion')}
 						</div>
 
 						<button
+							aria-labelledby="prompt-autocompletion-label"
 							class="p-1 px-3 text-xs flex rounded-sm transition"
 							on:click={() => {
 								togglePromptAutocomplete();
@@ -659,11 +790,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+					<div id="paste-large-label" class=" self-center text-xs">
 						{$i18n.t('Paste Large Text as File')}
 					</div>
 
 					<button
+						aria-labelledby="paste-large-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleLargeTextAsFile();
@@ -681,11 +813,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+					<div id="copy-formatted-label" class=" self-center text-xs">
 						{$i18n.t('Copy Formatted Text')}
 					</div>
 
 					<button
+						aria-labelledby="copy-formatted-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleCopyFormatted();
@@ -703,9 +836,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Always Collapse Code Blocks')}</div>
+					<div id="always-collapse-label" class=" self-center text-xs">
+						{$i18n.t('Always Collapse Code Blocks')}
+					</div>
 
 					<button
+						aria-labelledby="always-collapse-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleCollapseCodeBlocks();
@@ -723,9 +859,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Always Expand Details')}</div>
+					<div id="always-expand-label" class=" self-center text-xs">
+						{$i18n.t('Always Expand Details')}
+					</div>
 
 					<button
+						aria-labelledby="always-expand-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleExpandDetails();
@@ -743,11 +882,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+					<div id="chat-background-label" class=" self-center text-xs">
 						{$i18n.t('Chat Background Image')}
 					</div>
 
 					<button
+						aria-labelledby="chat-background-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							if (backgroundImageUrl !== null) {
@@ -769,10 +909,11 @@
 			</div>
 
 			<div>
-				<div class=" py-0.5 flex w-full justify-between">
+				<div id="allow-user-location-label" class=" py-0.5 flex w-full justify-between">
 					<div class=" self-center text-xs">{$i18n.t('Allow User Location')}</div>
 
 					<button
+						aria-labelledby="allow-user-location-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleUserLocation();
@@ -790,11 +931,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+					<div id="haptic-feedback-label" class=" self-center text-xs">
 						{$i18n.t('Haptic Feedback')} ({$i18n.t('Android')})
 					</div>
 
 					<button
+						aria-labelledby="haptic-feedback-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleHapticFeedback();
@@ -812,11 +954,12 @@
 
 			<!-- <div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+					<div id="fluidly-stream-label" class=" self-center text-xs">
 						{$i18n.t('Fluidly stream large external response chunks')}
 					</div>
 
 					<button
+					aria-labelledby="fluidly-stream-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleSplitLargeChunks();
@@ -834,11 +977,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
+					<div id="enter-key-behavior-label" class=" self-center text-xs">
 						{$i18n.t('Enter Key Behavior')}
 					</div>
 
 					<button
+						aria-labelledby="enter-key-behavior-label"
 						class="p-1 px-3 text-xs flex rounded transition"
 						on:click={() => {
 							togglectrlEnterToSend();
@@ -856,11 +1000,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">
-						{$i18n.t('Scroll to bottom when switching between branches')}
+					<div id="scroll-on-branch-change-label" class=" self-center text-xs">
+						{$i18n.t('Scroll On Branch Change')}
 					</div>
 
 					<button
+						aria-labelledby="scroll-on-branch-change-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							togglesScrollOnBranchChange();
@@ -878,9 +1023,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Web Search in Chat')}</div>
+					<div id="web-search-in-chat-label" class=" self-center text-xs">
+						{$i18n.t('Web Search in Chat')}
+					</div>
 
 					<button
+						aria-labelledby="web-search-in-chat-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleWebSearch();
@@ -898,9 +1046,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('iframe Sandbox Allow Same Origin')}</div>
+					<div id="iframe-sandbox-allow-same-origin-label" class=" self-center text-xs">
+						{$i18n.t('iframe Sandbox Allow Same Origin')}
+					</div>
 
 					<button
+						aria-labelledby="iframe-sandbox-allow-same-origin-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleIframeSandboxAllowSameOrigin();
@@ -918,9 +1069,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('iframe Sandbox Allow Forms')}</div>
+					<div id="iframe-sandbox-allow-forms-label" class=" self-center text-xs">
+						{$i18n.t('iframe Sandbox Allow Forms')}
+					</div>
 
 					<button
+						aria-labelledby="iframe-sandbox-allow-forms-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleIframeSandboxAllowForms();
@@ -936,6 +1090,29 @@
 				</div>
 			</div>
 
+			<div>
+				<div class=" py-0.5 flex w-full justify-between">
+					<div id="stylized-pdf-export-label" class=" self-center text-xs">
+						{$i18n.t('Stylized PDF Export')}
+					</div>
+
+					<button
+						aria-labelledby="stylized-pdf-export-label"
+						class="p-1 px-3 text-xs flex rounded-sm transition"
+						on:click={() => {
+							toggleStylizedPdfExport();
+						}}
+						type="button"
+					>
+						{#if stylizedPdfExport === true}
+							<span class="ml-2 self-center">{$i18n.t('On')}</span>
+						{:else}
+							<span class="ml-2 self-center">{$i18n.t('Off')}</span>
+						{/if}
+					</button>
+				</div>
+			</div>
+
 			<div class=" my-1.5 text-sm font-medium">{$i18n.t('Voice')}</div>
 
 			<div>
@@ -943,6 +1120,7 @@
 					<div class=" self-center text-xs">{$i18n.t('Allow Voice Interruption in Call')}</div>
 
 					<button
+						aria-labelledby="allow-voice-interruption-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleVoiceInterruption();
@@ -960,9 +1138,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Display Emoji in Call')}</div>
+					<div id="display-emoji-label" class=" self-center text-xs">
+						{$i18n.t('Display Emoji in Call')}
+					</div>
 
 					<button
+						aria-labelledby="display-emoji-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleEmojiInCall();
@@ -982,9 +1163,12 @@
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
-					<div class=" self-center text-xs">{$i18n.t('Image Compression')}</div>
+					<div id="image-compression-label" class=" self-center text-xs">
+						{$i18n.t('Image Compression')}
+					</div>
 
 					<button
+						aria-labelledby="image-compression-label"
 						class="p-1 px-3 text-xs flex rounded-sm transition"
 						on:click={() => {
 							toggleImageCompression();
@@ -1003,9 +1187,14 @@
 			{#if imageCompression}
 				<div>
 					<div class=" py-0.5 flex w-full justify-between text-xs">
-						<div class=" self-center text-xs">{$i18n.t('Image Max Compression Size')}</div>
+						<div id="image-compression-size-label" class=" self-center text-xs">
+							{$i18n.t('Image Max Compression Size')}
+						</div>
 
 						<div>
+							<label class="sr-only" for="image-comp-width"
+								>{$i18n.t('Image Max Compression Size width')}</label
+							>
 							<input
 								bind:value={imageCompressionSize.width}
 								type="number"
@@ -1013,6 +1202,9 @@
 								min="0"
 								placeholder="Width"
 							/>x
+							<label class="sr-only" for="image-comp-height"
+								>{$i18n.t('Image Max Compression Size height')}</label
+							>
 							<input
 								bind:value={imageCompressionSize.height}
 								type="number"
