@@ -125,7 +125,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 				<span class=" capitalize">{$config?.license_metadata?.type}</span> license purchased by
 				<span class=" capitalize">{$config?.license_metadata?.organization_name}</span>
 			</div>
-		{:else if $config?.private_ai?.enable_upstream_ui}
+		{:else}
 			<div class="flex space-x-1">
 				<a href="https://discord.gg/5rJgQTnV4s" target="_blank">
 					<img
