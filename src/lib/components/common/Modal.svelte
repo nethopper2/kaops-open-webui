@@ -43,6 +43,18 @@
 		return modals.length && modals[modals.length - 1] === modalElement;
 	};
 
+	// REMINDER: These focus trap functions were added to work with the vue Dialog when it comes from within a Modal.
+	export function activateFocusTrap() {
+		if (focusTrap) {
+			focusTrap.activate();
+		}
+	}
+	export function deactivateFocusTrap() {
+		if (focusTrap) {
+			focusTrap.deactivate();
+		}
+	}
+
 	onMount(() => {
 		mounted = true;
 	});

@@ -5,6 +5,8 @@ import Tooltip from '$lib/components/common/Tooltip.svelte';
 import { config } from '$lib/stores';
 import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue';
 
+ let TModalRef: Modal
+
 // The PopupMetadataEdit component instance.
 	let TRefFilePopup: { visible: boolean, fileItem: FileItem, i18n: { t: (s: string) => string }; }
 	const i18n = getContext('i18n');
@@ -58,7 +60,7 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 	};
 </script>
 
-<Modal size="lg" bind:show>
+<Modal size="lg" bind:show bind:this={TModalRef}>
 	<div>
 		<div class=" flex justify-between dark:text-gray-300 px-5 pt-4 pb-2">
 			<div class=" text-lg font-medium self-center capitalize">
@@ -132,12 +134,13 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 									<button
 										class="flex text-xs items-center space-x-1 px-2 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-200 transition"
 										on:click={() => {
-											TRefFilePopup.fileItem = {
+											// Stop the focus trap in teh Modal so the vue Dialog can be clicked.
+											TModalRef.deactivateFocusTrap()
+
+											TRefFilePopup.show({
 												path: document?.metadata?.file_id,
 												isDirectory: false,
-											}
-											TRefFilePopup.i18n = $i18n;
-											TRefFilePopup.visible = true;
+											})
 										}}
 										aria-label="Edit Metadata"
 									>
@@ -229,10 +232,10 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 				{/each}
 			</div>
 		</div>
-
-		<popup-metadata-edit
-			bind:this={TRefFilePopup}
-			on:update:visible={() => TRefFilePopup.visible = false}
-		/>
 	</div>
+
+	<popup-metadata-edit
+		bind:this={TRefFilePopup}
+		i18n={$i18n}
+	/>
 </Modal>
