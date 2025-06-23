@@ -246,9 +246,15 @@
 						dispatch('submit', e.detail);
 					}}
 				/>
+
+				<div class="flex items-center justify-end text-[10px] pr-8 gap-2">
+					<span class="opacity-70">Enhanced by</span>
+					<img src="static/private-ai/nh-logo-signature.svg" style="height: 20px;" />
+				</div>
 			</div>
 		</div>
 	</div>
+
 	<div class="mx-auto max-w-2xl font-primary mt-2" in:fade={{ duration: 200, delay: 200 }}>
 		<!-- <div class="mx-5">
 			<Suggestions
