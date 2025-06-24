@@ -258,12 +258,6 @@
 						dispatch('submit', e.detail);
 					}}
 				/>
-
-				<div class="flex items-center justify-end text-[10px] pr-8 gap-2">
-					<span class="opacity-70">{$i18n.t('Enhanced by')}</span>
-					<img src="static/private-ai/nh-logo-signature.svg" style="height: 20px;" alt="logo"
-							 draggable="false" />
-				</div>
 			</div>
 		</div>
 	</div>

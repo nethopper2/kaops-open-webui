@@ -22,7 +22,8 @@
 		tools,
 		user as _user,
 		showControls,
-		TTSWorker
+		TTSWorker,
+		isPublicModelChosen
 	} from '$lib/stores';
 
 	import {
@@ -57,6 +58,8 @@
 	import Sparkles from '../icons/Sparkles.svelte';
 
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
+	import NethopperLogo from '$lib/components/private-ai/NethopperLogo.svelte';
+	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -195,6 +198,9 @@
 			behavior: 'smooth'
 		});
 	};
+
+	let inputBgClasses = ''
+	$: inputBgClasses = $isPublicModelChosen ? 'bg-red-600/20 dark:bg-red-900/70' : 'bg-white/90 dark:bg-gray-400/5 dark:text-gray-100'
 
 	const screenCaptureHandler = async () => {
 		try {
@@ -499,6 +505,15 @@
 
 {#if loaded}
 	<div class="w-full font-primary">
+		{#if $isPublicModelChosen}
+			<div class="flex items-center px-8 pb-1 gap-1 text-xs">
+				<Tooltip content={$i18n.t('Do not send information you wish to keep private.')} placement="left">
+					<ExclamationTriangle/>
+				</Tooltip>
+				{$i18n.t('Warning: Public model chosen! Information you send will be visible to everyone.')}
+			</div>
+		{/if}
+
 		<div class=" mx-auto inset-x-0 bg-transparent flex justify-center">
 			<div
 				class="flex flex-col px-3 {($settings?.widescreenMode ?? null)
@@ -648,7 +663,7 @@
 							}}
 						>
 							<div
-								class="flex-1 flex flex-col relative w-full shadow-lg rounded-3xl border border-gray-50 dark:border-gray-850 hover:border-gray-100 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800 transition px-1 bg-white/90 dark:bg-gray-400/5 dark:text-gray-100"
+								class="flex-1 flex flex-col relative w-full shadow-lg rounded-3xl border border-gray-50 dark:border-gray-850 hover:border-gray-100 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800 transition px-1 {inputBgClasses}"
 								dir={$settings?.chatDirection ?? 'auto'}
 							>
 								{#if files.length > 0}
@@ -1580,6 +1595,8 @@
 					{/if}
 				</div>
 			</div>
+
+			<NethopperLogo/>
 		</div>
 	</div>
 {/if}
