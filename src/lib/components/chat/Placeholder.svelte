@@ -18,6 +18,8 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import MessageInput from './MessageInput.svelte';
+	import { isPrivateAiModel } from '$lib/utils/privateAi';
+	import LockClosed from '$lib/components/icons/LockClosed.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -157,6 +159,16 @@
 					class=" text-3xl @sm:text-3xl line-clamp-1 flex items-center"
 					in:fade={{ duration: 100 }}
 				>
+					{#if isPrivateAiModel(models[selectedModelIdx])}
+						<Tooltip
+							content={$i18n.t('Private AI Model')}
+							placement="top"
+							className=" flex items-center mr-1"
+						>
+							<LockClosed/>
+						</Tooltip>
+					{/if}
+
 					{#if models[selectedModelIdx]?.name}
 						<Tooltip
 							content={models[selectedModelIdx]?.name}
@@ -249,7 +261,8 @@
 
 				<div class="flex items-center justify-end text-[10px] pr-8 gap-2">
 					<span class="opacity-70">{$i18n.t('Enhanced by')}</span>
-					<img src="static/private-ai/nh-logo-signature.svg" style="height: 20px;" />
+					<img src="static/private-ai/nh-logo-signature.svg" style="height: 20px;" alt="logo"
+							 draggable="false" />
 				</div>
 			</div>
 		</div>

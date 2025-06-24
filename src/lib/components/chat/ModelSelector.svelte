@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { models, showSettings, settings, user, mobile, config } from '$lib/stores';
+import { models, showSettings, settings, user, mobile, config, isPublicModelChosen, type Model } from '$lib/stores';
 	import { onMount, tick, getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import Selector from './ModelSelector/Selector.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 
 	import { updateUserSettings } from '$lib/apis/users';
+	import { isPrivateAiModel } from '$lib/utils/privateAi';
+	import LockClosed from '$lib/components/icons/LockClosed.svelte';
 	const i18n = getContext('i18n');
 
 	export let selectedModels = [''];
@@ -43,6 +45,53 @@
 			$models.map((m) => m.id).includes(model) ? model : ''
 		);
 	}
+
+
+	// ============================================================================
+	// NOTE: For now we are only handling setting isPublicModelChosen from here
+	//       which will only occur from the chat area (the only area that
+	//       currently cares since the user is making chat content choices from there)
+	//       We can move to a more global way of handlig this later if needed.
+	// ============================================================================
+	// Handle ongoing changes
+	$: updatePublicModelStatus(selectedModels, $models);
+
+	// Handle the initial load
+	onMount(() => {
+		updatePublicModelStatus(selectedModels, $models);
+	});
+
+	function updatePublicModelStatus(selectedModels: string[], modelsArray: Model[]) {
+		if (!selectedModels) {
+			isPublicModelChosen.set(true);
+			return;
+		}
+
+		if (!Array.isArray(modelsArray)) {
+			isPublicModelChosen.set(true);
+			return;
+		}
+
+		if (selectedModels.length === 0) {
+			isPublicModelChosen.set(true);
+			return;
+		}
+
+		// Check if ANY selected model is public (not private)
+		const hasPublicModel = selectedModels.some(modelId => {
+			// Skip empty model IDs
+			if (!modelId || modelId === '') {
+				return false;
+			}
+
+			const model = modelsArray.find((m: Model) => m.id === modelId);
+			const isPrivate = model ? isPrivateAiModel(model) : false;
+			const isPublic = !isPrivate;
+			return isPublic;
+		});
+
+		isPublicModelChosen.set(hasPublicModel);
+	}
 </script>
 
 <div class="flex flex-col w-full items-start">
@@ -67,6 +116,16 @@
 					/>
 				</div>
 			</div>
+
+			{#if isPrivateAiModel($models.find((model) => model.id === selectedModel))}
+				<Tooltip
+					content={$i18n.t('Private AI Model')}
+					placement="top"
+					className=" flex items-center mr-1"
+				>
+					<LockClosed/>
+				</Tooltip>
+			{/if}
 
 			{#if $user?.role === 'admin' || ($user?.permissions?.chat?.multiple_models ?? true)}
 				{#if selectedModelIdx === 0}
