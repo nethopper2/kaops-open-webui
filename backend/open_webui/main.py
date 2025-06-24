@@ -1519,8 +1519,6 @@ async def get_app_config(request: Request):
     if user is None:
         onboarding = user_count == 0
 
-    log.info(f"ENABLE_SSO_DATA_SYNC: {ENABLE_SSO_DATA_SYNC}")
-
     return {
         **({"onboarding": True} if onboarding else {}),
         "status": True,
@@ -1541,7 +1539,7 @@ async def get_app_config(request: Request):
             "enable_signup": app.state.config.ENABLE_SIGNUP,
             "enable_login_form": app.state.config.ENABLE_LOGIN_FORM,
             "enable_websocket": ENABLE_WEBSOCKET_SUPPORT,
-            "enable_file_ingestion": ENABLE_SSO_DATA_SYNC and ENABLE_SSO_DATA_SYNC.lower() == 'true',
+            "enable_file_ingestion": ENABLE_SSO_DATA_SYNC if isinstance(ENABLE_SSO_DATA_SYNC, bool) else (ENABLE_SSO_DATA_SYNC.lower() == 'true' if isinstance(ENABLE_SSO_DATA_SYNC, str) else False),
             **(
                 {
                     "enable_direct_connections": app.state.config.ENABLE_DIRECT_CONNECTIONS,
