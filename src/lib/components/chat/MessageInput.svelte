@@ -60,6 +60,7 @@
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
 	import NethopperLogo from '$lib/components/private-ai/NethopperLogo.svelte';
 	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte';
+	import { appHooks } from '$lib/utils/hooks';
 
 	const i18n = getContext('i18n');
 
@@ -506,11 +507,26 @@
 {#if loaded}
 	<div class="w-full font-primary">
 		{#if $isPublicModelChosen}
-			<div class="flex items-center px-8 pb-1 gap-1 text-xs">
-				<Tooltip content={$i18n.t('Do not send information you wish to keep private.')} placement="left">
-					<ExclamationTriangle/>
-				</Tooltip>
-				{$i18n.t('Warning: Public model chosen! Information you send will be visible to everyone.')}
+			<div class="px-8 pb-1 text-xs">
+				<div class="flex items-center gap-1">
+					<Tooltip content={$i18n.t('Do not send information you wish to keep private.')} placement="left">
+						<ExclamationTriangle/>
+					</Tooltip>
+					{$i18n.t('Warning: Public model chosen! Information you send will be visible to everyone.')}
+				</div>
+				<div class="pl-1">
+					<button
+						class="flex text-xs items-center space-x-1 px-2 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-200 transition"
+						on:click={() => {
+										appHooks.callHook('models.select.privateOnly')
+										}}
+						aria-label="Remove public model(s)"
+					>
+						<div class="self-center mr-2 font-medium line-clamp-1">
+							{$i18n.t('Remove public model(s)')}
+						</div>
+					</button>
+				</div>
 			</div>
 		{/if}
 

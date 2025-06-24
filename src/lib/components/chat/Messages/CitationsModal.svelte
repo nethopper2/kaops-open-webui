@@ -145,7 +145,7 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 										aria-label="Edit Metadata"
 									>
 										<div class="self-center mr-2 font-medium line-clamp-1">
-											Edit Metadata
+											{$i18n.t('Edit Metadata')}
 										</div>
 									</button>
 								</div>

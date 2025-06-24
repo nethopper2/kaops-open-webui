@@ -1,6 +1,6 @@
 <script lang="ts">
 import { models, showSettings, settings, user, mobile, config, isPublicModelChosen, type Model } from '$lib/stores';
-	import { onMount, tick, getContext } from 'svelte';
+import { onMount, tick, getContext, onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import Selector from './ModelSelector/Selector.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
@@ -8,6 +8,7 @@ import { models, showSettings, settings, user, mobile, config, isPublicModelChos
 	import { updateUserSettings } from '$lib/apis/users';
 	import { isPrivateAiModel } from '$lib/utils/privateAi';
 	import LockClosed from '$lib/components/icons/LockClosed.svelte';
+import { appHooks } from '$lib/utils/hooks';
 	const i18n = getContext('i18n');
 
 	export let selectedModels = [''];
@@ -56,10 +57,65 @@ import { models, showSettings, settings, user, mobile, config, isPublicModelChos
 	// Handle ongoing changes
 	$: updatePublicModelStatus(selectedModels, $models);
 
+	let unregisterHooks: () => void;
+
 	// Handle the initial load
 	onMount(() => {
+		unregisterHooks = appHooks.hook('models.select.privateOnly', () => {
+			clearPublicModelSelection()
+		})
 		updatePublicModelStatus(selectedModels, $models);
 	});
+
+	onDestroy(() => {
+		unregisterHooks();
+	})
+
+	function clearPublicModelSelection() {
+		if (!selectedModels || !Array.isArray(selectedModels) || selectedModels.length === 0) {
+			return;
+		}
+
+		if (!$models || !Array.isArray($models) || $models.length === 0) {
+			return;
+		}
+
+		// Filter out public models, keeping only private models
+		const privateModelsOnly = selectedModels.filter(modelId => {
+			// Skip empty model IDs
+			if (!modelId || modelId === '') {
+				return false;
+			}
+
+			const model = $models.find(m => m.id === modelId);
+			if (!model) {
+				return false;
+			}
+
+			// Keep only private models (remove public ones)
+			return isPrivateAiModel(model);
+		});
+
+		// If we have private models remaining, use those
+		if (privateModelsOnly.length > 0) {
+			selectedModels = privateModelsOnly;
+			console.log('Cleared public models, remaining private models:', privateModelsOnly);
+			return;
+		}
+
+		// If no private models remain, find and select the first available private model
+		const availablePrivateModels = $models.filter(model => isPrivateAiModel(model));
+
+		if (availablePrivateModels.length > 0) {
+			// Select the first available private model
+			selectedModels = [availablePrivateModels[0].id];
+			console.log('No private models in selection, auto-selected first private model:', availablePrivateModels[0].id);
+		} else {
+			// No private models available at all, fallback to empty selection
+			selectedModels = [''];
+			console.log('No private models available, cleared selection');
+		}
+	}
 
 	function updatePublicModelStatus(selectedModels: string[], modelsArray: Model[]) {
 		if (!selectedModels) {
