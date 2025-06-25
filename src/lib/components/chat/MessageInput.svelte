@@ -61,6 +61,7 @@
 	import NethopperLogo from '$lib/components/private-ai/NethopperLogo.svelte';
 	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte';
 	import { appHooks } from '$lib/utils/hooks';
+	import LockClosed from '../icons/LockClosed.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -201,7 +202,7 @@
 	};
 
 	let inputBgClasses = ''
-	$: inputBgClasses = $isPublicModelChosen ? 'bg-red-600/20 dark:bg-red-900/70' : 'bg-white/90 dark:bg-gray-400/5 dark:text-gray-100'
+	$: inputBgClasses = $isPublicModelChosen ? 'bg-orange-200/60 dark:bg-yellow-600/25' : 'bg-white/90 dark:bg-gray-400/5 dark:text-gray-100'
 
 	const screenCaptureHandler = async () => {
 		try {
@@ -512,20 +513,9 @@
 					<Tooltip content={$i18n.t('Do not send information you wish to keep private.')} placement="left">
 						<ExclamationTriangle/>
 					</Tooltip>
-					{$i18n.t('Warning: Public model chosen! Information you send will be visible to everyone.')}
-				</div>
-				<div class="pl-1">
-					<button
-						class="flex text-xs items-center space-x-1 px-2 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-200 transition"
-						on:click={() => {
-										appHooks.callHook('models.select.privateOnly')
-										}}
-						aria-label="Remove public model(s)"
-					>
-						<div class="self-center mr-2 font-medium line-clamp-1">
-							{$i18n.t('Remove public model(s)')}
-						</div>
-					</button>
+
+					<span class="text-orange-700 dark:bg-transparent dark:text-amber-300 px-1">Warning! </span>
+					{$i18n.t('Public model chosen! Information you send will be visible to the internet.')}
 				</div>
 			</div>
 		{/if}
@@ -1307,6 +1297,7 @@
 											/>
 
 											<div class="flex gap-1 items-center overflow-x-auto scrollbar-none flex-1">
+
 												{#if showToolsButton}
 													<Tooltip
 														content={$i18n.t('{{COUNT}} Available Tools', {
@@ -1432,6 +1423,21 @@
 									</div>
 
 									<div class="self-end flex space-x-1 mr-1 shrink-0">
+
+										{#if $isPublicModelChosen}
+										<Tooltip content={$i18n.t('Use private model')}>
+											<button
+												class="flex items-center justify-center bg-white hover:bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-800 transition rounded-full p-1.5 mr-0.5 w-8 h-8"
+												on:click={() => {
+																appHooks.callHook('models.select.privateOnly')
+																}}
+												aria-label="Use private model"
+											>
+												<LockClosed/>
+											</button>
+										</Tooltip>
+										{/if}
+
 										{#if (!history?.currentId || history.messages[history.currentId]?.done == true) && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
 											<!-- {$i18n.t('Record voice')} -->
 											<Tooltip content={$i18n.t('Dictate')}>

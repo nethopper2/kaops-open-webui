@@ -175,7 +175,7 @@
 							placement="top"
 							className=" flex items-center "
 						>
-							<span class="line-clamp-1">
+							<span class="line-clamp-1 text-left">
 								{models[selectedModelIdx]?.name}
 							</span>
 						</Tooltip>
