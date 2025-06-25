@@ -28,6 +28,9 @@
 
 	let ldapUsername = '';
 
+	let brandingLogo = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom)?.logo : '';
+	let bgImageAuth = '';
+
 	const querystringValue = (key) => {
 		const querystring = window.location.search;
 		const urlParams = new URLSearchParams(querystring);
@@ -114,28 +117,37 @@
 
 	let onboarding = false;
 
-	async function setLogoImage() {
-		await tick();
-		const logo = document.getElementById('logo');
+  async function setLogoImage() {
+    await tick();
+    const logo = document.getElementById('logo');
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    const webuiCustom = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom) : {};
 
-		if (logo) {
-			const isDarkMode = document.documentElement.classList.contains('dark');
+    // Set background image based on theme
+    if (isDarkMode) {
+      console.log('Dark mode detected');
+      bgImageAuth = webuiCustom?.bgImageAuth || '';
+    } else {
+      console.log('Light mode detected');
+      bgImageAuth = webuiCustom?.bgImageAuthLight || '';
+    }
 
-			if (isDarkMode) {
-				const darkImage = new Image();
-				darkImage.src = '/static/favicon-dark.png';
+    if (logo) {
+        if (isDarkMode) {
+            const darkImage = new Image();
+            darkImage.src = '/static/favicon-dark.png';
 
-				darkImage.onload = () => {
-					logo.src = '/static/favicon-dark.png';
-					logo.style.filter = ''; // Ensure no inversion is applied if favicon-dark.png exists
-				};
+            darkImage.onload = () => {
+                logo.src = '/static/favicon-dark.png';
+                logo.style.filter = ''; // Ensure no inversion is applied
+            };
 
-				darkImage.onerror = () => {
-					logo.style.filter = 'invert(1)'; // Invert image if favicon-dark.png is missing
-				};
-			}
-		}
-	}
+            darkImage.onerror = () => {
+                logo.style.filter = 'invert(1)'; // Invert image if favicon-dark.png is missing
+            };
+        }
+    }
+  }
 
 	onMount(async () => {
 		if ($user !== undefined) {
@@ -170,7 +182,24 @@
 />
 
 <div class="w-full h-screen max-h-[100dvh] text-white relative">
-	<div class="w-full h-full absolute top-0 left-0 bg-white dark:bg-black"></div>
+	{#if bgImageAuth}
+		<!-- ::before pseudo-element as a div -->
+		<div 
+			class="pointer-events-none absolute inset-0 -z-20"
+			style="
+				background: url('{bgImageAuth}') center/cover no-repeat;
+				filter: brightness(0.4);
+				content: '';
+			">
+		</div>
+		<!-- ::after pseudo-element as a div -->
+		<div 
+			class="pointer-events-none absolute inset-0 -z-10 bg-white/70 dark:bg-black/30"
+			style="content: '';">
+		</div>
+	{:else}
+		<div class="w-full h-full absolute top-0 left-0 bg-white dark:bg-black"></div>
+	{/if}
 
 	<div class="w-full absolute top-0 left-0 right-0 h-8 drag-region" />
 
@@ -217,17 +246,28 @@
 							}}
 						>
 							<div class="mb-1">
+								{#if brandingLogo}
+									<img
+										src={brandingLogo}
+										alt="Logo"
+										class="mx-auto mb-8"
+                    style="max-height:25px;"
+									/>              
+								{/if}                
 								<div class=" text-2xl font-medium">
 									{#if $config?.onboarding ?? false}
 										{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
 									{:else if mode === 'ldap'}
 										{$i18n.t(`Sign in to {{WEBUI_NAME}} with LDAP`, { WEBUI_NAME: $WEBUI_NAME })}
-									{:else if mode === 'signin'}
-										{$i18n.t(`Sign in to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
+                  {:else if mode === 'signin'}
+                    {$i18n.t(`Sign in to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME.replace(/\s*\([^)]*\)/g, '') || '' })}                    
 									{:else}
 										{$i18n.t(`Sign up to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
 									{/if}
 								</div>
+                <div class="text-lg font-normal">
+                  {$i18n.t(`{{WEBUI_NAME}}`, { WEBUI_NAME: 'Open WebUI' })}
+                </div>
 
 								{#if $config?.onboarding ?? false}
 									<div class="mt-1 text-xs font-medium text-gray-600 dark:text-gray-500">
@@ -279,11 +319,11 @@
 											<label for="email" class="text-sm font-medium text-left mb-1 block"
 												>{$i18n.t('Email')}</label
 											>
-											<input
+                      <input
 												bind:value={email}
 												type="email"
 												id="email"
-												class="my-0.5 w-full text-sm outline-hidden bg-transparent text-gray-400"
+                        class="transition rounded-sm font-medium p-2 my-0.5 w-full text-sm text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white "
 												autocomplete="email"
 												name="email"
 												placeholder={$i18n.t('Enter Your Email')}
@@ -300,7 +340,7 @@
 											bind:value={password}
 											type="password"
 											id="password"
-											class="my-0.5 w-full text-sm outline-hidden bg-transparent text-gray-400"
+                      class="transition rounded-sm font-medium p-2 my-0.5 w-full text-sm text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white "
 											placeholder={$i18n.t('Enter Your Password')}
 											autocomplete="current-password"
 											name="current-password"
@@ -320,7 +360,7 @@
 										</button>
 									{:else}
 										<button
-											class="text-gray-300 bg-gray-100/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
+											class="text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
 											type="submit"
 										>
 											{mode === 'signin'

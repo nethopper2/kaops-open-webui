@@ -238,6 +238,7 @@ type Config = {
 		webui_custom?: {
 			logo?: string;
 			bgImageAuth?: string;
+      bgImageAuthLight?: string;
 		};
 	};
 };
