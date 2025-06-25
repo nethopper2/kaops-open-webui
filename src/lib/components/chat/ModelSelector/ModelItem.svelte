@@ -13,6 +13,8 @@
 	import ModelItemMenu from './ModelItemMenu.svelte';
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
 	import { toast } from 'svelte-sonner';
+	import LockClosed from '$lib/components/icons/LockClosed.svelte';
+	import { isPrivateAiModel } from '$lib/utils/privateAi';
 
 	const i18n = getContext('i18n');
 
@@ -132,6 +134,16 @@
 				{/if}
 
 				<!-- {JSON.stringify(item.info)} -->
+
+				{#if isPrivateAiModel(item.model)}
+					<Tooltip
+						content={$i18n.t('Private AI Model')}
+						placement="top"
+						className=" flex items-center mr-1"
+					>
+						<LockClosed/>
+					</Tooltip>
+				{/if}
 
 				{#if item.model?.direct}
 					<Tooltip content={`${$i18n.t('Direct')}`}>

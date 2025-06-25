@@ -22,7 +22,8 @@
 		tools,
 		user as _user,
 		showControls,
-		TTSWorker
+		TTSWorker,
+		isPublicModelChosen
 	} from '$lib/stores';
 
 	import {
@@ -57,6 +58,10 @@
 	import Sparkles from '../icons/Sparkles.svelte';
 
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
+	import NethopperLogo from '$lib/components/private-ai/NethopperLogo.svelte';
+	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte';
+	import { appHooks } from '$lib/utils/hooks';
+	import LockClosed from '../icons/LockClosed.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -195,6 +200,9 @@
 			behavior: 'smooth'
 		});
 	};
+
+	let inputBgClasses = ''
+	$: inputBgClasses = $isPublicModelChosen ? 'bg-orange-200/60 dark:bg-yellow-600/25' : 'bg-white/90 dark:bg-gray-400/5 dark:text-gray-100'
 
 	const screenCaptureHandler = async () => {
 		try {
@@ -499,6 +507,19 @@
 
 {#if loaded}
 	<div class="w-full font-primary">
+		{#if $isPublicModelChosen}
+			<div class="px-8 pb-1 text-xs">
+				<div class="flex items-center gap-1">
+					<Tooltip content={$i18n.t('Do not send information you wish to keep private.')} placement="left">
+						<ExclamationTriangle/>
+					</Tooltip>
+
+					<span class="text-orange-700 dark:bg-transparent dark:text-amber-300 px-1">Warning! </span>
+					{$i18n.t('Public model chosen! Information you send will be visible to the internet.')}
+				</div>
+			</div>
+		{/if}
+
 		<div class=" mx-auto inset-x-0 bg-transparent flex justify-center">
 			<div
 				class="flex flex-col px-3 {($settings?.widescreenMode ?? null)
@@ -648,7 +669,7 @@
 							}}
 						>
 							<div
-								class="flex-1 flex flex-col relative w-full shadow-lg rounded-3xl border border-gray-50 dark:border-gray-850 hover:border-gray-100 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800 transition px-1 bg-white/90 dark:bg-gray-400/5 dark:text-gray-100"
+								class="flex-1 flex flex-col relative w-full shadow-lg rounded-3xl border border-gray-50 dark:border-gray-850 hover:border-gray-100 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800 transition px-1 {inputBgClasses}"
 								dir={$settings?.chatDirection ?? 'auto'}
 							>
 								{#if files.length > 0}
@@ -1276,6 +1297,7 @@
 											/>
 
 											<div class="flex gap-1 items-center overflow-x-auto scrollbar-none flex-1">
+
 												{#if showToolsButton}
 													<Tooltip
 														content={$i18n.t('{{COUNT}} Available Tools', {
@@ -1401,6 +1423,21 @@
 									</div>
 
 									<div class="self-end flex space-x-1 mr-1 shrink-0">
+
+										{#if $isPublicModelChosen}
+										<Tooltip content={$i18n.t('Use private model')}>
+											<button
+												class="flex items-center justify-center bg-white hover:bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-800 transition rounded-full p-1.5 mr-0.5 w-8 h-8"
+												on:click={() => {
+																appHooks.callHook('models.select.privateOnly')
+																}}
+												aria-label="Use private model"
+											>
+												<LockClosed/>
+											</button>
+										</Tooltip>
+										{/if}
+
 										{#if (!history?.currentId || history.messages[history.currentId]?.done == true) && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
 											<!-- {$i18n.t('Record voice')} -->
 											<Tooltip content={$i18n.t('Dictate')}>
@@ -1580,6 +1617,8 @@
 					{/if}
 				</div>
 			</div>
+
+			<NethopperLogo/>
 		</div>
 	</div>
 {/if}
