@@ -15,6 +15,7 @@ from open_webui.models.datatokens import OAuthTokens
 
 from open_webui.models.chats import Chats
 from open_webui.models.groups import Groups, GroupModel, GroupUpdateForm, GroupForm
+from open_webui.utils.data.encryption import encrypt_data
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import BigInteger, Column, String, Text
