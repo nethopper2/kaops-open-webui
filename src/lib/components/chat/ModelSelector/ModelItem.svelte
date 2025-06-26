@@ -74,8 +74,12 @@
 		<div class="flex items-center gap-2">
 			<div class="flex items-center min-w-fit">
 				<Tooltip content={$user?.role === 'admin' ? (item?.value ?? '') : ''} placement="top-start">
+					<!--
+					NOTE: info?.meta?.profile_image_url does not appear to be read from a pipeline at this time.
+					      so for now manually adjust the image for the private models.
+					-->
 					<img
-						src={item.model?.info?.meta?.profile_image_url ?? '/static/favicon.png'}
+						src={isPrivateAiModel(item.model) ? '/static/private-ai/favicon.png' : item.model?.info?.meta?.profile_image_url ?? '/static/favicon.png'}
 						alt="Model"
 						class="rounded-full size-5 flex items-center"
 					/>

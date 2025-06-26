@@ -43,7 +43,7 @@
 	export let id = '';
 	export let value = '';
 	export let placeholder = 'Select a model';
-	export let searchEnabled = true;
+	export let searchEnabled = $config?.private_ai?.enable_upstream_ui ? true : false;
 	export let searchPlaceholder = $i18n.t('Search a model');
 
 	export let showTemporaryChatControl = false;
@@ -412,6 +412,7 @@
 				</div>
 			{/if}
 
+			{#if $config?.private_ai?.enable_upstream_ui}
 			<div class="px-3">
 				{#if tags && items.filter((item) => !(item.model?.info?.meta?.hidden ?? false)).length > 0}
 					<div
@@ -501,6 +502,7 @@
 					</div>
 				{/if}
 			</div>
+			{/if}
 
 			<div class="px-3 max-h-64 overflow-y-auto group relative">
 				{#each filteredItems as item, index}
