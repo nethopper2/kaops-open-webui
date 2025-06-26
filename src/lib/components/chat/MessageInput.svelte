@@ -61,7 +61,6 @@
 	import NethopperLogo from '$lib/components/private-ai/NethopperLogo.svelte';
 	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte';
 	import { appHooks } from '$lib/utils/hooks';
-	import LockClosed from '../icons/LockClosed.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -515,7 +514,7 @@
 					</Tooltip>
 
 					<span class="text-orange-700 dark:bg-transparent dark:text-amber-300 px-1">Warning! </span>
-					{$i18n.t('Public model chosen! Information you send will be visible to the internet.')}
+					{$i18n.t('Public model chosen! Do not enter confidential information in this prompt.')}
 				</div>
 			</div>
 		{/if}
@@ -1433,7 +1432,7 @@
 																}}
 												aria-label="Use private model"
 											>
-												<LockClosed/>
+												<ExclamationTriangle/>
 											</button>
 										</Tooltip>
 										{/if}
