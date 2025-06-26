@@ -9,7 +9,6 @@ from open_webui.env import SRC_LOG_LEVELS
 from open_webui.constants import ERROR_MESSAGES
 from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
-from open_webui.models.users import Users
 from open_webui.utils.data.encryption import encrypt_data, decrypt_data
 from open_webui.models.datatokens import OAuthTokens, OAuthTokenModel
 from open_webui.utils.data.data_ingestion import update_data_source_sync_status, delete_gcs_folder
