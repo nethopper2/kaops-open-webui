@@ -43,7 +43,7 @@
 	export let id = '';
 	export let value = '';
 	export let placeholder = 'Select a model';
-	export let searchEnabled = $config?.private_ai?.enable_upstream_ui ? true : false;
+	export let searchEnabled = true;
 	export let searchPlaceholder = $i18n.t('Search a model');
 
 	export let showTemporaryChatControl = false;
@@ -528,6 +528,7 @@
 					</div>
 				{/each}
 
+				{#if $config?.private_ai?.enable_upstream_ui}
 				{#if !(searchValue.trim() in $MODEL_DOWNLOAD_POOL) && searchValue && ollamaVersion && $user?.role === 'admin'}
           <div class="absolute left-0 w-full border-t-[0.5px] mb-8 border-neutral-300 dark:border-neutral-700" />
 					<Tooltip
@@ -638,6 +639,7 @@
 						</div>
 					</div>
 				{/each}
+				{/if}
 			</div>
 
 			{#if showTemporaryChatControl}
