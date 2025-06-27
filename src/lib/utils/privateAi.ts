@@ -1,6 +1,6 @@
 import type { Model } from '$lib/stores';
 
-export const PRIVATE_AI_MODEL_PREFIX = 'pipeline-'
+export const PRIVATE_AI_MODEL_PREFIX = 'private-ai-'
 
 /**
  * Determines if the provided model is a private AI model.

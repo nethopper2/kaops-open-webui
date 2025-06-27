@@ -412,6 +412,7 @@
 				</div>
 			{/if}
 
+			{#if $config?.private_ai?.enable_upstream_ui}
 			<div class="px-3">
 				{#if tags && items.filter((item) => !(item.model?.info?.meta?.hidden ?? false)).length > 0}
 					<div
@@ -501,6 +502,7 @@
 					</div>
 				{/if}
 			</div>
+			{/if}
 
 			<div class="px-3 max-h-64 overflow-y-auto group relative">
 				{#each filteredItems as item, index}
@@ -526,6 +528,7 @@
 					</div>
 				{/each}
 
+				{#if $config?.private_ai?.enable_upstream_ui}
 				{#if !(searchValue.trim() in $MODEL_DOWNLOAD_POOL) && searchValue && ollamaVersion && $user?.role === 'admin'}
           <div class="absolute left-0 w-full border-t-[0.5px] mb-8 border-neutral-300 dark:border-neutral-700" />
 					<Tooltip
@@ -636,6 +639,7 @@
 						</div>
 					</div>
 				{/each}
+				{/if}
 			</div>
 
 			{#if showTemporaryChatControl}
