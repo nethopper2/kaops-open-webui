@@ -957,7 +957,7 @@ async def get_api_key(user=Depends(get_current_user)):
         raise HTTPException(404, detail=ERROR_MESSAGES.API_KEY_NOT_FOUND)
 
 # User file sync, placed here to avoid a circular dependecy when using socket
-async def get_user_file_data_from_sso_provider(self, user_id: str, provider: str, token: str):
+async def get_user_file_data_from_sso_provider(user_id: str, provider: str, token: str):
         try:
             match provider:
                 case 'google':
