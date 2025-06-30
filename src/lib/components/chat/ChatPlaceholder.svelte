@@ -9,8 +9,7 @@
 
   // NOTE: Keeping the original import for Suggestions.svelte for reference
   //       May allow users to switch between the two components in the future
-	// import Suggestions from './Suggestions.svelte';
-	import SuggestionButtons from './SuggestionButtons.svelte';
+	import Suggestions from './Suggestions.svelte';
 	import { sanitizeResponseContent } from '$lib/utils';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
@@ -143,7 +142,7 @@
 			</div>
 		</div>
 
-		<!-- <div class=" w-full font-primary" in:fade={{ duration: 200, delay: 300 }}>
+		<div class=" w-full font-primary" in:fade={{ duration: 200, delay: 300 }}>
 			<Suggestions
 				className="grid grid-cols-2"
 				suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
@@ -153,20 +152,7 @@
 				on:select={(e) => {
 					submitPrompt(e.detail);
 				}}
-			/>
-		</div> -->
-
-		<div class="mx-0">
-			<SuggestionButtons
-				className="grid grid-cols-2"
-				suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
-					models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
-					$config?.default_prompt_suggestions ??
-					[]}
-				on:select={(e) => {
-					submitPrompt(e.detail);
-				}}
-        on:setInput={setInputPrompt}
+				on:setInput={setInputPrompt}
 			/>
 		</div>
 	</div>

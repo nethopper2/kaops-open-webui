@@ -27,7 +27,9 @@
 
 	// Update the filteredPrompts if inputValue changes
 	// Only increase version if something wirklich geändert hat
-	$: getFilteredPrompts(inputValue);
+	$: if (fuse && inputValue !== undefined) {
+		getFilteredPrompts(inputValue);
+	}
 
 	// Helper function to check if arrays are the same
 	// (based on unique IDs oder content)
@@ -42,6 +44,11 @@
 	}
 
 	const getFilteredPrompts = (inputValue) => {
+		if (!fuse) {
+			filteredPrompts = [];
+			return;
+		}
+
 		if (inputValue.length > 500) {
 			filteredPrompts = [];
 		} else {
@@ -59,8 +66,18 @@
 	};
 
 	$: if (suggestionPrompts) {
-		sortedPrompts = [...(suggestionPrompts ?? [])].sort(() => Math.random() - 0.5);
+		// sortedPrompts = [...(suggestionPrompts ?? [])].sort(() => Math.random() - 0.5);
+		sortedPrompts = [...(suggestionPrompts ?? [])];
 		getFilteredPrompts(inputValue);
+	}
+
+	// Computed property to determine if there is text input
+	$: hasInput = inputValue.length > 0;
+
+	// Function to clear the input value
+	function clearInput() {
+		inputValue = '';
+		dispatch('setInput', { value: ''})
 	}
 </script>
 
@@ -68,6 +85,14 @@
 	{#if filteredPrompts.length > 0}
 		<Bolt />
 		{$i18n.t('Suggested')}
+		{#if hasInput}
+			<button
+				on:click={clearInput}
+				class="ml-4 text-neutral-500 text-xs"
+			>
+				{$i18n.t('clear')}
+			</button>
+		{/if}
 	{:else}
 		<!-- Keine Vorschläge -->
 
