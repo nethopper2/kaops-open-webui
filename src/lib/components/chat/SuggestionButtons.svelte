@@ -25,13 +25,15 @@
   let showMore = false;
   function handleMoreClick() {
     showMore = !showMore;
-  }  
+  }
 	// Initialize Fuse
 	$: fuse = new Fuse(sortedPrompts, fuseOptions);
 
 	// Update the filteredPrompts if inputValue changes
 	// Only increase version if something wirklich geändert hat
-	$: getFilteredPrompts(inputValue);
+	$: if (fuse && inputValue !== undefined) {
+		getFilteredPrompts(inputValue);
+	}
 
 	// Helper function to check if arrays are the same
 	// (based on unique IDs oder content)
@@ -46,7 +48,12 @@
 	}
 
 	const getFilteredPrompts = (inputValue) => {
-    // If the input is too long, don't filter
+		if (!fuse) {
+			filteredPrompts = [];
+			return;
+		}
+
+		// If the input is too long, don't filter
 		if (inputValue.length > 500) {
 			filteredPrompts = [];
 		} else {
@@ -74,7 +81,8 @@
   $: isFilteredPrompts = filteredPrompts.length < sortedPrompts.length;
 
   // TODO: is there a better way to do this? revisit this implementation.
-  $: selectedSuggestion = filteredPrompts.find((p) => p.content === inputValue);
+	let selectedSuggestion
+	$: selectedSuggestion = filteredPrompts.find((p) => p.content === inputValue);
 
   // Computed property to determine if there is text input
   $: hasInput = inputValue.length > 0;
@@ -103,7 +111,7 @@
   function clearInput() {
     inputValue = '';
     dispatch('setInput', { value: ''})
-  }  
+  }
 </script>
 
 <div class="mb-1 flex gap-1 text-xs font-medium items-center text-gray-400 dark:text-gray-600">
@@ -141,7 +149,7 @@
 	{#if hasSuggestions}
 		{#each filteredPrompts as prompt, idx (prompt.id || prompt.content || prompt.image)}
         <button class="group flex flex-shrink-0 whitespace-nowrap h-[35px] items-center gap-1.5 rounded-full border border-neutral-700 px-4 text-start text-[13px] justify-center transition enabled:hover:bg-neutral-600  disabled:cursor-not-allowed"
-        on:click={() => {dispatch('select', prompt.content); selectedSuggestion = prompt.content;}}  
+        on:click={() => {dispatch('select', prompt.content); selectedSuggestion = prompt.content;}}
         >
           {#if prompt.image?.length > 0}
             {@html prompt.image}
@@ -194,14 +202,14 @@
 		animation-timing-function: ease;
 	}
 
-  /* 
-   * NOTE Should not need this custom class. the group-hover 
-   * should work, but does not for some reason 
+  /*
+   * NOTE Should not need this custom class. the group-hover
+   * should work, but does not for some reason
    */
   .group:hover .custom-hover {
     color: white;
   }
   .bg-token-border-light {
       background-color: #ffffff1a;
-  }  
+  }
 </style>
