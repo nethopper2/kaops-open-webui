@@ -894,7 +894,7 @@ async def disconnect_google(background_tasks: BackgroundTasks, user=Depends(get_
         messages.append(msg)
         overall_success = False
     else:
-        google_folder_path = f"{user_id}/Google Drive/" 
+        google_folder_path = f"userResources/{user_id}/Google Drive/" 
         try:
             background_tasks.add_task(
                 delete_gcs_folder,
@@ -1454,8 +1454,8 @@ async def disconnect_microsoft(background_tasks: BackgroundTasks, user=Depends(g
         messages.append(msg)
         overall_success = False
     else:
-        onedrive_folder_path = f"{user_id}/OneDrive/" 
-        sharepoint_folder_path = f"{user_id}/SharePoint/" 
+        onedrive_folder_path = f"userResources/{user_id}/OneDrive/" 
+        sharepoint_folder_path = f"userResources/{user_id}/SharePoint/" 
         try:
 
             background_tasks.add_task(
@@ -2031,7 +2031,7 @@ async def disconnect_slack(background_tasks: BackgroundTasks, user=Depends(get_v
         messages.append(msg)
         overall_success = False
     else:
-        slack_folder_path = f"{user_id}/Slack/"
+        slack_folder_path = f"userResources/{user_id}/Slack/"
         try:
             background_tasks.add_task(
                 delete_gcs_folder,
@@ -2572,7 +2572,7 @@ async def disconnect_atlassian(user=Depends(get_verified_user),
         messages.append(msg)
         overall_success = False
     else:
-        atlassian_folder_path = f"{user_id}/Atlassian/" # Assuming this GCS path
+        atlassian_folder_path = f"userResources/{user_id}/Atlassian/" # Assuming this GCS path
         try:
             gcs_cleanup_success = await delete_gcs_folder(
                 folder_path=atlassian_folder_path,
