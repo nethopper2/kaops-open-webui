@@ -469,11 +469,6 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
 
 @router.post("/signin", response_model=SessionUserResponse)
 async def signin(request: Request, response: Response, form_data: SigninForm, background_tasks: BackgroundTasks):
-
-# ========================================================================
-# START Fareed verify, fix & cleanup as needed.
-# ========================================================================
-
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
@@ -556,24 +551,6 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
 
             if trusted_groups:
                 Groups.sync_groups_by_group_names(user.id, trusted_groups)
-
-
-        # if WEBUI_AUTH_TRUSTED_GROUPS_HEADER:
-        #     trusted_groups = request.headers.get(
-        #         WEBUI_AUTH_TRUSTED_GROUPS_HEADER, ''
-        #     )
-        #
-        #     log.info(f"User {user.name}, in groups: {trusted_groups}")
-        #
-        #     Users.update_user_groups_from_header(user, trusted_groups, DEFAULT_USER_PERMISSIONS)
-
-         # Authenticate the user using the trusted email
-        # user = Auths.authenticate_user_by_trusted_header(trusted_email)
-
-
-# ========================================================================
-# END Fareed verify, fix & cleanup as needed.
-# ========================================================================
 
     elif WEBUI_AUTH == False:
         admin_email = "admin@localhost"
