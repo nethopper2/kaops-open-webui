@@ -63,44 +63,44 @@
 		<div class="w-full h-full absolute top-0 left-0 backdrop-blur-xs bg-black/50"></div>
 
 		<div class="relative bg-transparent w-full min-h-screen flex z-10">
-			<div class="flex flex-col justify-center w-full items-center pb-10 text-center">
+			<div class="flex flex-col justify-end w-full items-center pb-10 text-center">
 				<div class="text-5xl lg:text-7xl font-secondary">
 					<Marquee
 						duration={5000}
 						words={[
-              $i18n.t('Enterprise AI solutions'),
-							$i18n.t('On-Premises AI deployment'),
-							$i18n.t('Integrate AI with existing systems'),
-							$i18n.t('Protect intellectual property'),
-							$i18n.t('Customized AI solutions'),
-							$i18n.t('AI productivity'),
-							$i18n.t('Safeguard user data privacy'),
-              $i18n.t('Small business AI solutions'),
-							$i18n.t('Scalable cloud infrastructure'),
-							$i18n.t('Experiment with AI models'),
+							$i18n.t('Explore the cosmos'),
+							$i18n.t('Unlock mysteries'),
+							$i18n.t('Chart new frontiers'),
+							$i18n.t('Dive into knowledge'),
+							$i18n.t('Discover wonders'),
+							$i18n.t('Ignite curiosity'),
+							$i18n.t('Forge new paths'),
+							$i18n.t('Unravel secrets'),
+							$i18n.t('Pioneer insights'),
+							$i18n.t('Embark on adventures')
 						]}
 					/>
 
-					<div class="mt-0.5 text-4xl">{$i18n.t(`Your data. Private and secure.`)}</div>
+					<div class="mt-0.5">{$i18n.t(`wherever you are`)}</div>
 				</div>
 
 				<div class="flex justify-center mt-8">
 					<div class="flex flex-col justify-center items-center">
 						<button
+							aria-labelledby="get-started"
 							class="relative z-20 flex p-1 rounded-full bg-white/5 hover:bg-white/10 transition font-medium text-sm"
 							on:click={() => {
 								getStartedHandler();
 							}}
 						>
-							<ArrowRightCircle className="size-10 text-green-500 animate-pulse" />
+							<ArrowRightCircle className="size-6" />
 						</button>
-						<div class="mt-1.5 font-primary text-base font-medium">{$i18n.t(`Get started`)}</div>
-						<div class="mt-1 font-primary text-xs text-neutral-400">Nethopper Private AI</div>
+						<div id="get-started" class="mt-1.5 font-primary text-base font-medium">
+							{$i18n.t(`Get started`)}
+						</div>
 					</div>
 				</div>
 			</div>
-
-			<!-- <div class="absolute bottom-12 left-0 right-0 w-full"></div> -->
 		</div>
 	</div>
 {/if}

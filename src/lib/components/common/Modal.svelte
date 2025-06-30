@@ -3,7 +3,7 @@
 	import { fade } from 'svelte/transition';
 
 	import { flyAndScale } from '$lib/utils/transitions';
-
+	import * as FocusTrap from 'focus-trap';
 	export let show = true;
 	export let size = 'md';
 	export let containerClassName = 'p-3';
@@ -11,6 +11,10 @@
 
 	let modalElement = null;
 	let mounted = false;
+	// Create focus trap to trap user tabs inside modal
+	// https://www.w3.org/WAI/WCAG21/Understanding/focus-order.html
+	// https://www.w3.org/WAI/WCAG21/Understanding/keyboard.html
+	let focusTrap: FocusTrap.FocusTrap | null = null;
 
 	const sizeToWidth = (size) => {
 		if (size === 'full') {
@@ -39,15 +43,30 @@
 		return modals.length && modals[modals.length - 1] === modalElement;
 	};
 
+	// REMINDER: These focus trap functions were added to work with the vue Dialog when it comes from within a Modal.
+	export function activateFocusTrap() {
+		if (focusTrap) {
+			focusTrap.activate();
+		}
+	}
+	export function deactivateFocusTrap() {
+		if (focusTrap) {
+			focusTrap.deactivate();
+		}
+	}
+
 	onMount(() => {
 		mounted = true;
 	});
 
 	$: if (show && modalElement) {
 		document.body.appendChild(modalElement);
+		focusTrap = FocusTrap.createFocusTrap(modalElement);
+		focusTrap.activate();
 		window.addEventListener('keydown', handleKeyDown);
 		document.body.style.overflow = 'hidden';
 	} else if (modalElement) {
+		focusTrap.deactivate();
 		window.removeEventListener('keydown', handleKeyDown);
 		document.body.removeChild(modalElement);
 		document.body.style.overflow = 'unset';
@@ -55,6 +74,9 @@
 
 	onDestroy(() => {
 		show = false;
+		if (focusTrap) {
+			focusTrap.deactivate();
+		}
 		if (modalElement) {
 			document.body.removeChild(modalElement);
 		}
@@ -66,6 +88,8 @@
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<div
 		bind:this={modalElement}
+		aria-modal="true"
+		role="dialog"
 		class="modal fixed top-0 right-0 left-0 bottom-0 bg-black/60 w-full h-screen max-h-[100dvh] {containerClassName} flex justify-center z-9999 overflow-y-auto overscroll-contain"
 		in:fade={{ duration: 10 }}
 		on:mousedown={() => {

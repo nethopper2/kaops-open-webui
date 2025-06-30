@@ -1,6 +1,6 @@
 import { defineCustomElement } from 'vue';
 import FileManager from '$lib/components-vue/storage/FileManager.vue';
-import PopupMetadataEdit from '$lib/components-vue/storage/PopupMetadataEdit.vue';
+import PopupMetadataEditWrapper from '$lib/components-vue/storage/PopupMetadataEditWrapper.vue';
 import config from 'devextreme/core/config';
 import { baseZIndex } from 'devextreme/ui/overlay';
 
@@ -22,5 +22,5 @@ if (!customElements.get('file-manager')) {
 }
 
 if (!customElements.get('popup-metadata-edit')) {
-	customElements.define('popup-metadata-edit', defineCustomElement(PopupMetadataEdit));
+	customElements.define('popup-metadata-edit', defineCustomElement(PopupMetadataEditWrapper));
 }

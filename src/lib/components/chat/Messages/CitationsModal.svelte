@@ -5,6 +5,8 @@ import Tooltip from '$lib/components/common/Tooltip.svelte';
 import { config } from '$lib/stores';
 import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue';
 
+ let TModalRef: Modal
+
 // The PopupMetadataEdit component instance.
 	let TRefFilePopup: { visible: boolean, fileItem: FileItem, i18n: { t: (s: string) => string }; }
 	const i18n = getContext('i18n');
@@ -58,7 +60,7 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 	};
 </script>
 
-<Modal size="lg" bind:show>
+<Modal size="lg" bind:show bind:this={TModalRef}>
 	<div>
 		<div class=" flex justify-between dark:text-gray-300 px-5 pt-4 pb-2">
 			<div class=" text-lg font-medium self-center capitalize">
@@ -122,7 +124,7 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 									>
 										{decodeString(document?.metadata?.name ?? document.source.name)}
 									</a>
-									{#if document?.metadata?.page}
+									{#if Number.isInteger(document?.metadata?.page)}
 										<span class="text-xs text-gray-500 dark:text-gray-400">
 											({$i18n.t('page')}
 											{document.metadata.page + 1})
@@ -132,21 +134,33 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 									<button
 										class="flex text-xs items-center space-x-1 px-2 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-200 transition"
 										on:click={() => {
-											TRefFilePopup.fileItem = {
+											// Stop the focus trap in teh Modal so the vue Dialog can be clicked.
+											TModalRef.deactivateFocusTrap()
+
+											TRefFilePopup.show({
 												path: document?.metadata?.file_id,
 												isDirectory: false,
-											}
-											TRefFilePopup.i18n = $i18n;
-											TRefFilePopup.visible = true;
+											})
 										}}
 										aria-label="Edit Metadata"
 									>
 										<div class="self-center mr-2 font-medium line-clamp-1">
-											Edit Metadata
+											{$i18n.t('Edit Metadata')}
 										</div>
 									</button>
 								</div>
 							</Tooltip>
+							{#if document.metadata?.parameters}
+								<div class="text-sm font-medium dark:text-gray-300 mt-2">
+									{$i18n.t('Parameters')}
+								</div>
+								<pre
+									class="text-sm dark:text-gray-400 bg-gray-50 dark:bg-gray-800 p-2 rounded-md overflow-auto max-h-40">{JSON.stringify(
+										document.metadata.parameters,
+										null,
+										2
+									)}</pre>
+							{/if}
 							{#if showRelevance}
 								<div class="text-sm font-medium dark:text-gray-300 mt-2">
 									{$i18n.t('Relevance')}
@@ -169,12 +183,15 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 														{percentage.toFixed(2)}%
 													</span>
 												{/if}
+
+												{#if typeof document?.distance === 'number'}
+													<span class="text-gray-500 dark:text-gray-500">
+														({(document?.distance ?? 0).toFixed(4)})
+													</span>
+												{/if}
+											{:else if typeof document?.distance === 'number'}
 												<span class="text-gray-500 dark:text-gray-500">
 													({(document?.distance ?? 0).toFixed(4)})
-												</span>
-											{:else}
-												<span class="text-gray-500 dark:text-gray-500">
-													{(document?.distance ?? 0).toFixed(4)}
 												</span>
 											{/if}
 										</div>
@@ -215,10 +232,10 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 				{/each}
 			</div>
 		</div>
-
-		<popup-metadata-edit
-			bind:this={TRefFilePopup}
-			on:update:visible={() => TRefFilePopup.visible = false}
-		/>
 	</div>
+
+	<popup-metadata-edit
+		bind:this={TRefFilePopup}
+		i18n={$i18n}
+	/>
 </Modal>

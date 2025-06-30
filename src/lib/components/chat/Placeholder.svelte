@@ -13,11 +13,12 @@
 
   // NOTE: Keeping the original import for Suggestions.svelte for reference
   //       May allow users to switch between the two components in the future
-	// import Suggestions from './Suggestions.svelte';
-	import SuggestionButtons from './SuggestionButtons.svelte';
+	import Suggestions from './Suggestions.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import MessageInput from './MessageInput.svelte';
+	import { isPrivateAiModel } from '$lib/utils/privateAi';
+	import LockClosed from '$lib/components/icons/LockClosed.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -37,6 +38,8 @@
 	export let files = [];
 
 	export let selectedToolIds = [];
+	export let selectedFilterIds = [];
+
 	export let imageGenerationEnabled = false;
 	export let codeInterpreterEnabled = false;
 	export let webSearchEnabled = false;
@@ -106,7 +109,7 @@
 <div class="m-auto w-full max-w-6xl px-2 @2xl:px-20 translate-y-6 py-24 text-center">
 	{#if $temporaryChatEnabled}
 		<Tooltip
-			content={$i18n.t('This chat won’t appear in history and your messages will not be saved.')}
+			content={$i18n.t("This chat won't appear in history and your messages will not be saved.")}
 			className="w-full flex justify-center mb-0.5"
 			placement="top"
 		>
@@ -120,7 +123,7 @@
 		class="w-full text-3xl text-gray-800 dark:text-gray-100 text-center flex items-center gap-4 font-primary"
 	>
 		<div class="w-full flex flex-col justify-center items-center">
-			<div class="flex flex-row justify-center gap-3 @sm:gap-3.5 w-fit px-5">
+			<div class="flex flex-row justify-center gap-3 @sm:gap-3.5 w-fit px-5 max-w-xl">
 				<div class="flex shrink-0 justify-center">
 					<div class="flex -space-x-4 mb-0.5" in:fade={{ duration: 100 }}>
 						{#each models as model, modelIdx}
@@ -140,7 +143,7 @@
 										src={model?.info?.meta?.profile_image_url ??
 											($i18n.language === 'dg-DG'
 												? `/doge.png`
-												: '/static/favicon.png')}
+												: `${WEBUI_BASE_URL}/static/favicon.png`)}
 										class=" size-9 @sm:size-10 rounded-full border-[1px] border-gray-100 dark:border-none"
 										alt="logo"
 										draggable="false"
@@ -151,17 +154,35 @@
 					</div>
 				</div>
 
-				<div class="text-2xl @sm:text-3xl line-clamp-1" in:fade={{ duration: 100 }}>
-          {$i18n.t("Hi, I'm your Private AI", { name: $user?.name })}
+				<div
+					class=" text-3xl @sm:text-3xl line-clamp-1 flex items-center"
+					in:fade={{ duration: 100 }}
+				>
+					{#if isPrivateAiModel(models[selectedModelIdx])}
+						<Tooltip
+							content={$i18n.t('Private AI Model')}
+							placement="top"
+							className=" flex items-center mr-1"
+						>
+							<LockClosed/>
+						</Tooltip>
+					{/if}
+
+					{#if models[selectedModelIdx]?.name}
+						<Tooltip
+							content={models[selectedModelIdx]?.name}
+							placement="top"
+							className=" flex items-center "
+						>
+							<span class="line-clamp-1 text-left">
+								{models[selectedModelIdx]?.name}
+							</span>
+						</Tooltip>
+					{:else}
+						{$i18n.t('Hello, {{name}}', { name: $user?.name })}
+					{/if}
 				</div>
-      </div>
-      <div class="text-sm mt-2 line-clamp-1 text-neutral-500">
-        {#if models[selectedModelIdx]?.name}
-          {models[selectedModelIdx]?.name}
-        {:else}
-          No model selected
-        {/if}
-      </div>
+			</div>
 
 			<div class="flex mt-1 mb-2">
 				<div in:fade={{ duration: 100, delay: 50 }}>
@@ -210,6 +231,7 @@
 					bind:prompt
 					bind:autoScroll
 					bind:selectedToolIds
+					bind:selectedFilterIds
 					bind:imageGenerationEnabled
 					bind:codeInterpreterEnabled
 					bind:webSearchEnabled
@@ -219,6 +241,15 @@
 					{stopResponse}
 					{createMessagePair}
 					placeholder={$i18n.t('How can I help you today?')}
+					onChange={(input) => {
+						if (!$temporaryChatEnabled) {
+							if (input.prompt !== null) {
+								localStorage.setItem(`chat-input`, JSON.stringify(input));
+							} else {
+								localStorage.removeItem(`chat-input`);
+							}
+						}
+					}}
 					on:upload={(e) => {
 						dispatch('upload', e.detail);
 					}}
@@ -229,8 +260,9 @@
 			</div>
 		</div>
 	</div>
-	<div class="mx-auto max-w-2xl font-primary" in:fade={{ duration: 200, delay: 200 }}>
-		<!-- <div class="mx-5">
+
+	<div class="mx-auto max-w-2xl font-primary mt-2" in:fade={{ duration: 200, delay: 200 }}>
+		<div class="mx-5">
 			<Suggestions
 				suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
 					models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
@@ -240,20 +272,7 @@
 				on:select={(e) => {
 					selectSuggestionPrompt(e.detail);
 				}}
-			/>
-		</div> -->
-
-		<div class="mx-0">
-			<SuggestionButtons
-				suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
-					models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
-					$config?.default_prompt_suggestions ??
-					[]}
-				inputValue={prompt}
-				on:select={(e) => {
-					selectSuggestionPrompt(e.detail);
-				}}
-        on:setInput={setInputPrompt}
+				on:setInput={setInputPrompt}
 			/>
 		</div>
 	</div>

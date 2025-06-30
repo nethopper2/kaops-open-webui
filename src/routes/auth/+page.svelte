@@ -28,8 +28,8 @@
 
 	let ldapUsername = '';
 
-  let brandingLogo = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom)?.logo : '';
-  let bgImageAuth = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom)?.bgImageAuth : '';
+	let brandingLogo = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom)?.logo : '';
+	let bgImageAuth = '';
 
 	const querystringValue = (key) => {
 		const querystring = window.location.search;
@@ -44,7 +44,6 @@
 			if (sessionUser.token) {
 				localStorage.token = sessionUser.token;
 			}
-
 			$socket.emit('user-join', { auth: { token: sessionUser.token } });
 			await user.set(sessionUser);
 			await config.set(await getBackendConfig());
@@ -118,32 +117,37 @@
 
 	let onboarding = false;
 
-	async function setLogoImage() {
-		await tick();
-		const logo = document.getElementById('logo');
-    // NH: Remove the logo image from the DOM if it exists
-    if (logo) {
-        logo.remove(); // This removes the element from the DOM
+  async function setLogoImage() {
+    await tick();
+    const logo = document.getElementById('logo');
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    const webuiCustom = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom) : {};
+
+    // Set background image based on theme
+    if (isDarkMode) {
+      console.log('Dark mode detected');
+      bgImageAuth = webuiCustom?.bgImageAuth || '';
+    } else {
+      console.log('Light mode detected');
+      bgImageAuth = webuiCustom?.bgImageAuthLight || '';
     }
 
-		// if (logo) {
-		// 	const isDarkMode = document.documentElement.classList.contains('dark');
+    if (logo) {
+        if (isDarkMode) {
+            const darkImage = new Image();
+            darkImage.src = '/static/favicon-dark.png';
 
-		// 	if (isDarkMode) {
-		// 		const darkImage = new Image();
-		// 		darkImage.src = '/static/favicon-dark.png';
+            darkImage.onload = () => {
+                logo.src = '/static/favicon-dark.png';
+                logo.style.filter = ''; // Ensure no inversion is applied
+            };
 
-		// 		darkImage.onload = () => {
-		// 			logo.src = '/static/favicon-dark.png';
-		// 			logo.style.filter = ''; // Ensure no inversion is applied if favicon-dark.png exists
-		// 		};
-
-		// 		darkImage.onerror = () => {
-		// 			logo.style.filter = 'invert(1)'; // Invert image if favicon-dark.png is missing
-		// 		};
-		// 	}
-		// }
-	}
+            darkImage.onerror = () => {
+                logo.style.filter = 'invert(1)'; // Invert image if favicon-dark.png is missing
+            };
+        }
+    }
+  }
 
 	onMount(async () => {
 		if ($user !== undefined) {
@@ -178,42 +182,41 @@
 />
 
 <div class="w-full h-screen max-h-[100dvh] text-white relative">
-  {#if bgImageAuth}
-  <!-- ::before pseudo-element as a div -->
-  <div 
-    class="pointer-events-none absolute inset-0 -z-20"
-    style="
-      background: url('{bgImageAuth}') center/cover no-repeat;
-      filter: brightness(0.4);
-      content: '';
-    ">
-  </div>
-  <!-- ::after pseudo-element as a div -->
-  <div 
-    class="pointer-events-none absolute inset-0 -z-10 bg-black/30"
-    style="content: '';">
-  </div>
-  {:else}
-  	<div class="w-full h-full absolute top-0 left-0 bg-white dark:bg-black"></div>
-  {/if}
+	{#if bgImageAuth}
+		<!-- ::before pseudo-element as a div -->
+		<div 
+			class="pointer-events-none absolute inset-0 -z-20"
+			style="
+				background: url('{bgImageAuth}') center/cover no-repeat;
+				filter: brightness(0.4);
+				content: '';
+			">
+		</div>
+		<!-- ::after pseudo-element as a div -->
+		<div 
+			class="pointer-events-none absolute inset-0 -z-10 bg-white/70 dark:bg-black/30"
+			style="content: '';">
+		</div>
+	{:else}
+		<div class="w-full h-full absolute top-0 left-0 bg-white dark:bg-black"></div>
+	{/if}
 
 	<div class="w-full absolute top-0 left-0 right-0 h-8 drag-region" />
 
 	{#if loaded}
-    <!-- NH: removed logo in upper left corner on login page -->
-		<!-- <div class="fixed m-10 z-50">
+		<div class="fixed m-10 z-50">
 			<div class="flex space-x-2">
 				<div class=" self-center">
 					<img
 						id="logo"
 						crossorigin="anonymous"
-						src="{WEBUI_BASE_URL}/static/splash.png"
+						src="{WEBUI_BASE_URL}/static/favicon.png"
 						class=" w-6 rounded-full"
-						alt="logo"
+						alt=""
 					/>
 				</div>
 			</div>
-		</div> -->
+		</div>
 
 		<div
 			class="fixed bg-transparent min-h-screen w-full flex justify-center font-primary z-50 text-black dark:text-white"
@@ -244,26 +247,30 @@
 						>
 							<div class="mb-1">
 								{#if brandingLogo}
-                <img
-                    src={brandingLogo}
-                    alt="Logo"
-                    class="mx-auto mb-8"
-                />              
-                {/if}
-								<div class=" text-2xl font-medium text-white">
+									<img
+										src={brandingLogo}
+										alt="Logo"
+										class="mx-auto mb-8"
+                    style="max-height:25px;"
+									/>              
+								{/if}                
+								<div class=" text-2xl font-medium">
 									{#if $config?.onboarding ?? false}
 										{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
 									{:else if mode === 'ldap'}
 										{$i18n.t(`Sign in to {{WEBUI_NAME}} with LDAP`, { WEBUI_NAME: $WEBUI_NAME })}
-									{:else if mode === 'signin'}
-										{$i18n.t(`Sign in to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
+                  {:else if mode === 'signin'}
+                    {$i18n.t(`Sign in to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME.replace(/\s*\([^)]*\)/g, '') || '' })}                    
 									{:else}
 										{$i18n.t(`Sign up to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
 									{/if}
 								</div>
+                <div class="text-lg font-normal">
+                  {$i18n.t(`{{WEBUI_NAME}}`, { WEBUI_NAME: 'Open WebUI' })}
+                </div>
 
 								{#if $config?.onboarding ?? false}
-									<div class=" mt-1 text-xs font-medium text-gray-500">
+									<div class="mt-1 text-xs font-medium text-gray-600 dark:text-gray-500">
 										ⓘ {$WEBUI_NAME}
 										{$i18n.t(
 											'does not make any external connections, and your data stays securely on your locally hosted server.'
@@ -276,10 +283,13 @@
 								<div class="flex flex-col mt-4">
 									{#if mode === 'signup'}
 										<div class="mb-2">
-											<div class=" text-sm font-medium text-left mb-1 text-white">{$i18n.t('Name')}</div>
+											<label for="name" class="text-sm font-medium text-left mb-1 block"
+												>{$i18n.t('Name')}</label
+											>
 											<input
 												bind:value={name}
 												type="text"
+												id="name"
 												class="my-0.5 w-full text-sm outline-hidden bg-transparent text-gray-400"
 												autocomplete="name"
 												placeholder={$i18n.t('Enter Your Full Name')}
@@ -290,24 +300,30 @@
 
 									{#if mode === 'ldap'}
 										<div class="mb-2">
-											<div class=" text-sm font-medium text-left mb-1 text-white">{$i18n.t('Username')}</div>
+											<label for="username" class="text-sm font-medium text-left mb-1 block"
+												>{$i18n.t('Username')}</label
+											>
 											<input
 												bind:value={ldapUsername}
 												type="text"
 												class="my-0.5 w-full text-sm outline-hidden bg-transparent text-gray-400"
 												autocomplete="username"
 												name="username"
+												id="username"
 												placeholder={$i18n.t('Enter Your Username')}
 												required
 											/>
 										</div>
 									{:else}
 										<div class="mb-2">
-											<div class=" text-sm font-medium text-left mb-1 text-white">{$i18n.t('Email')}</div>
-											<input
+											<label for="email" class="text-sm font-medium text-left mb-1 block"
+												>{$i18n.t('Email')}</label
+											>
+                      <input
 												bind:value={email}
 												type="email"
-												class="my-0.5 w-full text-sm outline-hidden bg-transparent text-gray-400"
+												id="email"
+                        class="transition rounded-sm font-medium p-2 my-0.5 w-full text-sm text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white "
 												autocomplete="email"
 												name="email"
 												placeholder={$i18n.t('Enter Your Email')}
@@ -317,11 +333,14 @@
 									{/if}
 
 									<div>
-										<div class=" text-sm font-medium text-left mb-1 text-white">{$i18n.t('Password')}</div>
+										<label for="password" class="text-sm font-medium text-left mb-1 block"
+											>{$i18n.t('Password')}</label
+										>
 										<input
 											bind:value={password}
 											type="password"
-											class="my-0.5 w-full text-sm outline-hidden bg-transparent text-gray-400"
+											id="password"
+                      class="transition rounded-sm font-medium p-2 my-0.5 w-full text-sm text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white "
 											placeholder={$i18n.t('Enter Your Password')}
 											autocomplete="current-password"
 											name="current-password"
@@ -341,7 +360,7 @@
 										</button>
 									{:else}
 										<button
-											class="text-gray-300 bg-gray-100/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
+											class="text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
 											type="submit"
 										>
 											{mode === 'signin'

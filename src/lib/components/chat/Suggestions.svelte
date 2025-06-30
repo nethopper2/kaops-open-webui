@@ -2,7 +2,7 @@
 	import Fuse from 'fuse.js';
 	import Bolt from '$lib/components/icons/Bolt.svelte';
 	import { onMount, getContext, createEventDispatcher } from 'svelte';
-	import { WEBUI_NAME } from '$lib/stores';
+	import { settings, WEBUI_NAME } from '$lib/stores';
 	import { WEBUI_VERSION } from '$lib/constants';
 
 	const i18n = getContext('i18n');
@@ -27,7 +27,9 @@
 
 	// Update the filteredPrompts if inputValue changes
 	// Only increase version if something wirklich geändert hat
-	$: getFilteredPrompts(inputValue);
+	$: if (fuse && inputValue !== undefined) {
+		getFilteredPrompts(inputValue);
+	}
 
 	// Helper function to check if arrays are the same
 	// (based on unique IDs oder content)
@@ -42,6 +44,11 @@
 	}
 
 	const getFilteredPrompts = (inputValue) => {
+		if (!fuse) {
+			filteredPrompts = [];
+			return;
+		}
+
 		if (inputValue.length > 500) {
 			filteredPrompts = [];
 		} else {
@@ -59,57 +66,81 @@
 	};
 
 	$: if (suggestionPrompts) {
-		sortedPrompts = [...(suggestionPrompts ?? [])].sort(() => Math.random() - 0.5);
+		// sortedPrompts = [...(suggestionPrompts ?? [])].sort(() => Math.random() - 0.5);
+		sortedPrompts = [...(suggestionPrompts ?? [])];
 		getFilteredPrompts(inputValue);
+	}
+
+	// Computed property to determine if there is text input
+	$: hasInput = inputValue.length > 0;
+
+	// Function to clear the input value
+	function clearInput() {
+		inputValue = '';
+		dispatch('setInput', { value: ''})
 	}
 </script>
 
-<div class="mb-1 flex gap-1 text-xs font-medium items-center text-gray-400 dark:text-gray-600">
+<div class="mb-1 flex gap-1 text-xs font-medium items-center text-gray-600 dark:text-gray-400">
 	{#if filteredPrompts.length > 0}
 		<Bolt />
 		{$i18n.t('Suggested')}
+		{#if hasInput}
+			<button
+				on:click={clearInput}
+				class="ml-4 text-neutral-500 text-xs"
+			>
+				{$i18n.t('clear')}
+			</button>
+		{/if}
 	{:else}
 		<!-- Keine Vorschläge -->
 
 		<div
-			class="flex w-full text-center items-center justify-center self-start text-gray-400 dark:text-gray-600"
+			class="flex w-full {$settings?.landingPageMode === 'chat'
+				? ' -mt-1'
+				: 'text-center items-center justify-center'}  self-start text-gray-600 dark:text-gray-400"
 		>
 			{$WEBUI_NAME} ‧ v{WEBUI_VERSION}
 		</div>
 	{/if}
 </div>
 
-<div class="h-40 overflow-auto scrollbar-none {className} items-start">
+<div class="h-40 w-full">
 	{#if filteredPrompts.length > 0}
-		{#each filteredPrompts as prompt, idx (prompt.id || prompt.content)}
-			<button
-				class="waterfall flex flex-col flex-1 shrink-0 w-full justify-between
+		<div class="max-h-40 overflow-auto scrollbar-none items-start {className}">
+			{#each filteredPrompts as prompt, idx (prompt.id || prompt.content)}
+				<button
+					class="waterfall flex flex-col flex-1 shrink-0 w-full justify-between
 				       px-3 py-2 rounded-xl bg-transparent hover:bg-black/5
 				       dark:hover:bg-white/5 transition group"
-				style="animation-delay: {idx * 60}ms"
-				on:click={() => dispatch('select', prompt.content)}
-			>
-				<div class="flex flex-col text-left">
-					{#if prompt.title && prompt.title[0] !== ''}
-						<div
-							class="font-medium dark:text-gray-300 dark:group-hover:text-gray-200 transition line-clamp-1"
-						>
-							{prompt.title[0]}
-						</div>
-						<div class="text-xs text-gray-500 font-normal line-clamp-1">
-							{prompt.title[1]}
-						</div>
-					{:else}
-						<div
-							class="font-medium dark:text-gray-300 dark:group-hover:text-gray-200 transition line-clamp-1"
-						>
-							{prompt.content}
-						</div>
-						<div class="text-xs text-gray-500 font-normal line-clamp-1">{$i18n.t('Prompt')}</div>
-					{/if}
-				</div>
-			</button>
-		{/each}
+					style="animation-delay: {idx * 60}ms"
+					on:click={() => dispatch('select', prompt.content)}
+				>
+					<div class="flex flex-col text-left">
+						{#if prompt.title && prompt.title[0] !== ''}
+							<div
+								class="font-medium dark:text-gray-300 dark:group-hover:text-gray-200 transition line-clamp-1"
+							>
+								{prompt.title[0]}
+							</div>
+							<div class="text-xs text-gray-600 dark:text-gray-400 font-normal line-clamp-1">
+								{prompt.title[1]}
+							</div>
+						{:else}
+							<div
+								class="font-medium dark:text-gray-300 dark:group-hover:text-gray-200 transition line-clamp-1"
+							>
+								{prompt.content}
+							</div>
+							<div class="text-xs text-gray-600 dark:text-gray-400 font-normal line-clamp-1">
+								{$i18n.t('Prompt')}
+							</div>
+						{/if}
+					</div>
+				</button>
+			{/each}
+		</div>
 	{/if}
 </div>
 

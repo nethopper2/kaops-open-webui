@@ -4,7 +4,7 @@ import { DxForm, DxItem as DxFormItem } from 'devextreme-vue/form';
 import { DxPopup, DxToolbarItem } from 'devextreme-vue/popup';
 import 'devextreme-vue/tag-box';
 import 'devextreme-vue/text-area';
-import { computed, onBeforeMount, onUnmounted, ref, useHost, watch } from 'vue';
+import { computed, onBeforeMount, ref, type useHost, watch } from 'vue';
 import { toast } from 'svelte-sonner';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
 import { apiFetch } from '$lib/apis/private-ai/fetchClients';
@@ -17,9 +17,8 @@ export type FileItem = Pick<FileSystemItem, 'isDirectory' | 'path'>;
 const props = defineProps<{
 	fileItem?: FileItem;
 	i18n: { t: (s: string) => string };
+	svelteHost?: ReturnType<typeof useHost>
 }>();
-
-const svelteHost = useHost();
 
 const emit = defineEmits(['update:visible', 'saved', 'cancelled']);
 const localVisible = defineModel<boolean>('visible', { default: false });
@@ -93,7 +92,7 @@ async function showConfirmDeleteDialog() {
 			props.i18n.t('Confirm Deletion')
 		);
 		if (result) {
-			deleteMetadata();
+			void deleteMetadata();
 		}
 	} catch (err) {
 		console.error(err);
@@ -180,7 +179,7 @@ watch(
 );
 
 // Use the theme composable
-const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme();
+const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme({ svelteHost: props.svelteHost });
 
 onBeforeMount(() => {
 	setupTheme();
@@ -232,7 +231,11 @@ onBeforeMount(() => {
 				<dx-form-item
 					data-field="contextData"
 					editor-type="dxTextArea"
-					:help-text="fileItem?.isDirectory ? `To help our AI system generate accurate responses, please briefly describe this directory's purpose, list and explain its contents, outline any naming conventions, and provide instructions for use. Optionally, add example questions you might ask the AI about the files—this helps the AI understand your needs and improves its answers. Update this information whenever the directory changes.` : `To help our AI system generate accurate responses, please provide a brief description of this file's purpose, explain its contents, and include instructions for use if applicable. Optionally, add example questions you might ask the AI about this file—this helps the AI understand your needs and improves its answers. If relevant, mention any important details such as the file's format, structure, or dependencies. Be sure to update this information whenever the file changes.`"
+					:help-text="
+						fileItem?.isDirectory
+							? `To help our AI system generate accurate responses, please briefly describe this directory's purpose, list and explain its contents, outline any naming conventions, and provide instructions for use. Optionally, add example questions you might ask the AI about the files—this helps the AI understand your needs and improves its answers. Update this information whenever the directory changes.`
+							: `To help our AI system generate accurate responses, please provide a brief description of this file's purpose, explain its contents, and include instructions for use if applicable. Optionally, add example questions you might ask the AI about this file—this helps the AI understand your needs and improves its answers. If relevant, mention any important details such as the file's format, structure, or dependencies. Be sure to update this information whenever the file changes.`
+					"
 					:editor-options="{
 						height: 200,
 						maxLength: 200

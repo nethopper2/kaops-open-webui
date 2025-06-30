@@ -54,9 +54,11 @@ const showEditMetadataPopup = ref(false);
 
 // Use the theme composable
 const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme(
-	() => {
-		// and tell the FileManager to redraw
-		TRefFileManager.value?.instance?.repaint?.();
+	{
+		themeChangedCallback: () => {
+			// and tell the FileManager to redraw
+			TRefFileManager.value?.instance?.repaint?.();
+		}
 	}
 );
 

@@ -5,6 +5,7 @@ import os
 import pkgutil
 import sys
 import shutil
+from uuid import uuid4
 from pathlib import Path
 
 import markdown
@@ -106,11 +107,10 @@ for source in log_sources:
 log.setLevel(SRC_LOG_LEVELS["CONFIG"])
 
 WEBUI_NAME = os.environ.get("WEBUI_NAME", "Open WebUI")
-# if WEBUI_NAME != "Open WebUI":
-#     WEBUI_NAME += " (Open WebUI)"
+if WEBUI_NAME != "Open WebUI":
+    WEBUI_NAME += " (Open WebUI)"
 
-# WEBUI_FAVICON_URL = "https://openwebui.com/favicon.png"
-WEBUI_FAVICON_URL = "https://nh-addon-themes.s3.us-east-1.amazonaws.com/private-ai/favicon.png"
+WEBUI_FAVICON_URL = "https://openwebui.com/favicon.png"
 
 TRUSTED_SIGNATURE_KEY = os.environ.get("TRUSTED_SIGNATURE_KEY", "")
 
@@ -131,6 +131,7 @@ else:
         PACKAGE_DATA = {"version": "0.0.0"}
 
 VERSION = PACKAGE_DATA["version"]
+INSTANCE_ID = os.environ.get("INSTANCE_ID", str(uuid4()))
 
 
 # Function to parse each section
@@ -374,9 +375,9 @@ SLACK_TOKEN_URL = os.environ.get(
 )
 SLACK_AUTH_REVOKE_URL = os.environ.get(
     "SLACK_AUTH_REVOKE_URL", "https://slack.com/api/auth.revoke"
-)   
+)
 
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None) 
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None)
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", None)
 GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", None)
 
@@ -393,7 +394,7 @@ GOOGLE_AUTH_REVOKE_URL = os.environ.get(
 
 MICROSOFT_CLIENT_ID = os.environ.get("MICROSOFT_CLIENT_ID", None)
 MICROSOFT_CLIENT_SECRET = os.environ.get("MICROSOFT_CLIENT_SECRET", None)
-MICROSOFT_REDIRECT_URI = os.environ.get("MICROSOFT_REDIRECT_URI", None) 
+MICROSOFT_REDIRECT_URI = os.environ.get("MICROSOFT_REDIRECT_URI", None)
 MICROSOFT_TENANT_ID = os.environ.get("MICROSOFT_TENANT_ID", None)
 
 MICROSOFT_AUTHORIZE_URL = os.environ.get(
@@ -401,11 +402,11 @@ MICROSOFT_AUTHORIZE_URL = os.environ.get(
     f"https://login.microsoftonline.com/{MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize",
 )
 MICROSOFT_TOKEN_URL = os.environ.get(
-    "MICROSOFT_TOKEN_URL", 
+    "MICROSOFT_TOKEN_URL",
     f"https://login.microsoftonline.com/{MICROSOFT_TENANT_ID}/oauth2/v2.0/token"
-)   
+)
 MICROSOFT_LOGOUT_URL = os.environ.get(
-    "MICROSOFT_LOGOUT_URL", 
+    "MICROSOFT_LOGOUT_URL",
     f"https://login.microsoftonline.com/{MICROSOFT_TENANT_ID}/oauth2/v2.0/logout"
 )
 MICROSOFT_INTROSPECT_URL = os.environ.get(
@@ -417,16 +418,20 @@ ATLASSIAN_CLIENT_ID = os.environ.get("ATLASSIAN_CLIENT_ID", None)
 ATLASSIAN_CLIENT_SECRET = os.environ.get("ATLASSIAN_CLIENT_SECRET", None)
 ATLASSIAN_REDIRECT_URL = os.environ.get("ATLASSIAN_REDIRECT_URL", None)
 
-ATLASSIAN_AUTH_SERVER =  os.environ.get("ATLASSIAN_AUTH_SERVER", "https://auth.atlassian.com") 
-ATLASSIAN_API_GATEWAY = os.environ.get("ATLASSIAN_API_GATEWAY", "https://api.atlassian.com")  
-ATLASSIAN_TOKEN_URL = os.environ.get("ATLASSIAN_TOKEN_URL", f"{ATLASSIAN_AUTH_SERVER}/oauth/token") 
-ATLASSIAN_AUTHORIZE_URL = os.environ.get("ATLASSIAN_AUTHORIZE_URL", f"{ATLASSIAN_AUTH_SERVER}/authorize")  
-ATLASSIAN_ACCESSIBLE_RESOURCES_URL = os.environ.get("ATLASSIAN_ACCESSIBLE_RESOURCES_URL", f"{ATLASSIAN_API_GATEWAY}/oauth/token/accessible-resources")   
+ATLASSIAN_AUTH_SERVER =  os.environ.get("ATLASSIAN_AUTH_SERVER", "https://auth.atlassian.com")
+ATLASSIAN_API_GATEWAY = os.environ.get("ATLASSIAN_API_GATEWAY", "https://api.atlassian.com")
+ATLASSIAN_TOKEN_URL = os.environ.get("ATLASSIAN_TOKEN_URL", f"{ATLASSIAN_AUTH_SERVER}/oauth/token")
+ATLASSIAN_AUTHORIZE_URL = os.environ.get("ATLASSIAN_AUTHORIZE_URL", f"{ATLASSIAN_AUTH_SERVER}/authorize")
+ATLASSIAN_ACCESSIBLE_RESOURCES_URL = os.environ.get("ATLASSIAN_ACCESSIBLE_RESOURCES_URL", f"{ATLASSIAN_API_GATEWAY}/oauth/token/accessible-resources")
 
 
 
 BYPASS_MODEL_ACCESS_CONTROL = (
     os.environ.get("BYPASS_MODEL_ACCESS_CONTROL", "False").lower() == "true"
+)
+
+WEBUI_AUTH_SIGNOUT_REDIRECT_URL = os.environ.get(
+    "WEBUI_AUTH_SIGNOUT_REDIRECT_URL", None
 )
 
 ####################################
@@ -484,6 +489,11 @@ else:
     except Exception:
         AIOHTTP_CLIENT_TIMEOUT = 300
 
+
+AIOHTTP_CLIENT_SESSION_SSL = (
+    os.environ.get("AIOHTTP_CLIENT_SESSION_SSL", "True").lower() == "true"
+)
+
 AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST = os.environ.get(
     "AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST",
     os.environ.get("AIOHTTP_CLIENT_TIMEOUT_OPENAI_MODEL_LIST", "10"),
@@ -512,6 +522,56 @@ else:
     except Exception:
         AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA = 10
 
+
+AIOHTTP_CLIENT_SESSION_TOOL_SERVER_SSL = (
+    os.environ.get("AIOHTTP_CLIENT_SESSION_TOOL_SERVER_SSL", "True").lower() == "true"
+)
+
+
+####################################
+# SENTENCE TRANSFORMERS
+####################################
+
+
+SENTENCE_TRANSFORMERS_BACKEND = os.environ.get("SENTENCE_TRANSFORMERS_BACKEND", "")
+if SENTENCE_TRANSFORMERS_BACKEND == "":
+    SENTENCE_TRANSFORMERS_BACKEND = "torch"
+
+
+SENTENCE_TRANSFORMERS_MODEL_KWARGS = os.environ.get(
+    "SENTENCE_TRANSFORMERS_MODEL_KWARGS", ""
+)
+if SENTENCE_TRANSFORMERS_MODEL_KWARGS == "":
+    SENTENCE_TRANSFORMERS_MODEL_KWARGS = None
+else:
+    try:
+        SENTENCE_TRANSFORMERS_MODEL_KWARGS = json.loads(
+            SENTENCE_TRANSFORMERS_MODEL_KWARGS
+        )
+    except Exception:
+        SENTENCE_TRANSFORMERS_MODEL_KWARGS = None
+
+
+SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND = os.environ.get(
+    "SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND", ""
+)
+if SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND == "":
+    SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND = "torch"
+
+
+SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS = os.environ.get(
+    "SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS", ""
+)
+if SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS == "":
+    SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS = None
+else:
+    try:
+        SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS = json.loads(
+            SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS
+        )
+    except Exception:
+        SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS = None
+
 ####################################
 # OFFLINE_MODE
 ####################################
@@ -520,6 +580,7 @@ OFFLINE_MODE = os.environ.get("OFFLINE_MODE", "false").lower() == "true"
 
 if OFFLINE_MODE:
     os.environ["HF_HUB_OFFLINE"] = "1"
+
 
 ####################################
 # AUDIT LOGGING
@@ -542,11 +603,13 @@ AUDIT_EXCLUDED_PATHS = os.getenv("AUDIT_EXCLUDED_PATHS", "/chats,/chat,/folders"
 AUDIT_EXCLUDED_PATHS = [path.strip() for path in AUDIT_EXCLUDED_PATHS]
 AUDIT_EXCLUDED_PATHS = [path.lstrip("/") for path in AUDIT_EXCLUDED_PATHS]
 
+
 ####################################
 # OPENTELEMETRY
 ####################################
 
 ENABLE_OTEL = os.environ.get("ENABLE_OTEL", "False").lower() == "true"
+ENABLE_OTEL_METRICS = os.environ.get("ENABLE_OTEL_METRICS", "False").lower() == "true"
 OTEL_EXPORTER_OTLP_ENDPOINT = os.environ.get(
     "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317"
 )
