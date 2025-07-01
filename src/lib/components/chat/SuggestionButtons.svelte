@@ -92,8 +92,8 @@
   const oneRowHeight = 'h-[46px] overflow-hidden p-1';
   const noHeight = 'h-0 overflow-hidden p-0';
   $: suggestionHeight = (() => {
-    if(hasInput) {
-      // Should hide the buttons when there is input
+    if (!hasSuggestions) {
+      // Should hide the buttons when there are no suggestions
       return noHeight;
     } else {
       // Should show one or more rows of buttons
@@ -154,7 +154,14 @@
           {#if prompt.image?.length > 0}
             {@html prompt.image}
           {/if}
-          <span class="max-w-full select-none whitespace-nowrap transition group-hover:text-white dark:text-gray-500 custom-hover">{prompt.title[0]}</span>
+          <span class="max-w-full select-none flex flex-col justify-center transition group-hover:text-white dark:text-gray-500 custom-hover leading-[1.2]">
+            <span>{prompt.title[0]}</span>
+            {#if prompt.title[1]}
+              <span class="text-neutral-500 dark:text-gray-600 text-[10px] mb-0.2">
+                {prompt.title[1]}
+              </span>
+            {/if}
+          </span>
         </button>
 		{/each}
 	{/if}

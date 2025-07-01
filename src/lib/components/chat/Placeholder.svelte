@@ -19,6 +19,7 @@
 	import MessageInput from './MessageInput.svelte';
 	import { isPrivateAiModel } from '$lib/utils/privateAi';
 	import LockClosed from '$lib/components/icons/LockClosed.svelte';
+	import SuggestionButtons from './SuggestionButtons.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -263,6 +264,7 @@
 
 	<div class="mx-auto max-w-2xl font-primary mt-2" in:fade={{ duration: 200, delay: 200 }}>
 		<div class="mx-5">
+      {#if $config?.private_ai?.enable_upstream_ui}
 			<Suggestions
 				suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
 					models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
@@ -274,6 +276,20 @@
 				}}
 				on:setInput={setInputPrompt}
 			/>
+      {:else}        
+      <SuggestionButtons
+        className="grid grid-cols-2"
+        suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
+          models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
+          $config?.default_prompt_suggestions ??
+          []}
+        inputValue={prompt}
+        on:select={(e) => {
+          selectSuggestionPrompt(e.detail);
+        }}
+        on:setInput={setInputPrompt}
+        />
+      {/if}      
 		</div>
 	</div>
 </div>
