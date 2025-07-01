@@ -92,8 +92,8 @@
   const oneRowHeight = 'h-[46px] overflow-hidden p-1';
   const noHeight = 'h-0 overflow-hidden p-0';
   $: suggestionHeight = (() => {
-    if(hasInput) {
-      // Should hide the buttons when there is input
+    if (!hasSuggestions) {
+      // Should hide the buttons when there are no suggestions
       return noHeight;
     } else {
       // Should show one or more rows of buttons
