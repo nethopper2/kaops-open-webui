@@ -11,9 +11,8 @@ from sqlalchemy.dialects import sqlite
 log = logging.getLogger(__name__)
 
 # revision identifiers, used by Alembic.
-# IMPORTANT: Replace these with the actual values Alembic generates when you run 'alembic revision -m "Add oauth_tokens table"'
-revision: str = 'YOUR_NEW_REVISION_ID' # <-- GENERATE THIS WITH ALEMBIC
-down_revision: Union[str, None] = '0cdad206156e' # This should be the revision ID of your data_source migration
+revision: str = '1e91e8b76178'
+down_revision: Union[str, None] = '0cdad206156e' 
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
