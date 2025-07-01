@@ -13,6 +13,7 @@
 	import { sanitizeResponseContent } from '$lib/utils';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
+	import SuggestionButtons from './SuggestionButtons.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -143,6 +144,7 @@
 		</div>
 
 		<div class=" w-full font-primary" in:fade={{ duration: 200, delay: 300 }}>
+      {#if $config?.private_ai?.enable_upstream_ui}
 			<Suggestions
 				className="grid grid-cols-2"
 				suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
@@ -154,6 +156,19 @@
 				}}
 				on:setInput={setInputPrompt}
 			/>
+      {:else}        
+      <SuggestionButtons
+        className="grid grid-cols-2"
+        suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
+          models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
+          $config?.default_prompt_suggestions ??
+          []}
+        on:select={(e) => {
+          submitPrompt(e.detail);
+        }}
+        on:setInput={setInputPrompt}
+      />
+      {/if}
 		</div>
 	</div>
 {/key}
