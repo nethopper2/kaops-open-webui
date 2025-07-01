@@ -506,25 +506,26 @@
 
 {#if loaded}
 	<div class="w-full font-primary">
-		{#if $isPublicModelChosen}
-			<div class="px-8 pb-1 text-xs">
-				<div class="flex items-center gap-1">
-					<Tooltip content={$i18n.t('Do not send information you wish to keep private.')} placement="left">
-						<ExclamationTriangle/>
-					</Tooltip>
-
-					<span class="text-orange-700 dark:bg-transparent dark:text-amber-300 px-1">Warning! </span>
-					{$i18n.t('Public model chosen! Do not enter confidential information in this prompt.')}
-				</div>
-			</div>
-		{/if}
-
 		<div class=" mx-auto inset-x-0 bg-transparent flex justify-center">
 			<div
 				class="flex flex-col px-3 {($settings?.widescreenMode ?? null)
 					? 'max-w-full'
 					: 'max-w-6xl'} w-full"
 			>
+
+				{#if $isPublicModelChosen}
+					<div class="px-4 pb-1 text-xs w-full">
+						<div class="flex items-center gap-1">
+							<Tooltip content={$i18n.t('Do not send information you wish to keep private.')} placement="left">
+								<ExclamationTriangle/>
+							</Tooltip>
+
+							<span class="text-orange-700 dark:bg-transparent dark:text-amber-300 px-1">Warning! </span>
+							{$i18n.t('Public model chosen! Do not enter confidential information in this prompt.')}
+						</div>
+					</div>
+				{/if}
+
 				<div class="relative">
 					{#if autoScroll === false && history?.currentId}
 						<div
