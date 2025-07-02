@@ -154,12 +154,14 @@
           {#if prompt.image?.length > 0}
             {@html prompt.image}
           {/if}
-          <span class="max-w-full select-none flex flex-col justify-center transition group-hover:text-white dark:text-gray-500 custom-hover leading-[1.2]">
-            <span>{prompt.title[0]}</span>
-            {#if prompt.title[1]}
-              <span class="text-neutral-500 dark:text-gray-600 text-[10px] mb-0.2">
-                {prompt.title[1]}
-              </span>
+          <span class="max-w-full select-none flex flex-col justify-center transition group-hover:text-white dark:text-gray-500 custom-hover leading-[1]">
+            {#if prompt.title && Array.isArray(prompt.title) && prompt.title[0]}
+              <span>{prompt.title[0]}</span>
+              {#if prompt.title[1]}
+                <span class="text-neutral-500 dark:text-gray-600 text-[10px] mb-0.5">
+                  {prompt.title[1]}
+                </span>
+              {/if}
             {/if}
           </span>
         </button>
