@@ -520,7 +520,6 @@
 						</div>
 
 						<div class=" flex justify-between mb-2.5 mt-1.5 mx-0.5">
-							{#if $config?.private_ai?.enable_upstream_ui}
 							<div class="ml-1 self-end flex space-x-1">
 								<InputMenu
 									{screenCaptureHandler}
@@ -546,7 +545,6 @@
 									</button>
 								</InputMenu>
 							</div>
-							{/if}
 
 							<div class="self-end flex space-x-1 mr-1">
 								{#if content === ''}
