@@ -262,7 +262,7 @@
 		</div>
 	</div>
 
-	<div class="mx-auto max-w-2xl font-primary mt-2" in:fade={{ duration: 200, delay: 200 }}>
+	<div class="mx-auto max-w-3xl font-primary mt-2 " in:fade={{ duration: 200, delay: 200 }}>
 		<div class="mx-5">
       {#if $config?.private_ai?.enable_upstream_ui}
 			<Suggestions
