@@ -1056,7 +1056,7 @@ app.state.config.AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH = (
 
 app.state.config.NH_ENABLE_UPSTREAM_UI = NH_ENABLE_UPSTREAM_UI
 app.state.config.NH_API_BASE_URL = NH_API_BASE_URL
-app.state.config.NH_WEBUI_CUSTOM = NH_WEBUI_CUSTOM
+app.state.NH_WEBUI_CUSTOM = NH_WEBUI_CUSTOM
 
 
 ########################################
@@ -1566,7 +1566,7 @@ async def get_app_config(request: Request):
             "citation_document_url": f"https://storage.cloud.google.com/{GCS_BUCKET_NAME}",
             "enable_upstream_ui": app.state.config.NH_ENABLE_UPSTREAM_UI,
             "rest_api_base_url": app.state.config.NH_API_BASE_URL,
-            "webui_custom": app.state.config.NH_WEBUI_CUSTOM,
+            "webui_custom": app.state.NH_WEBUI_CUSTOM,
         },
         **(
             {

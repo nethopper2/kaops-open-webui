@@ -353,14 +353,14 @@
 								{#if $config?.features.enable_login_form || $config?.features.enable_ldap}
 									{#if mode === 'ldap'}
 										<button
-											class="text-gray-300 bg-gray-100/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
+											class="text-gray-300 bg-gray-100/5 hover:bg-gray-100/10 hover:text-gray-700 dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
 											type="submit"
 										>
 											{$i18n.t('Authenticate')}
 										</button>
 									{:else}
 										<button
-											class="text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
+											class="text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-gray-700 dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
 											type="submit"
 										>
 											{mode === 'signin'

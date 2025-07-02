@@ -114,81 +114,90 @@
   }
 </script>
 
-<div class="mb-1 flex gap-1 text-xs font-medium items-center text-gray-400 dark:text-gray-600">
-	{#if filteredPrompts.length > 0}
-		<Bolt />
-		{$i18n.t('Suggested')}
-    {#if !hasInput}
-      <button
-        on:click={handleMoreClick}
-        class="ml-4 md:order-none text-neutral-500 text-xs rounded-md order-2"
-      >
-        {isFullHeight ? 'show less' : 'show more'}
-      </button>
-  	{:else}
-      <button
-        on:click={clearInput}
-        class="ml-4 md:order-none text-neutral-500 text-xs rounded-md order-2"
-      >
-        clear
-      </button>
-    {/if}
-	{:else}
-		<!-- Keine Vorschläge -->
+<div>
+	<div class="mb-1 flex gap-1 text-xs font-medium items-center text-gray-400 dark:text-gray-600">
+		{#if filteredPrompts.length > 0}
+			<Bolt />
+			{$i18n.t('Suggested')}
+			{#if !hasInput}
+				<button
+					on:click={handleMoreClick}
+					class="ml-4 md:order-none text-neutral-500 text-xs rounded-md order-2"
+				>
+					{isFullHeight ? 'show less' : 'show more'}
+				</button>
+			{:else}
+				<button
+					on:click={clearInput}
+					class="ml-4 md:order-none text-neutral-500 text-xs rounded-md order-2"
+				>
+					clear
+				</button>
+			{/if}
+		{:else}
+			<!-- Keine Vorschläge -->
+			<div
+				class="flex w-full text-center items-center justify-center self-start text-gray-400 dark:text-gray-600"
+			>
+				{$WEBUI_NAME} ‧ v{WEBUI_VERSION}
+			</div>
+		{/if}
+	</div>
 
-		<div
-			class="flex w-full text-center items-center justify-center self-start text-gray-400 dark:text-gray-600"
-		>
-			{$WEBUI_NAME} ‧ v{WEBUI_VERSION}
-		</div>
-	{/if}
-</div>
-
+	<!-- categories -->
 <!-- categories -->
 <div class={`flex flex-wrap overflow-hidden gap-2 ${suggestionHeight}`}>
 	{#if hasSuggestions}
 		{#each filteredPrompts as prompt, idx (prompt.id || prompt.content || prompt.image)}
-        <button class="group flex flex-shrink-0 whitespace-nowrap h-[35px] items-center gap-1.5 rounded-full border border-neutral-700 px-4 text-start text-[13px] justify-center transition enabled:hover:bg-neutral-600  disabled:cursor-not-allowed"
-        on:click={() => {dispatch('select', prompt.content); selectedSuggestion = prompt.content;}}
-        >
-          {#if prompt.image?.length > 0}
-            {@html prompt.image}
-          {/if}
-          <span class="max-w-full select-none flex flex-col justify-center transition group-hover:text-white dark:text-gray-500 custom-hover leading-[1]">
-            {#if prompt.title && Array.isArray(prompt.title) && prompt.title[0]}
-              <span>{prompt.title[0]}</span>
-              {#if prompt.title[1]}
-                <span class="text-neutral-500 dark:text-gray-600 text-[10px] mb-0.5">
-                  {prompt.title[1]}
-                </span>
-              {/if}
-            {/if}
-          </span>
-        </button>
+			<button
+				class="group flex flex-shrink-0 whitespace-nowrap h-[35px] items-center gap-1.5 rounded-full border border-neutral-300 dark:border-neutral-700 px-4 text-start text-[13px] justify-center transition enabled:hover:bg-gray-100 enabled:dark:hover:bg-neutral-700 disabled:cursor-not-allowed"
+				on:click={() => {
+					dispatch('select', prompt.content);
+					selectedSuggestion = prompt.content;
+				}}
+			>
+				{#if prompt.image?.length > 0}
+					{@html prompt.image}
+				{/if}
+				<span class="max-w-full select-none flex flex-col justify-center transition leading-[1]">
+					{#if prompt.title && Array.isArray(prompt.title) && prompt.title[0]}
+						<span class="group-hover:text-gray-900 group-hover:dark:text-white">{prompt.title[0]}</span>
+						{#if prompt.title[1]}
+							<span class="text-neutral-500 dark:text-gray-600 text-[10px] mb-0.5 group-hover:text-gray-900 group-hover:dark:text-white">
+								{prompt.title[1]}
+							</span>
+						{/if}
+					{:else}
+						<span class="text-neutral-500 dark:text-gray-600 group-hover:text-gray-900 group-hover:dark:text-white">{prompt.content}</span>
+					{/if}
+				</span>
+			</button>
 		{/each}
 	{/if}
 </div>
 
-<!-- prompt options -->
-{#if isFilteredPrompts && selectedSuggestion?.prompts?.length > 0}
-  <div class="suggestions-container left-0 z-[-1] w-full pl-0 ">
-    <ul class="w-full flex-col p-2.5 max-lg:flex-col-reverse" style="opacity: 1; will-change: auto;">
-  		{#each selectedSuggestion?.prompts as promptOption}
-        <li class="w-full" style="opacity: 1; will-change: auto; transform: none;">
-          <button class="hover:bg-gray-100 dark:hover:bg-gray-800  flex w-full cursor-pointer items-center justify-start whitespace-pre-wrap rounded-lg px-2.5 py-3 text-start"
-            on:click={() => dispatch('select', promptOption)}
-            >
-            <span class="whitespace-pre-wrap text-sm">
-              <span class="text-neutral-500 dark:text-neutral-500 mr-1">{selectedSuggestion?.title?.[0]}</span>
-              <span class="text-neutral-900 dark:text-neutral-300 font-light ">{promptOption}</span>
-            </span>
-          </button>
-          <div class="h-[1px] opacity-60 bg-token-border-light"></div>
-        </li>
-      {/each}
-    </ul>
-  </div>
-{/if}
+	<!-- prompt options -->
+	{#if isFilteredPrompts && selectedSuggestion?.prompts?.length > 0}
+		<div class="suggestions-container left-0 z-[-1] w-full pl-0">
+			<ul class="w-full flex-col p-2.5 max-lg:flex-col-reverse" style="opacity: 1; will-change: auto;">
+				{#each selectedSuggestion?.prompts as promptOption}
+					<li class="w-full" style="opacity: 1; will-change: auto; transform: none;">
+						<button
+							class="flex w-full cursor-pointer items-center justify-start whitespace-pre-wrap rounded-lg px-2.5 py-3 text-start hover:bg-gray-200 dark:hover:bg-gray-700"
+							on:click={() => dispatch('select', promptOption)}
+						>
+							<span class="whitespace-pre-wrap text-sm">
+								<span class="text-neutral-500 dark:text-neutral-500 mr-1">{selectedSuggestion?.title?.[0]}</span>
+								<span class="text-neutral-900 dark:text-neutral-300 font-light">{promptOption}</span>
+							</span>
+						</button>
+						<div class="h-[1px] opacity-60 bg-token-border-light"></div>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
+</div>
 
 <style>
 	/* Waterfall animation for the suggestions */
@@ -211,14 +220,7 @@
 		animation-timing-function: ease;
 	}
 
-  /*
-   * NOTE Should not need this custom class. the group-hover
-   * should work, but does not for some reason
-   */
-  .group:hover .custom-hover {
-    color: white;
-  }
-  .bg-token-border-light {
-      background-color: #ffffff1a;
-  }
+	.bg-token-border-light {
+		background-color: #ffffff1a;
+	}
 </style>
