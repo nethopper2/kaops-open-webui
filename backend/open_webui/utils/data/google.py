@@ -49,6 +49,7 @@ EXCLUDED_FILES = [
 
 # Google Drive API endpoints
 DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3'
+GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me/messages'
 
 def make_request(url, method='GET', headers=None, params=None, data=None, stream=False, auth_token=None):
     """Helper function to make API requests with error handling"""
@@ -57,6 +58,331 @@ def make_request(url, method='GET', headers=None, params=None, data=None, stream
     
     return make_api_request(url, method=method, headers=headers, params=params, data=data, stream=stream, auth_token=auth_token)
 
+# Gmail sync functions
+# Gmail sync functions
+def list_gmail_messages(auth_token, query='', max_results=500):
+    """
+    List Gmail messages with optional query filter
+    
+    Args:
+        auth_token (str): OAuth token for authentication
+        query (str): Gmail search query (e.g., 'is:unread', 'from:example@gmail.com')
+        max_results (int): Maximum number of messages to retrieve
+        
+    Returns:
+        list: List of message metadata
+    """
+    try:
+        all_messages = []
+        next_page_token = None
+        
+        while True:
+            params = {
+                'maxResults': min(max_results - len(all_messages), 500),  # Gmail API limit is 500
+                'q': query
+            }
+            
+            if next_page_token:
+                params['pageToken'] = next_page_token
+            
+            url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages"
+            response = make_request(url, params=params, auth_token=auth_token)
+            
+            messages = response.get('messages', [])
+            all_messages.extend(messages)
+            
+            # Check if we have more pages and haven't reached max_results
+            next_page_token = response.get('nextPageToken')
+            if not next_page_token or len(all_messages) >= max_results:
+                break
+        
+        return all_messages[:max_results]
+        
+    except Exception as error:
+        print(f"Error listing Gmail messages: {str(error)}")
+        log.error(f"Error in list_gmail_messages:", exc_info=True)
+        return []
+
+def get_gmail_message(message_id, auth_token):
+    """
+    Get full Gmail message content
+    
+    Args:
+        message_id (str): Gmail message ID
+        auth_token (str): OAuth token for authentication
+        
+    Returns:
+        dict: Full message data including headers, body, and attachments
+    """
+    try:
+        url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}"
+        params = {'format': 'full'}
+        
+        message = make_request(url, params=params, auth_token=auth_token)
+        return message
+        
+    except Exception as error:
+        print(f"Error getting Gmail message {message_id}: {str(error)}")
+        log.error(f"Error in get_gmail_message for {message_id}:", exc_info=True)
+        return None
+
+def extract_email_content(message):
+    """
+    Extract readable content from Gmail message
+    
+    Args:
+        message (dict): Gmail message object
+        
+    Returns:
+        dict: Extracted email data with text content
+    """
+    try:
+        headers = message.get('payload', {}).get('headers', [])
+        
+        # Extract key headers
+        email_data = {
+            'id': message.get('id'),
+            'threadId': message.get('threadId'),
+            'snippet': message.get('snippet', ''),
+            'internalDate': message.get('internalDate'),
+            'subject': '',
+            'from': '',
+            'to': '',
+            'date': '',
+            'body': ''
+        }
+        
+        # Parse headers
+        for header in headers:
+            name = header.get('name', '').lower()
+            value = header.get('value', '')
+            
+            if name == 'subject':
+                email_data['subject'] = value
+            elif name == 'from':
+                email_data['from'] = value
+            elif name == 'to':
+                email_data['to'] = value
+            elif name == 'date':
+                email_data['date'] = value
+        
+        # Extract body content
+        def extract_body_recursive(payload):
+            """Recursively extract text content from message parts"""
+            body_text = ""
+            
+            if 'parts' in payload:
+                # Multi-part message
+                for part in payload['parts']:
+                    body_text += extract_body_recursive(part)
+            else:
+                # Single part message
+                mime_type = payload.get('mimeType', '')
+                body = payload.get('body', {})
+                
+                if mime_type in ['text/plain', 'text/html'] and 'data' in body:
+                    import base64
+                    decoded_data = base64.urlsafe_b64decode(body['data']).decode('utf-8', errors='ignore')
+                    body_text += decoded_data + "\n"
+            
+            return body_text
+        
+        email_data['body'] = extract_body_recursive(message.get('payload', {}))
+        
+        return email_data
+        
+    except Exception as error:
+        print(f"Error extracting email content: {str(error)}")
+        log.error(f"Error in extract_email_content:", exc_info=True)
+        return None
+
+def convert_email_to_text(email_data):
+    """
+    Convert email data to readable text format for storage
+    
+    Args:
+        email_data (dict): Extracted email data
+        
+    Returns:
+        str: Formatted email text
+    """
+    try:
+        text_content = f"""Subject: {email_data.get('subject', 'No Subject')}
+From: {email_data.get('from', 'Unknown')}
+To: {email_data.get('to', 'Unknown')}
+Date: {email_data.get('date', 'Unknown')}
+Message ID: {email_data.get('id', 'Unknown')}
+Thread ID: {email_data.get('threadId', 'Unknown')}
+
+{email_data.get('body', 'No content available')}
+"""
+        return text_content
+        
+    except Exception as error:
+        print(f"Error converting email to text: {str(error)}")
+        log.error(f"Error in convert_email_to_text:", exc_info=True)
+        return ""
+
+async def sync_gmail_to_gcs(auth_token, service_account_base64, gcs_bucket_name, query='', max_emails=1000):
+    """
+    Sync Gmail messages to Google Cloud Storage
+    
+    Args:
+        auth_token (str): OAuth token for authentication
+        service_account_base64 (str): Base64-encoded service account JSON
+        gcs_bucket_name (str): GCS bucket name
+        query (str): Gmail search query to filter messages
+        max_emails (int): Maximum number of emails to sync
+        
+    Returns:
+        dict: Sync results summary
+    """
+    global USER_ID, total_api_calls
+    
+    print('🔄 Starting Gmail sync process...')
+    
+    uploaded_files = []
+    skipped_files = 0
+    
+    try:
+        # Get list of Gmail messages
+        print(f"Fetching Gmail messages with query: '{query}' (max: {max_emails})")
+        messages = list_gmail_messages(auth_token, query, max_emails)
+        print(f"Found {len(messages)} Gmail messages")
+        
+        # Get existing GCS files for Gmail to check for duplicates
+        print("Checking existing Gmail files in GCS...")
+        gcs_files = list_gcs_files(service_account_base64, gcs_bucket_name)
+        gmail_prefix = f"userResources/{USER_ID}/Google/Gmail/"
+        existing_email_files = {
+            gcs_file['name'] for gcs_file in gcs_files 
+            if gcs_file['name'].startswith(gmail_prefix)
+        }
+        print(f"Found {len(existing_email_files)} existing Gmail files in GCS")
+        
+        # Process messages in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = []
+            
+            for i, message in enumerate(messages):
+                message_id = message.get('id')
+                if not message_id:
+                    continue
+                
+                # Create file path for email
+                email_path = f"userResources/{USER_ID}/Google/Gmail/email_{message_id}.txt"
+                
+                # Check if email already exists in GCS
+                if email_path in existing_email_files:
+                    print(f"⏭️  Skipping existing email: {message_id}")
+                    skipped_files += 1
+                    continue
+                
+                # Submit email processing task
+                futures.append(
+                    (
+                        executor.submit(
+                            download_and_upload_email,
+                            message_id,
+                            email_path,
+                            auth_token,
+                            service_account_base64,
+                            gcs_bucket_name
+                        ),
+                        message_id
+                    )
+                )
+            
+            # Process completed uploads
+            for future, message_id in futures:
+                try:
+                    result = future.result()
+                    if result:
+                        uploaded_files.append(result)
+                    else:
+                        skipped_files += 1
+                except Exception as e:
+                    print(f"Error processing email {message_id}: {str(e)}")
+                    log.error(f"Error processing email {message_id}:", exc_info=True)
+                    skipped_files += 1
+        
+        # Summary
+        print(f"\nGmail Sync Summary:")
+        print(f"📧 Emails processed: {len(messages)}")
+        print(f"📤 Emails uploaded: {len(uploaded_files)}")
+        print(f"⏭️  Emails skipped: {skipped_files}")
+        
+        return {
+            'uploaded': len(uploaded_files),
+            'skipped': skipped_files,
+            'total_processed': len(messages)
+        }
+        
+    except Exception as error:
+        print(f"Gmail sync failed: {str(error)}")
+        log.error(f"Gmail sync failed:", exc_info=True)
+        raise error
+
+def download_and_upload_email(message_id, email_path, auth_token, service_account_base64, gcs_bucket_name):
+    """
+    Download Gmail message and upload to GCS
+    
+    Args:
+        message_id (str): Gmail message ID
+        email_path (str): GCS path for the email file
+        auth_token (str): OAuth token
+        service_account_base64 (str): Service account credentials
+        gcs_bucket_name (str): GCS bucket name
+        
+    Returns:
+        dict: Upload result or None if failed
+    """
+    start_time = time.time()
+    
+    try:
+        # Get full message content
+        message = get_gmail_message(message_id, auth_token)
+        if not message:
+            return None
+        
+        # Extract email content
+        email_data = extract_email_content(message)
+        if not email_data:
+            return None
+        
+        # Convert to text format
+        email_text = convert_email_to_text(email_data)
+        if not email_text:
+            return None
+        
+        # Create BytesIO object with email content
+        email_content = io.BytesIO(email_text.encode('utf-8'))
+        
+        # Upload to GCS
+        result = upload_to_gcs(
+            email_content,
+            email_path,
+            'text/plain',
+            service_account_base64,
+            gcs_bucket_name
+        )
+        
+        upload_result = {
+            'path': email_path,
+            'type': 'new',
+            'size': len(email_text.encode('utf-8')),
+            'subject': email_data.get('subject', 'No Subject'),
+            'durationMs': int((time.time() - start_time) * 1000)
+        }
+        
+        print(f"[{datetime.now().isoformat()}] Uploaded email: {email_data.get('subject', 'No Subject')}")
+        return upload_result
+        
+    except Exception as e:
+        print(f"Error processing email {message_id}: {str(e)}")
+        log.error(f"Error in download_and_upload_email for {message_id}:", exc_info=True)
+        return None
+    
 #Google Drive Sync Functions
 def list_files_recursively(folder_id, auth_token, current_path='', all_files=None, drive_name=None):
     """Recursive file listing with path construction using REST API"""
@@ -124,9 +450,9 @@ def list_files_recursively(folder_id, auth_token, current_path='', all_files=Non
                 
                 # Include USER_ID and "Google Drive" folder in the path
                 if drive_name:
-                    file_info['fullPath'] = f"userResources/{USER_ID}/Google Drive/{drive_name}/{current_path}{file['name']}"
+                    file_info['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/{drive_name}/{current_path}{file['name']}"
                 else:
-                    file_info['fullPath'] = f"userResources/{USER_ID}/Google Drive/{current_path}{file['name']}"
+                    file_info['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/{current_path}{file['name']}"
                 
                 all_files.append(file_info)
     
@@ -456,7 +782,7 @@ async def sync_drive_to_gcs(auth_token, service_account_base64):
         global USER_ID
         
         # Delete orphaned GCS files that belong to this user
-        user_prefix = f"userResources/{USER_ID}/Google Drive/"
+        user_prefix = f"userResources/{USER_ID}/Google/Google Drive/"
         for gcs_name, gcs_file in gcs_file_map.items():
             # Only consider files that belong to this user's Google Drive folder
             if gcs_name.startswith(user_prefix) and gcs_name not in drive_file_paths:
@@ -541,10 +867,7 @@ async def sync_drive_to_gcs(auth_token, service_account_base64):
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
         
-        await update_data_source_sync_status(USER_ID, 'google', 'synced')
-    
     except Exception as error:
-        await update_data_source_sync_status(USER_ID, 'google', 'error')
         # Log the full error for debugging
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
         print(traceback.format_exc())
@@ -585,11 +908,27 @@ def download_and_upload_file(file, auth_token, service_account_base64, GCS_BUCKE
         return None # Ensure None is returned on error
 
 # Main Execution Function
-async def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str):
-    log.info(f'Sync Google Drive to Google Cloud Storage')
+async def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str, sync_drive=True, sync_gmail=True, gmail_query='', max_emails=1000):
+    """
+    Main entry point to sync Google Drive and/or Gmail to GCS
+    
+    Args:
+        user_id (str): User ID to prefix file paths
+        token (str): OAuth token for Google APIs
+        creds (str): Base64-encoded Google service account JSON
+        gcs_bucket_name (str): GCS bucket name
+        sync_drive (bool): Whether to sync Google Drive files
+        sync_gmail (bool): Whether to sync Gmail messages
+        gmail_query (str): Gmail search query to filter messages
+        max_emails (int): Maximum number of emails to sync
+        
+    Returns:
+        dict: Summary of sync operations
+    """
+    log.info(f'Sync Google services to Google Cloud Storage')
     log.info(f'User Open WebUI ID: {user_id}')
     log.info(f'GCS Bucket Name: {gcs_bucket_name}')
-    log.info(f'Auth token: {token}')
+    log.info(f'Sync Drive: {sync_drive}, Sync Gmail: {sync_gmail}')
 
     global USER_ID 
     global GCS_BUCKET_NAME
@@ -601,7 +940,30 @@ async def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bu
     total_api_calls = 0
     script_start_time = time.time()
 
+    results = {
+        'drive': None,
+        'gmail': None
+    }
+
     await update_data_source_sync_status(USER_ID, 'google', 'syncing')
 
-    # Run the sync process
-    await sync_drive_to_gcs(token, creds)
+    try:
+        # Sync Google Drive if requested
+        if sync_drive:
+            await sync_drive_to_gcs(token, creds)
+            results['drive'] = 'completed'
+        
+        # Sync Gmail if requested
+        if sync_gmail:
+            
+            gmail_result = await sync_gmail_to_gcs(token, creds, gcs_bucket_name, gmail_query, max_emails)
+            results['gmail'] = gmail_result
+
+        await update_data_source_sync_status(USER_ID, 'google', 'synced')
+        
+        return results
+        
+    except Exception as error:
+        await update_data_source_sync_status(USER_ID, 'google', 'error')
+        log.error("Google sync failed:", exc_info=True)
+        raise error

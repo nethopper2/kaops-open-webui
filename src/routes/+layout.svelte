@@ -64,11 +64,14 @@
 
 	let loaded = false;
 	let tokenTimer = null;
+	let backendConfig = null;
 
 	const BREAKPOINT = 768;
 
 	const setupSocket = async (enableWebsocket) => {
-		const _socket = io(`${WEBUI_BASE_URL}` || undefined, {
+		const websocketUrl = backendConfig?.features?.overide_socket_url ?? WEBUI_BASE_URL;
+
+		const _socket = io(`${websocketUrl}` || undefined, {
 			reconnection: true,
 			reconnectionDelay: 1000,
 			reconnectionDelayMax: 5000,
@@ -542,7 +545,7 @@
 			}
 		});
 
-		let backendConfig = null;
+		// let backendConfig = null;
 		try {
 			backendConfig = await getBackendConfig();
 			console.log('Backend config:', backendConfig);

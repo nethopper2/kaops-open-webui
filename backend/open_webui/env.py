@@ -358,9 +358,12 @@ OAUTH_PROVIDER_NAME = os.environ.get("OAUTH_PROVIDER_NAME", None)
 ####################################
 # DATA_INGESTION
 ####################################
+SSO_PROVIDER_NAME = os.environ.get("SSO_PROVIDER_NAME", None)
 ENABLE_SSO_DATA_SYNC = os.environ.get("ENABLE_SSO_DATA_SYNC", None)
+OVERIDE_WEB_SOCKET_URL = os.environ.get("OVERIDE_WEB_SOCKET_URL", None)
 GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", None)
 GCS_SERVICE_ACCOUNT_BASE64 = os.environ.get("GCS_SERVICE_ACCOUNT_BASE64", None)
+DATASOURCES_URL = os.environ.get("DATASOURCES_URL", "http://localhost:5173/workspace/data-sources")
 
 SLACK_CLIENT_ID = os.environ.get("SLACK_CLIENT_ID", None)
 SLACK_CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET", None)
@@ -377,7 +380,7 @@ SLACK_AUTH_REVOKE_URL = os.environ.get(
     "SLACK_AUTH_REVOKE_URL", "https://slack.com/api/auth.revoke"
 )
 
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None)
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "None")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", None)
 GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", None)
 

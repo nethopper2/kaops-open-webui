@@ -32,8 +32,7 @@ from open_webui.env import (
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
     WEBUI_AUTH_TRUSTED_NAME_HEADER,
     WEBUI_AUTH_TRUSTED_GROUPS_HEADER,
-    WEBUI_AUTH_TRUSTED_PROFILE_IMAGE_URL_HEADER,
-    OAUTH_PROVIDER_NAME,
+    SSO_PROVIDER_NAME,
     ENABLE_SSO_DATA_SYNC,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
@@ -475,7 +474,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
 
         # Fetch the Authorization headers added to request
         # This will be used when using SSO to extract user profile and file data
-        sso_provider = str(OAUTH_PROVIDER_NAME).lower()
+        sso_provider = str(SSO_PROVIDER_NAME).lower()
         token = request.headers.get(
                 'X-Forwarded-Access-Token', None
             )
@@ -526,9 +525,22 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
             # update their profile image URL and name with the latest data
             # from the SSO provider
             if user_exists:
-                Users.update_user_by_id(user_id, {"profile_image_url": trusted_profile_image_url, "name": trusted_name})
+                updates_to_make = {}
 
-
+                # Check and add profile_image_url to updates if different
+                if user_exists.profile_image_url != trusted_profile_image_url:
+                    updates_to_make["profile_image_url"] = trusted_profile_image_url
+                    
+                # Check and add name to updates if different
+                if user_exists.name != trusted_name:
+                    updates_to_make["name"] = trusted_name
+                    
+                # Perform the update only if there are changes
+                if updates_to_make:
+                    Users.update_user_by_id(user_id, updates_to_make)
+                    print(f"User '{user_id}' updated successfully.")
+                    
+                
             # For existing and new users, trigger user file data sync from the SSO provider if enabled
             if ENABLE_SSO_DATA_SYNC:
                 # Add background tasks to sync user file data from the SSO provider
@@ -817,6 +829,10 @@ async def add_user(form_data: AddUserForm, user=Depends(get_admin_user)):
 
         if user:
             token = create_token(data={"id": user.id})
+            
+            # Create default data sources for the new user
+            DataSources.create_default_data_sources_for_user(user.id)
+
             return {
                 "token": token,
                 "token_type": "Bearer",

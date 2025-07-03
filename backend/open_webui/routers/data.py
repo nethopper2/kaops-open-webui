@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, BackgroundTasks
+from fastapi.responses import RedirectResponse, HTMLResponse
 import requests
 import os
 import logging
@@ -68,7 +69,8 @@ from open_webui.env import (
     ATLASSIAN_REDIRECT_URL,
 
     GCS_BUCKET_NAME,
-    GCS_SERVICE_ACCOUNT_BASE64
+    GCS_SERVICE_ACCOUNT_BASE64,
+    DATASOURCES_URL
 )
 
 oauth_state_store = {}
@@ -350,6 +352,7 @@ def get_google_auth_url(user=Depends(get_verified_user)):
     google_scopes = [
         "https://www.googleapis.com/auth/userinfo.profile", # Basic profile info
         "https://www.googleapis.com/auth/drive.readonly",   # Read-only Google Drive files
+        "https://www.googleapis.com/auth/gmail.readonly" # Read-only Gmail messages
     ]
 
     scope_str = " ".join(google_scopes) # Google scopes are space-separated
@@ -488,14 +491,16 @@ async def google_callback(request: Request, background_tasks: BackgroundTasks):
                 GCS_BUCKET_NAME
             )
 
-            await update_data_source_sync_status(user_id, 'google', 'syncing')
+            background_tasks.add_task(
+                update_data_source_sync_status,
+                'google', 
+                'syncing'
+            )
 
-            return {
-                "message": "Google data sync initiated successfully.",
-                "user_id": user_id,
-                "google_user_id": google_user_id,
-                "status": "success"
-            }
+            return RedirectResponse(
+                url=DATASOURCES_URL,
+                status_code=302
+            )
             
 
         except Exception as sync_error:
@@ -551,6 +556,18 @@ async def manual_google_sync(
     """Manually trigger Google sync for the authenticated user, fetching tokens from DB."""
     if not user:
         raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    # Check if Slack sync is already in progress
+    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+    google_data_source = None
+    
+    for ds in user_data_sources:
+        if ds.action == 'google':
+            google_data_source = ds
+            break
+    
+    if google_data_source and google_data_source.sync_status == 'syncing':
+        return
 
     current_time = int(time.time())
 
@@ -654,12 +671,21 @@ async def manual_google_sync(
         log.warning(f"Access token for user {user.id} nearing expiration but no valid refresh token available. Initiating re-authorization flow.")
         
         try:
+            # Google scopes - choose the necessary ones for the data you want to access.
+            # For read-only access to common user data:
+            google_scopes = [
+                "https://www.googleapis.com/auth/userinfo.profile", # Basic profile info
+                "https://www.googleapis.com/auth/drive.readonly",   # Read-only Google Drive files
+                "https://www.googleapis.com/auth/gmail.readonly" # Read-only Gmail messages
+            ]
+
+            scope_str = " ".join(google_scopes) # Google scopes are space-separated
             # Generate re-authorization URL for Google OAuth
             google_auth_url = (
                 f"https://accounts.google.com/o/oauth2/auth?"
                 f"client_id={GOOGLE_CLIENT_ID}&"
                 f"redirect_uri={os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8000/auth/google/callback')}&"
-                f"scope=openid%20https://www.googleapis.com/auth/userinfo.email%20https://www.googleapis.com/auth/userinfo.profile&"
+                f"scope={scope_str}&"
                 f"response_type=code&"
                 f"access_type=offline&"
                 f"prompt=consent&"
@@ -937,10 +963,13 @@ def get_microsoft_auth_url(user=Depends(get_verified_user)):
 
     # Microsoft Graph scopes.
     microsoft_scopes = [
-        "User.Read",         # Read user's profile
-        "Files.Read.All",    # Read user's files in OneDrive and SharePoint
-        "Sites.Read.All",    # Read user's sites in SharePoint
-        "offline_access"     # Crucial to get a refresh_token
+        "User.Read",              # Read user's profile
+        "Files.Read.All",         # Read user's files in OneDrive and SharePoint
+        "Sites.Read.All",         # Read user's sites in SharePoint
+        "Notes.Read",             # Read user's OneNote notebooks
+        "Mail.Read",              # Read user's mail in Outlook
+        "MailboxSettings.Read",   # Read user's mailbox settings
+        "offline_access"          # Crucial to get a refresh_token
     ]
 
     scope_str = " ".join(microsoft_scopes) # Microsoft scopes are space-separated
@@ -1075,14 +1104,16 @@ async def microsoft_callback(request: Request, background_tasks: BackgroundTasks
                 GCS_BUCKET_NAME
             )
 
-            await update_data_source_sync_status(user_id, 'microsoft', 'syncing')
+            background_tasks.add_task(
+                update_data_source_sync_status,
+                'microsoft', 
+                'syncing'
+            )
 
-            return {
-                "message": "Microsoft data sync initiated successfully.",
-                "user_id": user_id,
-                "microsoft_user_id": microsoft_user_id,
-                "status": "success"
-            }
+            return RedirectResponse(
+                url=DATASOURCES_URL,
+                status_code=302
+            )
 
         except Exception as sync_error:
             log.error(f"Microsoft sync failed for user {user_id}: {str(sync_error)}")
@@ -1137,6 +1168,18 @@ async def manual_microsoft_sync(
     """Manually trigger Microsoft sync for the authenticated user, fetching tokens from DB."""
     if not user:
         raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    # Check if Slack sync is already in progress
+    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+    microsoft_data_source = None
+    
+    for ds in user_data_sources:
+        if ds.action == 'microsoft':
+            microsoft_data_source = ds
+            break
+    
+    if microsoft_data_source and microsoft_data_source.sync_status == 'syncing':
+        return
 
     current_time = int(time.time())
 
@@ -1234,12 +1277,24 @@ async def manual_microsoft_sync(
     elif refresh_needed and not decrypted_refresh_token:
         log.warning(f"Access token for user {user.id} nearing expiration but no valid refresh token available. Initiating re-authorization flow.")
         try:
+            # Microsoft Graph scopes.
+            microsoft_scopes = [
+                "User.Read",              # Read user's profile
+                "Files.Read.All",         # Read user's files in OneDrive and SharePoint
+                "Sites.Read.All",         # Read user's sites in SharePoint
+                "Notes.Read",             # Read user's OneNote notebooks
+                "Mail.Read",              # Read user's mail in Outlook
+                "MailboxSettings.Read",   # Read user's mailbox settings
+                "offline_access"          # Crucial to get a refresh_token
+            ]
+
+            scope_str = " ".join(microsoft_scopes) # Microsoft scopes are space-separated
             # Generate re-authorization URL for Microsoft OAuth
             microsoft_auth_url = (
                 f"{MICROSOFT_AUTHORIZE_URL}"
                 f"?client_id={MICROSOFT_CLIENT_ID}&"
                 f"redirect_uri={MICROSOFT_REDIRECT_URI}&"
-                f"scope=User.Read%20Files.Read.All%20Sites.Read.All%20offline_access&" # Re-request necessary scopes including offline_access
+                f"scope={scope_str}&" # Re-request necessary scopes including offline_access
                 f"response_type=code&"
                 f"prompt=consent&" # Ensures refresh token is granted
                 f"state={user.id}"
@@ -1291,13 +1346,16 @@ async def manual_microsoft_sync(
             GCS_BUCKET_NAME
         )
 
-        await update_data_source_sync_status(user.id, 'microsoft', 'syncing')
+        background_tasks.add_task(
+            update_data_source_sync_status,
+            'microsoft', 
+            'syncing'
+        )
 
-        return {
-            "message": "Microsoft data sync initiated successfully.",
-            "user_id": user.id,
-            "status": "success"
-        }
+        return RedirectResponse(
+            url=DATASOURCES_URL,
+            status_code=302
+        )
 
     except Exception as sync_error:
         log.error(f"Microsoft sync failed for user {user.id}: {str(sync_error)}")
@@ -1644,7 +1702,6 @@ async def slack_callback(request: Request, background_tasks: BackgroundTasks):
                 encrypted_refresh_token=encrypted_refresh_token,
                 access_token_expires_at=access_token_expires_at,
                 scopes=granted_scopes,
-                # data_source_id=None, # You could link this to a specific data_source entry if applicable
             )
             log.info(f"Stored/Updated Slack OAuth tokens for user {user_id}, team {team_id}")
 
@@ -1682,18 +1739,16 @@ async def slack_callback(request: Request, background_tasks: BackgroundTasks):
                 GCS_BUCKET_NAME
             )
 
-            await update_data_source_sync_status(user_id, 'slack', 'syncing')
-            
-            return {
-                "message": "Slack data sync initiated successfully.",
-                "user_id": user_id,
-                "team_name": data.get("team", {}).get("name", "Unknown"),
-                "slack_user_id": slack_user_id,
-                "token_type": "user" if user_access_token else "bot",
-                "bot_token_available": bool(bot_access_token),
-                "user_token_available": bool(user_access_token),
-                "status": "success"
-            }
+            background_tasks.add_task(
+                update_data_source_sync_status,
+                'slack', 
+                'syncing'
+            )
+
+            return RedirectResponse(
+                url=DATASOURCES_URL,
+                status_code=302
+            )
             
         except Exception as sync_error:
             log.error(f"Slack sync failed for user {user_id}: {str(sync_error)}")
@@ -1736,17 +1791,31 @@ async def manual_slack_sync(
     if not user:
         raise HTTPException(status_code=401, detail="User not authenticated")
     
+    # Check if Slack sync is already in progress
+    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+    slack_data_source = None
+    
+    for ds in user_data_sources:
+        if ds.action == 'slack':
+            slack_data_source = ds
+            break
+    
+    if slack_data_source and slack_data_source.sync_status == 'syncing':
+        return
+    
     current_time = int(time.time())
 
     # 1. Fetch encrypted tokens for the user and Slack provider
     # Fetch the most recently updated Slack token associated with the user
     token_entry = OAuthTokens.get_token_by_user_provider_details(
         user_id=user.id,
-        provider_name="slack"
+        provider_name="Slack"
         # If a user can connect multiple Slack workspaces, you'd need a way
         # to identify which specific team/workspace token to use, e.g., via a query parameter.
         # For now, we fetch the "primary" one (most recently updated).
     )
+
+    log.info(f"Fetched Slack token entry for user {user.id}: {token_entry}")
 
     if not token_entry:
         raise HTTPException(
@@ -1858,7 +1927,11 @@ async def manual_slack_sync(
             GCS_BUCKET_NAME
         )
 
-        await update_data_source_sync_status(user.id, 'slack', 'syncing')
+        background_tasks.add_task(
+                update_data_source_sync_status,
+                'slack', 
+                'syncing'
+            )
         
         return {
             "message": "Slack data sync initiated successfully.",
@@ -1970,7 +2043,7 @@ async def disconnect_slack(background_tasks: BackgroundTasks, user=Depends(get_v
         else:
             db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
                 user_id=user_id,
-                provider_name="slack"
+                provider_name="Slack"
             )
 
         if db_delete_success:
@@ -2225,14 +2298,16 @@ async def atlassian_callback(request: Request, background_tasks: BackgroundTasks
                 gcs_bucket_name=GCS_BUCKET_NAME
             )
 
-            await update_data_source_sync_status(user_id, 'atlassian', 'syncing')
+            background_tasks.add_task(
+                update_data_source_sync_status,
+                'google', 
+                'syncing'
+            )
 
-            return {
-                "message": "Atlassian data sync initiated successfully.",
-                "user_id": user_id,
-                "atlassian_user_id": atlassian_user_id,
-                "status": "success"
-            }
+            return RedirectResponse(
+                url=DATASOURCES_URL,
+                status_code=302
+            )
 
         except Exception as sync_error:
             log.error(f"Atlassian sync failed for user {user_id}: {str(sync_error)}", exc_info=True)
@@ -2284,6 +2359,18 @@ async def manual_atlassian_sync(
     """Manually trigger Atlassian sync for the authenticated user, fetching tokens from DB."""
     if not user:
         raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    # Check if Slack sync is already in progress
+    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+    atlassian_data_source = None
+    
+    for ds in user_data_sources:
+        if ds.action == 'atlassian':
+            atlassian_data_source = ds
+            break
+    
+    if atlassian_data_source and atlassian_data_source.sync_status == 'syncing':
+        return
 
     current_time = int(time.time())
 

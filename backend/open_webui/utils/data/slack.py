@@ -12,7 +12,7 @@ import traceback
 
 from open_webui.env import SRC_LOG_LEVELS
 
-from open_webui.utils.data.data_ingestion import upload_to_gcs, list_gcs_files, delete_gcs_file, make_api_request, parse_date, format_bytes, update_data_source_sync_status
+from open_webui.utils.data.data_ingestion import upload_to_gcs, download_from_gcs, list_gcs_files, delete_gcs_file, make_api_request, parse_date, format_bytes, update_data_source_sync_status
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
@@ -263,6 +263,27 @@ def check_user_membership(conversation_id, auth_token, target_user_id):
         print(f"Error checking membership for {conversation_id}: {str(error)}")
         return False
 
+def check_user_is_member(conversation_id, auth_token):
+    """Check if the authenticated user is a member of the conversation"""
+    try:
+        url = f"{SLACK_API_BASE}/conversations.info"
+        headers = {"Authorization": f"Bearer {auth_token}"}
+        params = {'channel': conversation_id}
+        
+        response = make_request(url, headers=headers, params=params, auth_token=auth_token)
+        
+        if response.get('ok'):
+            channel_info = response.get('channel', {})
+            # User is a member if they can access channel info and is_member is True
+            return channel_info.get('is_member', False)
+        else:
+            # If we can't get channel info, assume we're not a member
+            return False
+            
+    except Exception as error:
+        print(f"Error checking membership for {conversation_id}: {str(error)}")
+        return False
+
 def join_channel_if_user_is_member(conversation_id, auth_token, target_user_id, conversation_name=""):
     """Join a channel only if the target user is already a member"""
     try:
@@ -294,7 +315,7 @@ def join_channel_if_user_is_member(conversation_id, auth_token, target_user_id, 
         return False
 
 def get_conversations_list(auth_token, types="public_channel,private_channel,mpim,im"):
-    """Get list of conversations the user has access to"""
+    """Get list of conversations the user has access to and is a member of"""
     try:
         all_conversations = []
         cursor = None
@@ -318,7 +339,18 @@ def get_conversations_list(auth_token, types="public_channel,private_channel,mpi
                 raise Exception(f"Failed to get conversations: {response.get('error')}")
             
             conversations = response.get('channels', [])
-            all_conversations.extend(conversations)
+            
+            # Filter conversations to only include those where user is a member
+            for conv in conversations:
+                # For DMs (im) and group DMs (mpim), user is always a member if they're in the list
+                if conv.get('is_im') or conv.get('is_mpim'):
+                    all_conversations.append(conv)
+                # For channels, check if user is a member
+                elif conv.get('is_member', False):
+                    all_conversations.append(conv)
+                # For channels where is_member is not reliable, do an explicit check
+                elif check_user_is_member(conv['id'], auth_token):
+                    all_conversations.append(conv)
             
             # Check for pagination
             cursor = response.get('response_metadata', {}).get('next_cursor')
@@ -330,6 +362,141 @@ def get_conversations_list(auth_token, types="public_channel,private_channel,mpi
     except Exception as error:
         print(f"Error getting conversations: {str(error)}")
         return []
+    
+def download_existing_conversation_from_gcs(conversation_path, service_account_base64, gcs_bucket_name):
+    """Download existing conversation data from GCS"""
+    try:
+        # This function needs to be implemented - it should download the JSON file from GCS
+        # and return the parsed conversation data
+        file_content = download_from_gcs(conversation_path, service_account_base64, gcs_bucket_name)
+        if file_content:
+            return json.loads(file_content.decode('utf-8'))
+        return None
+    except Exception as error:
+        print(f"Error downloading existing conversation from GCS: {str(error)}")
+        return None
+
+def get_conversation_history_incremental(conversation_id, auth_token, conversation_name="", last_message_ts=None):
+    """Get message history for a conversation, optionally from a specific timestamp"""
+    try:
+        all_messages = []
+        cursor = None
+        
+        while True:
+            params = {
+                'channel': conversation_id,
+                'limit': 1000,
+                'inclusive': 'true'
+            }
+            
+            # If we have a last message timestamp, only fetch messages after it
+            if last_message_ts:
+                params['oldest'] = str(float(last_message_ts) + 0.000001)  # Add tiny increment to exclude the last message
+            
+            if cursor:
+                params['cursor'] = cursor
+            
+            url = f"{SLACK_API_BASE}/conversations.history"
+            headers = {"Authorization": f"Bearer {auth_token}"}
+            
+            response = make_request(url, headers=headers, params=params, auth_token=auth_token)
+            
+            if not response.get('ok'):
+                error_msg = response.get('error', 'unknown_error')
+                print(f"⚠️  Failed to get history for {conversation_name} ({conversation_id}): {error_msg}")
+                return []
+            
+            messages = response.get('messages', [])
+            all_messages.extend(messages)
+            
+            # Check for pagination
+            cursor = response.get('response_metadata', {}).get('next_cursor')
+            if not cursor:
+                break
+            
+            # Add delay between requests
+            if cursor:  # Only sleep if there are more pages
+                print(f"Waiting 30s before fetching next batch for {conversation_name}...")
+                time.sleep(30)
+        
+        return all_messages
+        
+    except Exception as error:
+        print(f"Error getting conversation history for {conversation_id}: {str(error)}")
+        return []
+    
+def merge_conversation_messages(existing_messages, new_messages):
+    """Merge existing and new messages, handling updates and deletions"""
+    try:
+        # Create a map of existing messages by timestamp for quick lookup
+        existing_msg_map = {msg.get('ts'): msg for msg in existing_messages if msg.get('ts')}
+        
+        # Start with existing messages
+        all_messages = list(existing_messages)
+        
+        # Process new messages
+        for new_msg in new_messages:
+            msg_ts = new_msg.get('ts')
+            if not msg_ts:
+                continue
+                
+            # If message already exists, update it (handles edits)
+            if msg_ts in existing_msg_map:
+                # Find and replace the existing message
+                for i, existing_msg in enumerate(all_messages):
+                    if existing_msg.get('ts') == msg_ts:
+                        all_messages[i] = new_msg
+                        break
+            else:
+                # Add new message
+                all_messages.append(new_msg)
+        
+        # Sort messages by timestamp
+        all_messages.sort(key=lambda x: float(x.get('ts', 0)))
+        
+        # Handle deleted messages - this is tricky because Slack doesn't explicitly tell us
+        # about deletions in the API. For now, we'll keep all messages we have.
+        # A more sophisticated approach would be to periodically do a full sync
+        # to catch deletions, or implement a separate deletion detection mechanism.
+        
+        return all_messages
+        
+    except Exception as error:
+        print(f"Error merging conversation messages: {str(error)}")
+        return existing_messages
+    
+def get_latest_message_timestamp(messages):
+    """Get the timestamp of the most recent message"""
+    if not messages:
+        return None
+    
+    try:
+        # Sort messages by timestamp and get the latest
+        sorted_messages = sorted(messages, key=lambda x: float(x.get('ts', 0)), reverse=True)
+        return sorted_messages[0].get('ts') if sorted_messages else None
+    except Exception as error:
+        print(f"Error getting latest message timestamp: {str(error)}")
+        return None
+    
+def check_file_exists_in_gcs(file_id, service_account_base64, gcs_bucket_name):
+    """Check if a file with the given Slack file ID already exists in GCS"""
+    try:
+        # List all files in the user's Slack files directory
+        user_prefix = f"userResources/{USER_ID}/Slack/Files/"
+        gcs_files = list_gcs_files(service_account_base64, gcs_bucket_name, prefix=user_prefix)
+        
+        # Check if any file has this file ID in its metadata or path
+        for gcs_file in gcs_files:
+            # We'll need to store the Slack file ID in the file path or metadata
+            # For now, let's assume we include it in the filename
+            if f"_{file_id}" in gcs_file['name'] or gcs_file['name'].endswith(f"_{file_id}"):
+                return gcs_file
+        
+        return None
+        
+    except Exception as error:
+        print(f"Error checking if file exists in GCS: {str(error)}")
+        return None
 
 def get_user_direct_messages(auth_token, user_id):
     """Get all direct message conversations for the user"""
@@ -525,8 +692,8 @@ def download_slack_file(file_info, auth_token):
         # log.error(f"Error downloading file {file_info.get('name', 'unknown')}:", exc_info=True)
         return None # Return None as stated in the original function's error path
 
-def process_conversation(conversation, auth_token, slack_user_id, user_info_map):
-    """Process a single conversation and return its data"""
+def process_conversation(conversation, auth_token, slack_user_id, user_info_map, service_account_base64, gcs_bucket_name):
+    """Process a single conversation with incremental updates"""
     try:
         conversation_id = conversation['id']
         conversation_name = conversation.get('name', conversation_id)
@@ -534,44 +701,70 @@ def process_conversation(conversation, auth_token, slack_user_id, user_info_map)
         
         print(f"Processing {conversation_type}: {conversation_name}")
         
-        # Get message history with target_user_id for membership checking
-        messages = get_conversation_history(conversation_id, auth_token, conversation_name, slack_user_id)
-        
-        # Skip if no messages (likely due to access issues)
-        if not messages:
-            print(f"⚠️  No messages found for {conversation_name}, skipping...")
-            return None
-        
-        # Get thread replies for messages that have them
-        for message in messages:
-            if message.get('thread_ts') and message.get('reply_count', 0) > 0:
-                replies = get_conversation_replies(conversation_id, message['thread_ts'], auth_token)
-                message['replies'] = replies
-        
-        # Create conversation data structure
-        conversation_data = {
-            'conversation_info': conversation,
-            'messages': messages,
-            'exported_at': datetime.now(timezone.utc).isoformat(),
-            'total_messages': len(messages)
-        }
-        
         # Create file path based on conversation type and name
         if conversation.get('is_im'):
-            # For DMs, use the other user's name or ID
             other_user = conversation.get('user', 'unknown_user')
             other_user_name = user_info_map.get(other_user, other_user)
             file_path = f"userResources/{USER_ID}/Slack/Direct Messages/{other_user_name}.json"
         elif conversation.get('is_mpim'):
-            # For multi-person DMs
             file_path = f"userResources/{USER_ID}/Slack/Group Messages/{conversation_name}.json"
         else:
-            # For channels
             file_path = f"userResources/{USER_ID}/Slack/Channels/{conversation_name}.json"
         
-        # Get the most recent message timestamp for comparison, using safe_parse_date
+        # Check if conversation already exists in GCS
+        existing_conversation_data = download_existing_conversation_from_gcs(
+            file_path, service_account_base64, gcs_bucket_name
+        )
+        
+        existing_messages = []
+        last_message_ts = None
+        
+        if existing_conversation_data:
+            print(f"📥 Found existing conversation data for {conversation_name}")
+            existing_messages = existing_conversation_data.get('messages', [])
+            last_message_ts = get_latest_message_timestamp(existing_messages)
+            
+            if last_message_ts:
+                print(f"🕐 Last message timestamp: {last_message_ts}")
+        
+        # Get new messages (or all messages if no existing data)
+        new_messages = get_conversation_history_incremental(
+            conversation_id, auth_token, conversation_name, last_message_ts
+        )
+        
+        if not new_messages and not existing_messages:
+            print(f"⚠️  No messages found for {conversation_name}, skipping...")
+            return None
+        
+        # Merge existing and new messages
+        if existing_messages:
+            all_messages = merge_conversation_messages(existing_messages, new_messages)
+            print(f"📊 Merged {len(existing_messages)} existing + {len(new_messages)} new = {len(all_messages)} total messages")
+        else:
+            all_messages = new_messages
+            print(f"📊 Found {len(all_messages)} messages in new conversation")
+        
+        # Get thread replies for messages that have them
+        for message in all_messages:
+            if message.get('thread_ts') and message.get('reply_count', 0) > 0:
+                # Only fetch replies if we don't already have them or if this is a new message
+                if not message.get('replies') or message in new_messages:
+                    replies = get_conversation_replies(conversation_id, message['thread_ts'], auth_token)
+                    message['replies'] = replies
+        
+        # Create conversation data structure
+        conversation_data = {
+            'conversation_info': conversation,
+            'messages': all_messages,
+            'exported_at': datetime.now(timezone.utc).isoformat(),
+            'total_messages': len(all_messages),
+            'last_sync_timestamp': last_message_ts,
+            'incremental_sync': existing_conversation_data is not None
+        }
+        
+        # Get the most recent message timestamp for comparison
         message_dates = []
-        for msg in messages:
+        for msg in all_messages:
             if msg.get('ts'):
                 parsed_date = safe_parse_date(msg.get('ts'))
                 if parsed_date:
@@ -583,29 +776,43 @@ def process_conversation(conversation, auth_token, slack_user_id, user_info_map)
             'path': file_path,
             'data': conversation_data,
             'size': len(json.dumps(conversation_data).encode('utf-8')),
-            'modified_time': modified_time
+            'modified_time': modified_time,
+            'is_update': existing_conversation_data is not None,
+            'new_messages_count': len(new_messages)
         }
         
     except Exception as error:
         print(f"Error processing conversation {conversation.get('name', conversation.get('id'))}: {str(error)}")
         return None
 
-def process_file(file_info, auth_token):
-    """Process a single file and return its data"""
+def process_file(file_info, auth_token, service_account_base64, gcs_bucket_name):
+    """Process a single file, skipping if already exists in GCS"""
     try:
-        file_name = file_info.get('name', f"file_{file_info['id']}")
+        file_id = file_info['id']
+        file_name = file_info.get('name', f"file_{file_id}")
         file_size = file_info.get('size', 0)
-        file_type = file_info.get('filetype', 'unknown')
         
         print(f"Processing file: {file_name} ({format_bytes(file_size)})")
+        
+        # Check if file already exists in GCS
+        existing_gcs_file = check_file_exists_in_gcs(file_id, service_account_base64, gcs_bucket_name)
+        
+        if existing_gcs_file:
+            print(f"⏭️  File {file_name} already exists in GCS, skipping...")
+            return {
+                'skipped': True,
+                'path': existing_gcs_file['name'],
+                'reason': 'Already exists in GCS'
+            }
         
         # Download file content
         file_content = download_slack_file(file_info, auth_token)
         if not file_content:
             return None
         
-        # Create file path
-        file_path = f"userResources/{USER_ID}/Slack/Files/{file_name}"
+        # Create file path with file ID to ensure uniqueness
+        safe_filename = f"{file_name}_{file_id}"
+        file_path = f"userResources/{USER_ID}/Slack/Files/{safe_filename}"
         
         # Use safe_parse_date for file timestamp
         file_timestamp = file_info.get('timestamp')
@@ -616,7 +823,9 @@ def process_file(file_info, auth_token):
             'content': file_content,
             'size': file_size,
             'mime_type': file_info.get('mimetype'),
-            'modified_time': modified_time
+            'modified_time': modified_time,
+            'file_id': file_id,
+            'skipped': False
         }
         
     except Exception as error:
@@ -661,7 +870,7 @@ def upload_file_to_gcs(file_data, service_account_base64, gcs_bucket_name):
         return None
 
 async def sync_slack_to_gcs(auth_token, service_account_base64):
-    """Main function to sync Slack data to Google Cloud Storage"""
+    """Main function to sync Slack data to Google Cloud Storage with incremental updates"""
     global total_api_calls
     global GCS_BUCKET_NAME
     
@@ -680,11 +889,11 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
         slack_user_id = user_info['user_id']
         print(f"Syncing data for user: {user_info['user']} ({slack_user_id})")
         
-        # Get all conversations including explicit DM fetch
-        print("Fetching conversations...")
+        # Get conversations where user is a member
+        print("Fetching conversations where user is a member...")
         conversations = get_conversations_list(auth_token)
         
-        # Also explicitly fetch DMs to ensure we get all of them
+        # Also explicitly fetch DMs
         print("Fetching direct messages...")
         direct_messages = get_user_direct_messages(auth_token, slack_user_id)
         
@@ -710,18 +919,22 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
         files = get_user_files(auth_token, slack_user_id)
         print(f"Found {len(files)} files")
         
-        # List existing GCS files for this user
-        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME)
-        gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
-        
-        # Process conversations
+        # Process conversations with incremental updates
         print("\nProcessing conversations...")
         conversation_paths = set()
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             # Submit conversation processing tasks
             conv_futures = {
-                executor.submit(process_conversation, conv, auth_token, slack_user_id, user_info_map): conv
+                executor.submit(
+                    process_conversation, 
+                    conv, 
+                    auth_token, 
+                    slack_user_id, 
+                    user_info_map,
+                    service_account_base64,
+                    GCS_BUCKET_NAME
+                ): conv
                 for conv in unique_conversations
             }
             
@@ -732,50 +945,38 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
                     if conv_data:
                         conversation_paths.add(conv_data['path'])
                         
-                        # Check if upload is needed
-                        gcs_file = gcs_file_map.get(conv_data['path'])
-                        needs_upload = False
-                        reason = ''
+                        # Always upload conversations (they handle their own incremental logic)
+                        start_time = time.time()
+                        result = upload_conversation_to_gcs(conv_data, service_account_base64, GCS_BUCKET_NAME)
                         
-                        if not gcs_file:
-                            needs_upload = True
-                            reason = 'New conversation'
-                        else:
-                            gcs_updated = parse_date(gcs_file.get('updated'))
-                            conv_modified = conv_data['modified_time']
-                            
-                            if conv_modified and gcs_updated and conv_modified > gcs_updated:
-                                needs_upload = True
-                                reason = f"Conversation updated"
-                        
-                        if needs_upload:
-                            start_time = time.time()
-                            result = upload_conversation_to_gcs(conv_data, service_account_base64, GCS_BUCKET_NAME)
-                            
-                            if result:
-                                uploaded_files.append({
-                                    'path': conv_data['path'],
-                                    'type': 'updated' if gcs_file else 'new',
-                                    'size': conv_data['size'],
-                                    'durationMs': int((time.time() - start_time) * 1000),
-                                    'reason': reason
-                                })
-                                print(f"[{datetime.now().isoformat()}] {'Updated' if gcs_file else 'Uploaded'} {conv_data['path']}")
-                        else:
-                            skipped_files += 1
+                        if result:
+                            uploaded_files.append({
+                                'path': conv_data['path'],
+                                'type': 'updated' if conv_data['is_update'] else 'new',
+                                'size': conv_data['size'],
+                                'durationMs': int((time.time() - start_time) * 1000),
+                                'reason': f"{'Incremental update' if conv_data['is_update'] else 'New conversation'} - {conv_data['new_messages_count']} new messages"
+                            })
+                            print(f"[{datetime.now().isoformat()}] {'Updated' if conv_data['is_update'] else 'Uploaded'} {conv_data['path']}")
                             
                 except Exception as e:
                     conv = conv_futures[future]
                     print(f"Error processing conversation {conv.get('name', conv.get('id'))}: {str(e)}")
         
-        # Process files
+        # Process files with existence checking
         print("\nProcessing files...")
         file_paths = set()
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             # Submit file processing tasks
             file_futures = {
-                executor.submit(process_file, file_info, auth_token): file_info
+                executor.submit(
+                    process_file, 
+                    file_info, 
+                    auth_token,
+                    service_account_base64,
+                    GCS_BUCKET_NAME
+                ): file_info
                 for file_info in files
             }
             
@@ -784,45 +985,33 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
                 try:
                     file_data = future.result()
                     if file_data:
-                        file_paths.add(file_data['path'])
-                        
-                        # Check if upload is needed
-                        gcs_file = gcs_file_map.get(file_data['path'])
-                        needs_upload = False
-                        reason = ''
-                        
-                        if not gcs_file:
-                            needs_upload = True
-                            reason = 'New file'
+                        if file_data.get('skipped'):
+                            skipped_files += 1
+                            file_paths.add(file_data['path'])
                         else:
-                            gcs_updated = parse_date(gcs_file.get('updated'))
-                            file_modified = file_data['modified_time']
+                            file_paths.add(file_data['path'])
                             
-                            if file_modified and gcs_updated and file_modified > gcs_updated:
-                                needs_upload = True
-                                reason = f"File updated"
-                        
-                        if needs_upload:
                             start_time = time.time()
                             result = upload_file_to_gcs(file_data, service_account_base64, GCS_BUCKET_NAME)
                             
                             if result:
                                 uploaded_files.append({
                                     'path': file_data['path'],
-                                    'type': 'updated' if gcs_file else 'new',
+                                    'type': 'new',
                                     'size': file_data['size'],
                                     'durationMs': int((time.time() - start_time) * 1000),
-                                    'reason': reason
+                                    'reason': 'New file'
                                 })
-                                print(f"[{datetime.now().isoformat()}] {'Updated' if gcs_file else 'Uploaded'} {file_data['path']}")
-                        else:
-                            skipped_files += 1
+                                print(f"[{datetime.now().isoformat()}] Uploaded {file_data['path']}")
                             
                 except Exception as e:
                     file_info = file_futures[future]
                     print(f"Error processing file {file_info.get('name', 'unknown')}: {str(e)}")
         
-        # Delete orphaned GCS files that belong to this user's Slack data
+        # Clean up orphaned files (same as before)
+        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME)
+        gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
+        
         user_prefix = f"userResources/{USER_ID}/Slack/"
         all_current_paths = conversation_paths | file_paths
         
@@ -858,6 +1047,7 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
         print(f"💬 Conversations Processed: {len(unique_conversations)}")
         print(f"📁 Files Processed: {len(files)}")
         print(f"🗑️  Orphans Removed: {len(deleted_files)}")
+        print(f"⏭️  Files Skipped (already exist): {skipped_files}")
         
         print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
@@ -866,13 +1056,12 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
     except Exception as error:
         await update_data_source_sync_status(USER_ID, 'slack', 'error')
         print(f'Slack Sync failed: {str(error)}')
-        # Log the full error for debugging
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
         print(traceback.format_exc())
         raise
 
 # Main Execution Function
-def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str):
+async def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str):
     """
     Main execution function for Slack to GCS sync
     
@@ -901,18 +1090,7 @@ def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_name: s
     if not user_info:
         raise ValueError("Invalid Slack token or could not retrieve user information")
 
-    # Start the sync process in a separate thread/process
-    import threading
-    
-    async def run_sync():
-        try:
-            await sync_slack_to_gcs(token, creds)
-        except Exception as e:
-            log.error(f"Sync process failed: {str(e)}")
-    
-    sync_thread = threading.Thread(target=run_sync)
-    sync_thread.daemon = True
-    sync_thread.start()
+    await sync_slack_to_gcs(token, creds)
     
     # Return immediate response
     return {
