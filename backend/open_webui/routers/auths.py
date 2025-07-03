@@ -483,6 +483,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
         trusted_name = trusted_email
         trusted_profile_image_url = "/user.png"
+        update_user_details = False
 
         # If the trusted name header is present, use it to set the trusted name
         # Otherwise, use the trusted email as the name
@@ -499,6 +500,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                 trusted_email = sso_response.get('trusted_email', trusted_email)
                 trusted_name = sso_response.get('trusted_name', trusted_name)
                 trusted_profile_image_url = sso_response.get('trusted_profile_image_url', trusted_profile_image_url)
+                update_user_details = True
 
         # Check if the user already exists in the database
         user_exists = Users.get_user_by_email(trusted_email.lower())
@@ -524,7 +526,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
             # If an SSO provider is present and the user exists,
             # update their profile image URL and name with the latest data
             # from the SSO provider
-            if user_exists:
+            if user_exists and update_user_details:
                 updates_to_make = {}
 
                 # Check and add profile_image_url to updates if different
@@ -542,14 +544,15 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                     
                 
             # For existing and new users, trigger user file data sync from the SSO provider if enabled
-            if ENABLE_SSO_DATA_SYNC:
-                # Add background tasks to sync user file data from the SSO provider
-                background_tasks.add_task(
-                    get_user_file_data_from_sso_provider,
-                    user_id,
-                    sso_provider,
-                    token
-                )
+            #TODO: Renable once celery work is done
+            # if ENABLE_SSO_DATA_SYNC:
+            #     # Add background tasks to sync user file data from the SSO provider
+            #     background_tasks.add_task(
+            #         get_user_file_data_from_sso_provider,
+            #         user_id,
+            #         sso_provider,
+            #         token
+            #     )
 
         # Authenticate the user using the trusted email
         user = Auths.authenticate_user_by_email(trusted_email)
