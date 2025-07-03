@@ -424,7 +424,9 @@ from open_webui.env import (
     ENABLE_OTEL,
     EXTERNAL_PWA_MANIFEST_URL,
     AIOHTTP_CLIENT_SESSION_SSL,
-    ENABLE_SSO_DATA_SYNC
+    #Data Ingestion
+    ENABLE_SSO_DATA_SYNC,
+    OVERIDE_WEB_SOCKET_URL,
 )
 
 
@@ -1540,6 +1542,7 @@ async def get_app_config(request: Request):
             "enable_login_form": app.state.config.ENABLE_LOGIN_FORM,
             "enable_websocket": ENABLE_WEBSOCKET_SUPPORT,
             "enable_file_ingestion": ENABLE_SSO_DATA_SYNC if isinstance(ENABLE_SSO_DATA_SYNC, bool) else (ENABLE_SSO_DATA_SYNC.lower() == 'true' if isinstance(ENABLE_SSO_DATA_SYNC, str) else False),
+            "overide_socket_url": OVERIDE_WEB_SOCKET_URL,
             **(
                 {
                     "enable_direct_connections": app.state.config.ENABLE_DIRECT_CONNECTIONS,

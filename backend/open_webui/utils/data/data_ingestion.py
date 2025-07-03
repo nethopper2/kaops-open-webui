@@ -193,8 +193,8 @@ def upload_to_gcs(file_content, destination_name, content_type, service_account_
         print(f"GCS upload failed for {destination_name}: {str(error)}")
         raise # Re-raise to ensure calling functions are aware of the failure
 
-def list_gcs_files(service_account_base64, GCS_BUCKET_NAME):
-    """List all files in GCS bucket using REST API with pagination"""
+def download_from_gcs(file_path, service_account_base64, GCS_BUCKET_NAME):
+    """Download a file from GCS bucket using REST API with retry functionality"""
     try:
         # Decode service account
         credentials_json = json.loads(
@@ -202,16 +202,61 @@ def list_gcs_files(service_account_base64, GCS_BUCKET_NAME):
         )
         
         # Get access token for GCS
-        # Note: In a production environment, use a token service or library
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": create_jwt(credentials_json)
+        }
+        
+        # Use make_api_request for token request with retry functionality
+        token_response = make_api_request(token_url, method='POST', data=token_data)
+        gcs_token = token_response['access_token']
+        
+        # Download the object
+        encoded_name = quote(file_path, safe='')
+        url = f"https://storage.googleapis.com/storage/v1/b/{GCS_BUCKET_NAME}/o/{encoded_name}?alt=media"
+        headers = {'Authorization': f'Bearer {gcs_token}'}
+        
+        # Use make_api_request for download with retry functionality and streaming
+        response = make_api_request(url, method='GET', headers=headers, stream=True)
+        
+        # For streaming responses, we need to read the content
+        content = response.content
+        response.close()  # Close the streaming response
+        
+        return content
+        
+    except requests.exceptions.HTTPError as e:
+        if hasattr(e, 'response') and e.response and e.response.status_code == 404:
+            # File doesn't exist - this is expected for new files
+            return None
+        else:
+            status_code = e.response.status_code if hasattr(e, 'response') and e.response else 'Unknown'
+            response_text = e.response.text if hasattr(e, 'response') and e.response else 'No response'
+            print(f"GCS download failed for {file_path}: HTTP {status_code} - {response_text}")
+            return None
+    except Exception as error:
+        print(f"GCS download failed for {file_path}: {str(error)}")
+        return None
+
+def list_gcs_files(service_account_base64, GCS_BUCKET_NAME, prefix=None):
+    """List files in GCS bucket using REST API with optional prefix filtering, pagination, and retry functionality"""
+    try:
+        # Decode service account
+        credentials_json = json.loads(
+            base64.b64decode(service_account_base64).decode('utf-8')
+        )
+        
+        # Get access token for GCS
         token_url = "https://oauth2.googleapis.com/token"
         token_data = {
             "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "assertion": create_jwt(credentials_json) 
         }
         
-        token_response = requests.post(token_url, data=token_data)
-        token_response.raise_for_status()
-        gcs_token = token_response.json()['access_token']
+        # Use make_api_request for token request with retry functionality
+        token_response = make_api_request(token_url, method='POST', data=token_data)
+        gcs_token = token_response['access_token']
         
         # List objects in bucket
         url = f"https://storage.googleapis.com/storage/v1/b/{GCS_BUCKET_NAME}/o"
@@ -222,12 +267,16 @@ def list_gcs_files(service_account_base64, GCS_BUCKET_NAME):
         
         while True:
             params = {'maxResults': 1000}
+            
+            # Add prefix filter if provided
+            if prefix:
+                params['prefix'] = prefix
+                
             if page_token:
                 params['pageToken'] = page_token
-                
-            response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            result = response.json()
+            
+            # Use make_api_request for listing with retry functionality
+            result = make_api_request(url, method='GET', headers=headers, params=params)
             
             if 'items' in result:
                 all_objects.extend(result['items'])
@@ -242,7 +291,7 @@ def list_gcs_files(service_account_base64, GCS_BUCKET_NAME):
     except Exception as error:
         print(f"GCS listing failed: {str(error)}")
         return []
-
+    
 async def delete_gcs_folder(folder_path: str, service_account_base64: str, GCS_BUCKET_NAME: str) -> bool:
     """
     Deletes all files within a specified "folder" (prefix) in a GCS bucket asynchronously.

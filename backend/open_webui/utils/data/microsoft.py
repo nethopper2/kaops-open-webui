@@ -1,12 +1,10 @@
 import os
 import time
-import requests
 import concurrent.futures
 import io
 import traceback
 import logging
 from datetime import datetime
-from urllib.parse import urlencode, quote
 
 from open_webui.env import SRC_LOG_LEVELS
 
@@ -15,6 +13,8 @@ from open_webui.utils.data.data_ingestion import upload_to_gcs, list_gcs_files, 
 from open_webui.models.data import DataSources
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
+
+existing_gcs_files = set()
 
 # Metrics tracking
 total_api_calls = 0
@@ -57,6 +57,408 @@ def make_request(url, method='GET', headers=None, params=None, data=None, stream
     total_api_calls += 1
     
     return make_api_request(url, method=method, headers=headers, params=params, data=data, stream=stream, auth_token=auth_token)
+
+def load_existing_gcs_files(service_account_base64, gcs_bucket_name):
+    """Load existing GCS files into memory for duplicate checking"""
+    global existing_gcs_files, USER_ID
+    
+    try:
+        print("Loading existing files from GCS for duplicate checking...")
+        gcs_files = list_gcs_files(service_account_base64, gcs_bucket_name)
+        user_prefix = f"userResources/{USER_ID}/Microsoft/"
+        existing_gcs_files = {
+            gcs_file['name'] for gcs_file in gcs_files 
+            if gcs_file['name'].startswith(user_prefix)
+        }
+        print(f"Found {len(existing_gcs_files)} existing files in GCS for user {USER_ID}")
+    except Exception as e:
+        print(f"Error loading existing GCS files: {str(e)}")
+        log.error("Error loading existing GCS files:", exc_info=True)
+        existing_gcs_files = set()
+
+def file_exists_in_gcs(file_path):
+    """Check if file already exists in GCS"""
+    global existing_gcs_files
+    return file_path in existing_gcs_files
+
+# OneNote integration functions
+def list_onenote_notebooks(auth_token):
+    """List all OneNote notebooks"""
+    try:
+        url = f"{GRAPH_API_BASE}/me/onenote/notebooks"
+        response = make_request(url, auth_token=auth_token)
+        return response.get('value', [])
+    except Exception as error:
+        print(f"Error listing OneNote notebooks: {str(error)}")
+        log.error("Error in list_onenote_notebooks:", exc_info=True)
+        return []
+
+def list_onenote_sections(notebook_id, auth_token):
+    """List sections in a OneNote notebook"""
+    try:
+        url = f"{GRAPH_API_BASE}/me/onenote/notebooks/{notebook_id}/sections"
+        response = make_request(url, auth_token=auth_token)
+        return response.get('value', [])
+    except Exception as error:
+        print(f"Error listing OneNote sections for notebook {notebook_id}: {str(error)}")
+        log.error(f"Error in list_onenote_sections for {notebook_id}:", exc_info=True)
+        return []
+
+def list_onenote_pages(section_id, auth_token):
+    """List pages in a OneNote section"""
+    try:
+        url = f"{GRAPH_API_BASE}/me/onenote/sections/{section_id}/pages"
+        response = make_request(url, auth_token=auth_token)
+        return response.get('value', [])
+    except Exception as error:
+        print(f"Error listing OneNote pages for section {section_id}: {str(error)}")
+        log.error(f"Error in list_onenote_pages for {section_id}:", exc_info=True)
+        return []
+
+def download_onenote_page(page_id, auth_token):
+    """Download OneNote page content as HTML"""
+    try:
+        url = f"{GRAPH_API_BASE}/me/onenote/pages/{page_id}/content"
+        response = make_request(url, auth_token=auth_token, stream=True)
+        
+        content = io.BytesIO()
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                content.write(chunk)
+        content.seek(0)
+        return content
+    except Exception as error:
+        print(f"Error downloading OneNote page {page_id}: {str(error)}")
+        log.error(f"Error in download_onenote_page for {page_id}:", exc_info=True)
+        return None
+
+async def sync_onenote_to_gcs(auth_token, service_account_base64, gcs_bucket_name):
+    """Sync OneNote notebooks to GCS"""
+    global USER_ID
+    
+    print('🔄 Starting OneNote sync process...')
+    
+    uploaded_files = []
+    skipped_files = 0
+    
+    try:
+        # Get OneNote notebooks
+        notebooks = list_onenote_notebooks(auth_token)
+        print(f"Found {len(notebooks)} OneNote notebooks")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = []
+            
+            for notebook in notebooks:
+                notebook_id = notebook.get('id')
+                notebook_name = notebook.get('displayName', 'Untitled Notebook')
+                
+                # Get sections in notebook
+                sections = list_onenote_sections(notebook_id, auth_token)
+                
+                for section in sections:
+                    section_id = section.get('id')
+                    section_name = section.get('displayName', 'Untitled Section')
+                    
+                    # Get pages in section
+                    pages = list_onenote_pages(section_id, auth_token)
+                    
+                    for page in pages:
+                        page_id = page.get('id')
+                        page_title = page.get('title', 'Untitled Page')
+                        
+                        # Create file path
+                        safe_notebook = notebook_name.replace('/', '_').replace('\\', '_')
+                        safe_section = section_name.replace('/', '_').replace('\\', '_')
+                        safe_title = page_title.replace('/', '_').replace('\\', '_')
+                        file_path = f"userResources/{USER_ID}/Microsoft/OneNote/{safe_notebook}/{safe_section}/{safe_title}.html"
+                        
+                        # Check if file already exists
+                        if file_exists_in_gcs(file_path):
+                            print(f"⏭️  Skipping existing OneNote page: {page_title}")
+                            skipped_files += 1
+                            continue
+                        
+                        # Submit download task
+                        futures.append(
+                            (
+                                executor.submit(
+                                    download_and_upload_onenote_page,
+                                    page_id,
+                                    file_path,
+                                    page_title,
+                                    auth_token,
+                                    service_account_base64,
+                                    gcs_bucket_name
+                                ),
+                                page_title
+                            )
+                        )
+            
+            # Process completed uploads
+            for future, page_title in futures:
+                try:
+                    result = future.result()
+                    if result:
+                        uploaded_files.append(result)
+                        existing_gcs_files.add(result['path'])  # Add to cache
+                    else:
+                        skipped_files += 1
+                except Exception as e:
+                    print(f"Error processing OneNote page {page_title}: {str(e)}")
+                    log.error(f"Error processing OneNote page {page_title}:", exc_info=True)
+                    skipped_files += 1
+        
+        print(f"\nOneNote Sync Summary:")
+        print(f"📓 Pages uploaded: {len(uploaded_files)}")
+        print(f"⏭️  Pages skipped: {skipped_files}")
+        
+        return {
+            'uploaded': len(uploaded_files),
+            'skipped': skipped_files
+        }
+        
+    except Exception as error:
+        print(f"OneNote sync failed: {str(error)}")
+        log.error("OneNote sync failed:", exc_info=True)
+        raise error
+
+def download_and_upload_onenote_page(page_id, file_path, page_title, auth_token, service_account_base64, gcs_bucket_name):
+    """Download OneNote page and upload to GCS"""
+    start_time = time.time()
+    
+    try:
+        # Download page content
+        page_content = download_onenote_page(page_id, auth_token)
+        if not page_content:
+            return None
+        
+        # Upload to GCS
+        result = upload_to_gcs(
+            page_content,
+            file_path,
+            'text/html',
+            service_account_base64,
+            gcs_bucket_name
+        )
+        
+        upload_result = {
+            'path': file_path,
+            'type': 'new',
+            'size': result.get('size'),
+            'title': page_title,
+            'durationMs': int((time.time() - start_time) * 1000)
+        }
+        
+        print(f"[{datetime.now().isoformat()}] Uploaded OneNote page: {page_title}")
+        return upload_result
+        
+    except Exception as e:
+        print(f"Error processing OneNote page {page_id}: {str(e)}")
+        log.error(f"Error in download_and_upload_onenote_page for {page_id}:", exc_info=True)
+        return None
+
+# Outlook integration functions
+def list_outlook_messages(auth_token, folder='inbox', query='', max_results=1000):
+    """List Outlook messages from specified folder"""
+    try:
+        all_messages = []
+        skip = 0
+        top = min(max_results, 100)  # Microsoft Graph limit
+        
+        while len(all_messages) < max_results:
+            params = {
+                '$top': top,
+                '$skip': skip,
+                '$select': 'id,subject,from,toRecipients,receivedDateTime,hasAttachments,bodyPreview'
+            }
+            
+            if query:
+                params['$filter'] = query
+            
+            url = f"{GRAPH_API_BASE}/me/mailFolders/{folder}/messages"
+            response = make_request(url, params=params, auth_token=auth_token)
+            
+            messages = response.get('value', [])
+            if not messages:
+                break
+                
+            all_messages.extend(messages)
+            skip += top
+            
+            if len(messages) < top:  # No more results
+                break
+        
+        return all_messages[:max_results]
+        
+    except Exception as error:
+        print(f"Error listing Outlook messages: {str(error)}")
+        log.error("Error in list_outlook_messages:", exc_info=True)
+        return []
+
+def get_outlook_message(message_id, auth_token):
+    """Get full Outlook message content"""
+    try:
+        url = f"{GRAPH_API_BASE}/me/messages/{message_id}"
+        params = {'$select': 'id,subject,from,toRecipients,receivedDateTime,body,hasAttachments'}
+        
+        message = make_request(url, params=params, auth_token=auth_token)
+        return message
+        
+    except Exception as error:
+        print(f"Error getting Outlook message {message_id}: {str(error)}")
+        log.error(f"Error in get_outlook_message for {message_id}:", exc_info=True)
+        return None
+
+def convert_outlook_message_to_text(message):
+    """Convert Outlook message to readable text format"""
+    try:
+        subject = message.get('subject', 'No Subject')
+        from_addr = message.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')
+        from_name = message.get('from', {}).get('emailAddress', {}).get('name', from_addr)
+        received_date = message.get('receivedDateTime', 'Unknown')
+        
+        to_recipients = []
+        for recipient in message.get('toRecipients', []):
+            email_addr = recipient.get('emailAddress', {})
+            to_recipients.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
+        to_list = '; '.join(to_recipients)
+        
+        body_content = message.get('body', {}).get('content', 'No content available')
+        
+        text_content = f"""Subject: {subject}
+                            From: {from_name} <{from_addr}>
+                            To: {to_list}
+                            Date: {received_date}
+                            Message ID: {message.get('id', 'Unknown')}
+
+                            {body_content}
+                        """
+        return text_content
+        
+    except Exception as error:
+        print(f"Error converting Outlook message to text: {str(error)}")
+        log.error("Error in convert_outlook_message_to_text:", exc_info=True)
+        return ""
+
+async def sync_outlook_to_gcs(auth_token, service_account_base64, gcs_bucket_name, folder='inbox', query='', max_emails=1000):
+    """Sync Outlook messages to GCS"""
+    global USER_ID
+    
+    print(f'🔄 Starting Outlook sync process for folder: {folder}...')
+    
+    uploaded_files = []
+    skipped_files = 0
+    
+    try:
+        # Get Outlook messages
+        print(f"Fetching Outlook messages from {folder} (max: {max_emails})")
+        messages = list_outlook_messages(auth_token, folder, query, max_emails)
+        print(f"Found {len(messages)} Outlook messages")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = []
+            
+            for message in messages:
+                message_id = message.get('id')
+                if not message_id:
+                    continue
+                
+                # Create file path
+                safe_subject = message.get('subject', 'No Subject').replace('/', '_').replace('\\', '_')[:100]
+                file_path = f"userResources/{USER_ID}/Microsoft/Outlook/{folder}/email_{message_id}_{safe_subject}.txt"
+                
+                # Check if file already exists
+                if file_exists_in_gcs(file_path):
+                    print(f"⏭️  Skipping existing Outlook email: {safe_subject}")
+                    skipped_files += 1
+                    continue
+                
+                # Submit download task
+                futures.append(
+                    (
+                        executor.submit(
+                            download_and_upload_outlook_message,
+                            message_id,
+                            file_path,
+                            auth_token,
+                            service_account_base64,
+                            gcs_bucket_name
+                        ),
+                        message_id
+                    )
+                )
+            
+            # Process completed uploads
+            for future, message_id in futures:
+                try:
+                    result = future.result()
+                    if result:
+                        uploaded_files.append(result)
+                        existing_gcs_files.add(result['path'])  # Add to cache
+                    else:
+                        skipped_files += 1
+                except Exception as e:
+                    print(f"Error processing Outlook message {message_id}: {str(e)}")
+                    log.error(f"Error processing Outlook message {message_id}:", exc_info=True)
+                    skipped_files += 1
+        
+        print(f"\nOutlook Sync Summary:")
+        print(f"📧 Emails uploaded: {len(uploaded_files)}")
+        print(f"⏭️  Emails skipped: {skipped_files}")
+        
+        return {
+            'uploaded': len(uploaded_files),
+            'skipped': skipped_files
+        }
+        
+    except Exception as error:
+        print(f"Outlook sync failed: {str(error)}")
+        log.error("Outlook sync failed:", exc_info=True)
+        raise error
+
+def download_and_upload_outlook_message(message_id, file_path, auth_token, service_account_base64, gcs_bucket_name):
+    """Download Outlook message and upload to GCS"""
+    start_time = time.time()
+    
+    try:
+        # Get full message content
+        message = get_outlook_message(message_id, auth_token)
+        if not message:
+            return None
+        
+        # Convert to text format
+        message_text = convert_outlook_message_to_text(message)
+        if not message_text:
+            return None
+        
+        # Create BytesIO object
+        message_content = io.BytesIO(message_text.encode('utf-8'))
+        
+        # Upload to GCS
+        result = upload_to_gcs(
+            message_content,
+            file_path,
+            'text/plain',
+            service_account_base64,
+            gcs_bucket_name
+        )
+        
+        upload_result = {
+            'path': file_path,
+            'type': 'new',
+            'size': len(message_text.encode('utf-8')),
+            'subject': message.get('subject', 'No Subject'),
+            'durationMs': int((time.time() - start_time) * 1000)
+        }
+        
+        print(f"[{datetime.now().isoformat()}] Uploaded Outlook email: {message.get('subject', 'No Subject')}")
+        return upload_result
+        
+    except Exception as e:
+        print(f"Error processing Outlook message {message_id}: {str(e)}")
+        log.error(f"Error in download_and_upload_outlook_message for {message_id}:", exc_info=True)
+        return None
 
 # OneDrive Functions
 def list_onedrive_files_recursively(folder_id, auth_token, current_path='', all_files=None):
@@ -133,7 +535,7 @@ def list_onedrive_files_recursively(folder_id, auth_token, current_path='', all_
                 global USER_ID
                 
                 # Include USER_ID in the path
-                file_info['fullPath'] = f"userResources/{USER_ID}/OneDrive/{current_path}{file['name']}"
+                file_info['fullPath'] = f"userResources/{USER_ID}/Microsoft/OneDrive/{current_path}{file['name']}"
                 
                 all_files.append(file_info)
     
@@ -363,7 +765,7 @@ def list_sharepoint_files_recursively(site_id, drive_id, folder_id, auth_token, 
                 global USER_ID
                 
                 # Include USER_ID and site name in the path
-                file_info['fullPath'] = f"userResources/{USER_ID}/SharePoint/{site_name}/{current_path}{file['name']}"
+                file_info['fullPath'] = f"userResources/{USER_ID}/Microsoft/SharePoint/{site_name}/{current_path}{file['name']}"
                 
                 all_files.append(file_info)
     
@@ -424,6 +826,12 @@ def download_sharepoint_file(site_id, drive_id, file_id, auth_token):
 def download_and_upload_onedrive_file(file, auth_token, service_account_base64, GCS_BUCKET_NAME, exists, reason):
     """Helper function to download a OneDrive file and upload it to GCS"""
     start_time = time.time()
+
+    # Check if file already exists in GCS
+    if file_exists_in_gcs(file['fullPath']):
+        print(f"⏭️  Skipping existing file: {file['fullPath']}")
+        return None
+        
     
     try:
         # Download file from OneDrive
@@ -449,6 +857,8 @@ def download_and_upload_onedrive_file(file, auth_token, service_account_base64, 
             'durationMs': int((time.time() - start_time) * 1000),
             'reason': reason
         }
+
+        existing_gcs_files.add(file['fullPath'])  # Add to cache
         
         print(f"[{datetime.now().isoformat()}] {'Updated' if exists else 'Uploaded'} {file['fullPath']}")
         return upload_result
@@ -460,6 +870,11 @@ def download_and_upload_onedrive_file(file, auth_token, service_account_base64, 
 def download_and_upload_sharepoint_file(file, auth_token, service_account_base64, GCS_BUCKET_NAME, exists, reason):
     """Helper function to download a SharePoint file and upload it to GCS"""
     start_time = time.time()
+
+    # Check if file already exists in GCS
+    if file_exists_in_gcs(file['fullPath']):
+        print(f"⏭️  Skipping existing file: {file['fullPath']}")
+        return None
     
     try:
         # Extract site_id and drive_id from file object's parentReference 
@@ -493,6 +908,8 @@ def download_and_upload_sharepoint_file(file, auth_token, service_account_base64
             'durationMs': int((time.time() - start_time) * 1000),
             'reason': reason
         }
+
+        existing_gcs_files.add(file['fullPath'])  # Add to cache
         
         print(f"[{datetime.now().isoformat()}] {'Updated' if exists else 'Uploaded'} {file['fullPath']}")
         return upload_result
@@ -523,7 +940,7 @@ async def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NA
         onedrive_file_paths = {file['fullPath'] for file in all_files}
         
         # Delete orphaned GCS files that belong to this user
-        user_prefix = f"userResources/{USER_ID}/OneDrive/"
+        user_prefix = f"OneDrive/"
         for gcs_name, gcs_file in gcs_file_map.items():
             # Only consider files that belong to this user's OneDrive folder
             if gcs_name.startswith(user_prefix) and gcs_name not in onedrive_file_paths:
@@ -616,7 +1033,6 @@ async def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NA
         }
     
     except Exception as error:
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'error')
         print(f'OneDrive sync failed: {str(error)}')
         # Log the full error for debugging
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
@@ -775,7 +1191,6 @@ async def sync_sharepoint_to_gcs(auth_token, service_account_base64, GCS_BUCKET_
         }
     
     except Exception as error:
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'error')
         print(f'SharePoint sync failed: {str(error)}')
         # Log the full error for debugging
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
@@ -804,17 +1219,24 @@ def process_sharepoint_folder(site_id, drive_id, folder_id, auth_token, site_dri
         return collected_files
 
 # Main execution function 
-async def initiate_microsoft_sync(user_id, auth_token, service_account_base64, gcs_bucket_name, sync_onedrive=True, sync_sharepoint=True):
+async def initiate_microsoft_sync(user_id, auth_token, service_account_base64, gcs_bucket_name, 
+                                sync_onedrive=True, sync_sharepoint=True, sync_onenote=True, 
+                                sync_outlook=True, outlook_folder='inbox', outlook_query='', max_emails=1000):
     """
-    Main entry point to sync both OneDrive and SharePoint to GCS
+    Main entry point to sync Microsoft services to GCS
     
     Args:
+        user_id (str): User ID to prefix file paths
         auth_token (str): Microsoft Graph API auth token
         service_account_base64 (str): Base64-encoded Google service account JSON
-        user_id (str): User ID to prefix file paths
-        bucket_name (str): GCS bucket name
+        gcs_bucket_name (str): GCS bucket name
         sync_onedrive (bool): Whether to sync OneDrive
         sync_sharepoint (bool): Whether to sync SharePoint
+        sync_onenote (bool): Whether to sync OneNote
+        sync_outlook (bool): Whether to sync Outlook
+        outlook_folder (str): Outlook folder to sync (default: 'inbox')
+        outlook_query (str): Outlook query filter
+        max_emails (int): Maximum emails to sync
         
     Returns:
         dict: Summary of sync operations
@@ -829,27 +1251,44 @@ async def initiate_microsoft_sync(user_id, auth_token, service_account_base64, g
     total_api_calls = 0
     script_start_time = time.time()
 
-
     log.info(f"Initiating Microsoft sync for user {USER_ID} to bucket {GCS_BUCKET_NAME}")
-    
-    # Validate configuration
-    validate_config()
-    
-    results = {
-        'onedrive': None,
-        'sharepoint': None
-    }
+    log.info(f"Sync OneDrive: {sync_onedrive}, SharePoint: {sync_sharepoint}, OneNote: {sync_onenote}, Outlook: {sync_outlook}")
 
     await update_data_source_sync_status(USER_ID, 'microsoft', 'syncing')
     
-    # Sync OneDrive if requested
-    if sync_onedrive:
-        results['onedrive'] = await sync_onedrive_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
+    # Load existing GCS files for duplicate checking
+    load_existing_gcs_files(service_account_base64, gcs_bucket_name)
     
-    # Sync SharePoint if requested
-    if sync_sharepoint:
-        results['sharepoint'] = await sync_sharepoint_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
+    results = {
+        'onedrive': None,
+        'sharepoint': None,
+        'onenote': None,
+        'outlook': None
+    }
 
-    await update_data_source_sync_status(USER_ID, 'microsoft', 'synced')
     
-    return results
+    try:
+        # Sync OneDrive if requested
+        if sync_onedrive:
+            results['onedrive'] = await sync_onedrive_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
+        
+        # Sync SharePoint if requested
+        if sync_sharepoint:
+            results['sharepoint'] = await sync_sharepoint_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
+        
+        # Sync OneNote if requested
+        if sync_onenote:
+            results['onenote'] = await sync_onenote_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
+        
+        # Sync Outlook if requested
+        if sync_outlook:
+            results['outlook'] = await sync_outlook_to_gcs(auth_token, service_account_base64, gcs_bucket_name, outlook_folder, outlook_query, max_emails)
+
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'synced')
+        
+        return results
+        
+    except Exception as error:
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'error')
+        log.error("Microsoft sync failed:", exc_info=True)
+        raise error

@@ -119,7 +119,7 @@ class DataSourcesTable:
     DEFAULT_DATA_SOURCES = [
         {
             "name": "Google File Storage",
-            "context": "Google Drive",
+            "context": "Gmail & Google Drive",
             "sync_status": "unsynced",
             "icon": "Google",
             "action": "google",
@@ -127,7 +127,7 @@ class DataSourcesTable:
         },
         { 
             "name": "Microsoft Office 365 File Storage",
-            "context": "OneDrive & SharePoint",
+            "context": "Outlook, OneDrive, SharePoint & OneNote",
             "sync_status": "unsynced",
             "icon": "Microsoft",
             "action": "microsoft",
