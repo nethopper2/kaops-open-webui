@@ -3148,6 +3148,7 @@ NH_API_BASE_URL = PersistentConfig(
     "NH_API_BASE_URL", "private_ai.api_base_url", os.environ.get("NH_API_BASE_URL", "http://localhost:3000")
 )
 # Custom NH settings for the WebUI model directly from environment variable
+NH_DOCKER_IMAGE = os.environ.get("DOCKER_IMAGE", "")
 NH_WEBUI_CUSTOM = os.environ.get("NH_WEBUI_CUSTOM", "{}")
 # Bypass persistentConfig for NH_WEBUI_CUSTOM until we develop a proper UI for it
 # NH_WEBUI_CUSTOM = PersistentConfig(

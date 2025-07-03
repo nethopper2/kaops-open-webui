@@ -2,7 +2,7 @@
 	import Fuse from 'fuse.js';
 	import Bolt from '$lib/components/icons/Bolt.svelte';
 	import { getContext, createEventDispatcher } from 'svelte';
-	import { WEBUI_NAME } from '$lib/stores';
+	import { config, WEBUI_NAME } from '$lib/stores';
 
 	import { WEBUI_VERSION } from '$lib/constants';
 
@@ -134,48 +134,49 @@
 					clear
 				</button>
 			{/if}
-		{:else}
-			<!-- Keine Vorschläge -->
-			<div
-				class="flex w-full text-center items-center justify-center self-start text-gray-400 dark:text-gray-600"
-			>
-				{$WEBUI_NAME} ‧ v{WEBUI_VERSION}
-			</div>
-		{/if}
+{/if}
 	</div>
 
-	<!-- categories -->
-<!-- categories -->
-<div class={`flex flex-wrap overflow-hidden gap-2 ${suggestionHeight}`}>
-	{#if hasSuggestions}
-		{#each filteredPrompts as prompt, idx (prompt.id || prompt.content || prompt.image)}
-			<button
-				class="group flex flex-shrink-0 whitespace-nowrap h-[35px] items-center gap-1.5 rounded-full border border-neutral-300 dark:border-neutral-700 px-4 text-start text-[13px] justify-center transition enabled:hover:bg-gray-100 enabled:dark:hover:bg-neutral-700 disabled:cursor-not-allowed"
-				on:click={() => {
-					dispatch('select', prompt.content);
-					selectedSuggestion = prompt.content;
-				}}
-			>
-				{#if prompt.image?.length > 0}
-					{@html prompt.image}
-				{/if}
-				<span class="max-w-full select-none flex flex-col justify-center transition leading-[1]">
-					{#if prompt.title && Array.isArray(prompt.title) && prompt.title[0]}
-						<span class="group-hover:text-gray-900 group-hover:dark:text-white">{prompt.title[0]}</span>
-						{#if prompt.title[1]}
-							<span class="text-neutral-500 dark:text-gray-600 text-[10px] mb-0.5 group-hover:text-gray-900 group-hover:dark:text-white">
-								{prompt.title[1]}
-							</span>
-						{/if}
-					{:else}
-						<span class="text-neutral-500 dark:text-gray-600 group-hover:text-gray-900 group-hover:dark:text-white">{prompt.content}</span>
-					{/if}
-				</span>
-			</button>
-		{/each}
-	{/if}
-</div>
+  <!-- categories -->
+  <div class={`flex flex-wrap overflow-hidden gap-2 ${suggestionHeight}`}>
+    {#if hasSuggestions}
+      {#each filteredPrompts as prompt, idx (prompt.id || prompt.content || prompt.image)}
+        <button
+          class="group flex flex-shrink-0 whitespace-nowrap h-[35px] items-center gap-1.5 rounded-full border border-neutral-300 dark:border-neutral-700 px-4 text-start text-[13px] justify-center transition enabled:hover:bg-gray-100 enabled:dark:hover:bg-neutral-700 disabled:cursor-not-allowed"
+          on:click={() => {
+            dispatch('select', prompt.content);
+            selectedSuggestion = prompt.content;
+          }}
+        >
+          {#if prompt.image?.length > 0}
+            {@html prompt.image}
+          {/if}
+          <span class="max-w-full select-none flex flex-col justify-center transition leading-[1]">
+            {#if prompt.title && Array.isArray(prompt.title) && prompt.title[0]}
+              <span class="group-hover:text-gray-900 group-hover:dark:text-white">{prompt.title[0]}</span>
+              {#if prompt.title[1]}
+                <span class="text-neutral-500 dark:text-gray-500 text-[10px] mb-0.5 group-hover:text-gray-900 group-hover:dark:text-white">
+                  {prompt.title[1]}
+                </span>
+              {/if}
+            {:else}
+              <span class="text-neutral-500 dark:text-gray-500 group-hover:text-gray-900 group-hover:dark:text-white">{prompt.content}</span>
+            {/if}
+          </span>
+        </button>
+      {/each}
+    {/if}
+  </div>
 
+  <div class="fixed bottom-0 left-0 w-full flex flex-col text-sm text-center items-center justify-center self-start text-gray-300 dark:text-gray-600">
+    <div>
+      {$WEBUI_NAME} ‧ v{WEBUI_VERSION}
+    </div>
+    <div class="text-xs">
+      {$config?.private_ai?.docker_image}
+    </div>
+  </div>  
+  
 	<!-- prompt options -->
 	{#if isFilteredPrompts && selectedSuggestion?.prompts?.length > 0}
 		<div class="suggestions-container left-0 z-[-1] w-full pl-0">
