@@ -241,6 +241,7 @@ type Config = {
 			bgImageAuth?: string;
 			bgImageAuthLight?: string;
 		};
+    docker_image?: string;
 	};
 };
 

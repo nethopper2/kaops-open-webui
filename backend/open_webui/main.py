@@ -396,6 +396,7 @@ from open_webui.config import (
     NH_ENABLE_UPSTREAM_UI,
     NH_API_BASE_URL,
     NH_WEBUI_CUSTOM,
+    NH_DOCKER_IMAGE,
 )
 from open_webui.env import (
     AUDIT_EXCLUDED_PATHS,
@@ -1059,6 +1060,7 @@ app.state.config.AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH = (
 app.state.config.NH_ENABLE_UPSTREAM_UI = NH_ENABLE_UPSTREAM_UI
 app.state.config.NH_API_BASE_URL = NH_API_BASE_URL
 app.state.NH_WEBUI_CUSTOM = NH_WEBUI_CUSTOM
+app.state.NH_DOCKER_IMAGE = NH_DOCKER_IMAGE
 
 
 ########################################
@@ -1570,6 +1572,7 @@ async def get_app_config(request: Request):
             "enable_upstream_ui": app.state.config.NH_ENABLE_UPSTREAM_UI,
             "rest_api_base_url": app.state.config.NH_API_BASE_URL,
             "webui_custom": app.state.NH_WEBUI_CUSTOM,
+            "docker_image": app.state.NH_DOCKER_IMAGE,
         },
         **(
             {
