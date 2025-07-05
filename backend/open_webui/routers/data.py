@@ -23,8 +23,8 @@ from open_webui.models.data import (
     DataSourceResponse,
 )
 
-
-# Import the slack sync utility
+from open_webui.tasks import create_task
+import asyncio
 from open_webui.utils.data.slack import initiate_slack_sync
 from open_webui.utils.data.google import initiate_google_file_sync
 from open_webui.utils.data.microsoft import initiate_microsoft_sync
@@ -379,7 +379,7 @@ def get_google_auth_url(user=Depends(get_verified_user)):
     }
 
 @router.get("/google/callback")
-async def google_callback(request: Request, background_tasks: BackgroundTasks):
+async def google_callback(request: Request):
     """Handle Google OAuth callback and initiate sync process."""
     code = request.query_params.get("code")
     state = request.query_params.get("state")
@@ -483,19 +483,18 @@ async def google_callback(request: Request, background_tasks: BackgroundTasks):
             log.info(f"Starting Google sync for user {user_id} with token (retrieved from OAuth response)")
 
             # Add the task to the background tasks to sync user Google data
-            background_tasks.add_task(
-                initiate_google_file_sync,
-                user_id,
-                access_token, # Use the token directly from the response
-                GCS_SERVICE_ACCOUNT_BASE64,
-                GCS_BUCKET_NAME
-            )
+            async def run_google_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,  # Use default thread pool
+                    lambda: asyncio.run(initiate_google_file_sync(
+                        user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
+                    ))
+                )
+            
+            await create_task(request, run_google_sync(), id=f"google_sync_{user_id}")
 
-            background_tasks.add_task(
-                update_data_source_sync_status,
-                'google', 
-                'syncing'
-            )
+            await update_data_source_sync_status(user_id, 'google', 'syncing')
 
             return RedirectResponse(
                 url=DATASOURCES_URL,
@@ -550,7 +549,7 @@ def get_google_status(user=Depends(get_verified_user)):
 
 @router.post("/google/sync")
 async def manual_google_sync(
-    background_tasks: BackgroundTasks,
+    request: Request,
     user=Depends(get_verified_user),
 ):
     """Manually trigger Google sync for the authenticated user, fetching tokens from DB."""
@@ -737,21 +736,24 @@ async def manual_google_sync(
         log.info(f"Starting scheduled/manual Google sync for user {user.id}")
 
         # Add the task to the background tasks to sync user Google data
-        background_tasks.add_task(
-            initiate_google_file_sync,
-            user.id,
-            sync_token, # Use the valid (or freshly refreshed) token
-            GCS_SERVICE_ACCOUNT_BASE64,
-            GCS_BUCKET_NAME
-        )
+        async def run_google_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,  # Use default thread pool
+                lambda: asyncio.run(initiate_google_file_sync(
+                    user.id,
+            sync_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
+                ))
+            )
+        
+        await create_task(request, run_google_sync(), id=f"google_sync_{user.id}")
 
         await update_data_source_sync_status(user.id, 'google', 'syncing')
 
-        return {
-            "message": "Google data sync initiated successfully.",
-            "user_id": user.id,
-            "status": "success"
-        }
+        return RedirectResponse(
+            url=DATASOURCES_URL,
+            status_code=302
+        )
 
     except Exception as sync_error:
         log.error(f"Google sync failed for user {user.id}: {str(sync_error)}")
@@ -769,7 +771,7 @@ async def manual_google_sync(
         )
 
 @router.delete("/google/disconnect")
-async def disconnect_google(background_tasks: BackgroundTasks, user=Depends(get_verified_user),
+async def disconnect_google(request: Request, user=Depends(get_verified_user),
     google_team_id: Optional[str] = None
 ):
     """
@@ -920,14 +922,17 @@ async def disconnect_google(background_tasks: BackgroundTasks, user=Depends(get_
         messages.append(msg)
         overall_success = False
     else:
-        google_folder_path = f"userResources/{user_id}/Google Drive/" 
+        google_folder_path = f"userResources/{user_id}/Google/" 
         try:
-            background_tasks.add_task(
-                delete_gcs_folder,
-                google_folder_path,
-                GCS_SERVICE_ACCOUNT_BASE64,
-                GCS_BUCKET_NAME
-            )
+            # Add the task to the background tasks to sync user Google data
+            async def delete_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,  # Use default thread pool
+                    lambda: asyncio.run(delete_gcs_folder(google_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
+                )
+            
+            await create_task(request, delete_sync(), id=f"delete_google_sync_{user.id}")
 
             msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Google folder."
             log.info(msg)
@@ -995,7 +1000,7 @@ def get_microsoft_auth_url(user=Depends(get_verified_user)):
     }
 
 @router.get("/microsoft/callback")
-async def microsoft_callback(request: Request, background_tasks: BackgroundTasks):
+async def microsoft_callback(request: Request):
     """Handle Microsoft OAuth callback and initiate sync process."""
     code = request.query_params.get("code")
     state = request.query_params.get("state")
@@ -1096,19 +1101,18 @@ async def microsoft_callback(request: Request, background_tasks: BackgroundTasks
             log.info(f"Starting Microsoft sync for user {user_id} with token (retrieved from OAuth response)")
 
             # Add the task to the background tasks to sync user Microsoft data
-            background_tasks.add_task(
-                initiate_microsoft_sync,
-                user_id,
-                access_token, # Use the token directly from the response
-                GCS_SERVICE_ACCOUNT_BASE64,
-                GCS_BUCKET_NAME
-            )
+            async def run_microsoft_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,  # Use default thread pool
+                    lambda: asyncio.run(initiate_microsoft_sync(
+                        user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
+                    ))
+                )
+            
+            await create_task(request, run_microsoft_sync(), id=f"microsoft_sync_{user_id}")
 
-            background_tasks.add_task(
-                update_data_source_sync_status,
-                'microsoft', 
-                'syncing'
-            )
+            await update_data_source_sync_status(user_id, 'microsoft', 'syncing')
 
             return RedirectResponse(
                 url=DATASOURCES_URL,
@@ -1162,7 +1166,7 @@ def get_microsoft_status(user=Depends(get_verified_user)):
 
 @router.post("/microsoft/sync")
 async def manual_microsoft_sync(
-    background_tasks: BackgroundTasks,
+    request: Request,
     user=Depends(get_verified_user),
 ):
     """Manually trigger Microsoft sync for the authenticated user, fetching tokens from DB."""
@@ -1337,20 +1341,18 @@ async def manual_microsoft_sync(
         log.info(f"Starting scheduled/manual Microsoft sync for user {user.id}")
 
         # Add the task to the background tasks to sync user Microsoft data
-        # You will need to implement initiate_microsoft_sync
-        background_tasks.add_task(
-            initiate_microsoft_sync,
-            user.id,
-            sync_token, # Use the valid (or freshly refreshed) token
-            GCS_SERVICE_ACCOUNT_BASE64,
-            GCS_BUCKET_NAME
-        )
+        async def run_microsoft_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,  # Use default thread pool
+                lambda: asyncio.run(initiate_microsoft_sync(
+                    user.id, sync_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
+                ))
+            )
+        
+        await create_task(request, run_microsoft_sync(), id=f"microsoft_sync_{user.id}")
 
-        background_tasks.add_task(
-            update_data_source_sync_status,
-            'microsoft', 
-            'syncing'
-        )
+        await update_data_source_sync_status(user.id, 'microsoft', 'syncing')
 
         return RedirectResponse(
             url=DATASOURCES_URL,
@@ -1371,7 +1373,7 @@ async def manual_microsoft_sync(
         )
 
 @router.delete("/microsoft/disconnect")
-async def disconnect_microsoft(background_tasks: BackgroundTasks, user=Depends(get_verified_user),
+async def disconnect_microsoft(request: Request, user=Depends(get_verified_user),
     microsoft_tenant_id: Optional[str] = None # Microsoft uses tenant IDs
 ):
     """
@@ -1512,23 +1514,18 @@ async def disconnect_microsoft(background_tasks: BackgroundTasks, user=Depends(g
         messages.append(msg)
         overall_success = False
     else:
-        onedrive_folder_path = f"userResources/{user_id}/OneDrive/" 
-        sharepoint_folder_path = f"userResources/{user_id}/SharePoint/" 
+        microsoft_folder_path = f"userResources/{user_id}/Microsoft/" 
         try:
 
-            background_tasks.add_task(
-                delete_gcs_folder,
-                onedrive_folder_path,
-                GCS_SERVICE_ACCOUNT_BASE64,
-                GCS_BUCKET_NAME
-            )
+            # Add the task to the background tasks to sync user Microsoft data
+            async def delete_microsoft_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,  # Use default thread pool
+                    lambda: asyncio.run(delete_gcs_folder(microsoft_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
+                )
             
-            background_tasks.add_task(
-                delete_gcs_folder,
-                sharepoint_folder_path,
-                GCS_SERVICE_ACCOUNT_BASE64,
-                GCS_BUCKET_NAME
-            )
+            await create_task(request, delete_microsoft_sync(), id=f"delete_google_sync_{user.id}")
 
             msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Microsoft folder."
             log.info(msg)
@@ -1612,7 +1609,7 @@ def get_slack_auth_url(user=Depends(get_verified_user)):
     }
 
 @router.get("/slack/callback")
-async def slack_callback(request: Request, background_tasks: BackgroundTasks):
+async def slack_callback(request: Request):
     """Handle Slack OAuth callback and initiate sync process."""
     code = request.query_params.get("code")
     state = request.query_params.get("state")
@@ -1730,20 +1727,19 @@ async def slack_callback(request: Request, background_tasks: BackgroundTasks):
         try:
             log.info(f"Starting Slack sync for user {user_id} with {'user' if user_access_token else 'bot'} token (retrieved from OAuth response)")
             
-            # Add the task to the background tasks to sync user slack data
-            background_tasks.add_task(
-                initiate_slack_sync,
-                user_id,
-                sync_token_for_immediate_use,
-                GCS_SERVICE_ACCOUNT_BASE64,
-                GCS_BUCKET_NAME
-            )
+            # Add the task to the background tasks to sync user Slack data
+            async def run_slack_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,  # Use default thread pool
+                    lambda: asyncio.run(initiate_slack_sync(
+                        user_id, sync_token_for_immediate_use, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
+                    ))
+                )
+            
+            await create_task(request, run_slack_sync(), id=f"slack_sync_{user_id}")
 
-            background_tasks.add_task(
-                update_data_source_sync_status,
-                'slack', 
-                'syncing'
-            )
+            await update_data_source_sync_status(user_id, 'slack', 'syncing')
 
             return RedirectResponse(
                 url=DATASOURCES_URL,
@@ -1784,7 +1780,7 @@ def get_slack_status(user=Depends(get_verified_user)):
 
 @router.post("/slack/sync")
 async def manual_slack_sync(
-    background_tasks: BackgroundTasks,
+    request: Request,
     user=Depends(get_verified_user),
 ):
     """Manually trigger Slack sync for the authenticated user, fetching tokens from DB."""
@@ -1918,26 +1914,25 @@ async def manual_slack_sync(
     try:
         log.info(f"Starting scheduled/manual Slack sync for user {user.id}")
 
-        # Add the task to the background tasks to sync user slack data
-        background_tasks.add_task(
-            initiate_slack_sync,
-            user.id,
-            sync_token, # Use the valid (or freshly refreshed) token
-            GCS_SERVICE_ACCOUNT_BASE64,
-            GCS_BUCKET_NAME
-        )
-
-        background_tasks.add_task(
-                update_data_source_sync_status,
-                'slack', 
-                'syncing'
+         # Add the task to the background tasks to sync user Slack data
+        async def run_slack_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,  # Use default thread pool
+                lambda: asyncio.run(initiate_slack_sync(
+                    user.id,
+            sync_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
+                ))
             )
         
-        return {
-            "message": "Slack data sync initiated successfully.",
-            "user_id": user.id,
-            "status": "success"
-        }
+        await create_task(request, run_slack_sync(), id=f"slack_sync_{user.id}")
+
+        await update_data_source_sync_status(user.id, 'slack', 'syncing')
+
+        return RedirectResponse(
+            url=DATASOURCES_URL,
+            status_code=302
+        )
         
     except Exception as sync_error:
         log.error(f"Slack sync failed for user {user.id}: {str(sync_error)}")
@@ -1955,7 +1950,7 @@ async def manual_slack_sync(
         )
 
 @router.delete("/slack/disconnect")
-async def disconnect_slack(background_tasks: BackgroundTasks, user=Depends(get_verified_user),
+async def disconnect_slack(request: Request,user=Depends(get_verified_user),
     slack_team_id: Optional[str] = None
 ):
     """
@@ -2106,12 +2101,15 @@ async def disconnect_slack(background_tasks: BackgroundTasks, user=Depends(get_v
     else:
         slack_folder_path = f"userResources/{user_id}/Slack/"
         try:
-            background_tasks.add_task(
-                delete_gcs_folder,
-                slack_folder_path,
-                GCS_SERVICE_ACCOUNT_BASE64,
-                GCS_BUCKET_NAME
-            )
+            # Add the task to the background tasks to sync user Google data
+            async def delete_slack_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,  # Use default thread pool
+                    lambda: asyncio.run(delete_gcs_folder(slack_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
+                )
+            
+            await create_task(request, delete_slack_sync(), id=f"delete_slack_sync_{user.id}")
 
             msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Slack folder."
             log.info(msg)
@@ -2195,7 +2193,7 @@ def get_atlassian_auth_url(user=Depends(get_verified_user)):
     }
 
 @router.get("/atlassian/callback")
-async def atlassian_callback(request: Request, background_tasks: BackgroundTasks):
+async def atlassian_callback(request: Request):
     """Handle Atlassian OAuth callback and initiate sync process."""
     code = request.query_params.get("code")
     state = request.query_params.get("state")
@@ -2290,19 +2288,19 @@ async def atlassian_callback(request: Request, background_tasks: BackgroundTasks
         try:
             log.info(f"Starting Atlassian sync for user {user_id} with token (retrieved from OAuth response)")
 
-            background_tasks.add_task(
-                initiate_atlassian_sync,
-                user_id=user_id,
-                token=access_token,
-                creds=GCS_SERVICE_ACCOUNT_BASE64,
-                gcs_bucket_name=GCS_BUCKET_NAME
-            )
+            # Add the task to the background tasks to sync user Atlassian data
+            async def run_atlassian_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,  # Use default thread pool
+                    lambda: asyncio.run(initiate_atlassian_sync(
+                        user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
+                    ))
+                )
+            
+            await create_task(request, run_atlassian_sync(), id=f"run_atlassian_sync_{user_id}")
 
-            background_tasks.add_task(
-                update_data_source_sync_status,
-                'google', 
-                'syncing'
-            )
+            await update_data_source_sync_status(user_id, 'atlassian', 'syncing')
 
             return RedirectResponse(
                 url=DATASOURCES_URL,
@@ -2352,10 +2350,7 @@ def get_atlassian_status(user=Depends(get_verified_user)):
     }
 
 @router.post("/atlassian/sync")
-async def manual_atlassian_sync(
-    background_tasks: BackgroundTasks,
-    user=Depends(get_verified_user),
-):
+async def manual_atlassian_sync(request: Request, user=Depends(get_verified_user)):
     """Manually trigger Atlassian sync for the authenticated user, fetching tokens from DB."""
     if not user:
         raise HTTPException(status_code=401, detail="User not authenticated")
@@ -2506,21 +2501,25 @@ async def manual_atlassian_sync(
     try:
         log.info(f"Starting scheduled/manual Atlassian sync for user {user.id}")
 
-        background_tasks.add_task(
-            initiate_atlassian_sync,
-            user_id=user.id,
-            token=sync_token,
-            creds=GCS_SERVICE_ACCOUNT_BASE64,
-            gcs_bucket_name=GCS_BUCKET_NAME
-        )
+        # Add the task to the background tasks to sync user Atlassian data
+        async def run_atlassian_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,  # Use default thread pool
+                lambda: asyncio.run(initiate_atlassian_sync(
+                    user.id,
+            sync_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
+                ))
+            )
+        
+        await create_task(request, run_atlassian_sync(), id=f"run_atlassian_sync_{user.id}")
 
         await update_data_source_sync_status(user.id, 'atlassian', 'syncing')
 
-        return {
-            "message": "Atlassian data sync initiated successfully.",
-            "user_id": user.id,
-            "status": "success"
-        }
+        return RedirectResponse(
+            url=DATASOURCES_URL,
+            status_code=302
+        )
 
     except Exception as sync_error:
         log.error(f"Atlassian sync failed for user {user.id}: {str(sync_error)}", exc_info=True)
@@ -2536,7 +2535,7 @@ async def manual_atlassian_sync(
         )
 
 @router.delete("/atlassian/disconnect")
-async def disconnect_atlassian(user=Depends(get_verified_user),
+async def disconnect_atlassian(request: Request, user=Depends(get_verified_user),
     atlassian_cloud_id: Optional[str] = None # Atlassian uses cloud_id to identify specific sites
 ):
     """
@@ -2659,22 +2658,22 @@ async def disconnect_atlassian(user=Depends(get_verified_user),
         messages.append(msg)
         overall_success = False
     else:
-        atlassian_folder_path = f"userResources/{user_id}/Atlassian/" # Assuming this GCS path
+        atlassian_folder_path = f"userResources/{user_id}/Atlassian/"
         try:
-            gcs_cleanup_success = await delete_gcs_folder(
-                folder_path=atlassian_folder_path,
-                service_account_base64=GCS_SERVICE_ACCOUNT_BASE64,
-                GCS_BUCKET_NAME=GCS_BUCKET_NAME
-            )
-            if gcs_cleanup_success:
-                msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Atlassian folder."
-                log.info(msg)
-                messages.append(msg)
-            else:
-                msg = f"Failed to delete GCS data for user {user_id}'s Atlassian folder."
-                log.error(msg)
-                messages.append(msg)
-                overall_success = False
+            # Add the task to the background tasks to sync user Atlassian data
+            async def delete_atlassian_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,  
+                    lambda: asyncio.run(delete_gcs_folder(atlassian_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
+                )
+            
+            await create_task(request, delete_atlassian_sync(), id=f"delete_atlassian_sync_{user.id}")
+
+            msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Atlassian folder."
+            log.info(msg)
+            messages.append(msg)
+
         except Exception as e:
             msg = f"Error during GCS data cleanup for user {user_id}'s Atlassian folder: {e}"
             log.exception(msg)
