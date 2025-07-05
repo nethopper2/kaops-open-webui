@@ -181,6 +181,8 @@ class DataSourcesTable:
             created_source = self.insert_new_data_source(user_id, form_data)
             if created_source:
                 created_sources.append(created_source)
+
+        log.info(f"Data Sources created for user {user_id}, source: {created_sources}")
                 
         return created_sources
 

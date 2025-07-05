@@ -23,7 +23,8 @@ from open_webui.models.data import DataSources
 
 from open_webui.utils.data.google import initiate_google_file_sync
 from open_webui.utils.data.microsoft import initiate_microsoft_sync
-from open_webui.utils.data.encryption import encrypt_data
+from open_webui.tasks import create_task
+import asyncio
 from open_webui.models.groups import Groups
 
 from open_webui.constants import ERROR_MESSAGES, WEBHOOK_MESSAGES
@@ -544,15 +545,18 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                     
                 
             # For existing and new users, trigger user file data sync from the SSO provider if enabled
-            #TODO: Renable once celery work is done
-            # if ENABLE_SSO_DATA_SYNC:
-            #     # Add background tasks to sync user file data from the SSO provider
-            #     background_tasks.add_task(
-            #         get_user_file_data_from_sso_provider,
-            #         user_id,
-            #         sso_provider,
-            #         token
-            #     )
+            if ENABLE_SSO_DATA_SYNC:
+                # Add background tasks to sync user file data from the SSO provider
+                async def get_user_file_data():
+                    loop = asyncio.get_event_loop()
+                    return await loop.run_in_executor(
+                        None,  # Use default thread pool
+                        lambda: asyncio.run(get_user_file_data_from_sso_provider(
+                            user_id, sso_provider, token
+                        ))
+                    )
+                
+                await create_task(request, get_user_file_data(), id=f"get_user_file_data_{user_id}")
 
         # Authenticate the user using the trusted email
         user = Auths.authenticate_user_by_email(trusted_email)
