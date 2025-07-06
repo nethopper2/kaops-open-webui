@@ -476,7 +476,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         # Fetch the Authorization headers added to request
         # This will be used when using SSO to extract user profile and file data
         sso_provider = str(SSO_PROVIDER_NAME).lower()
-        token = request.headers.get(
+        auth_token = request.headers.get(
                 'X-Forwarded-Access-Token', None
             )
 
@@ -496,7 +496,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         # If an SSO provider is present, use it to fetch user profile data
         # and update the trusted email, name, and profile image URL
         if sso_provider:
-            sso_response = Users.get_user_profile_data_from_sso_provider(sso_provider, token)
+            sso_response = Users.get_user_profile_data_from_sso_provider(sso_provider, auth_token)
             if sso_response:
                 trusted_email = sso_response.get('trusted_email', trusted_email)
                 trusted_name = sso_response.get('trusted_name', trusted_name)
@@ -521,7 +521,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
 
             # Fetch and save the user's OAuth tokens from the SSO provider
             Users.fetch_and_save_user_oauth_tokens(
-                user_id, sso_provider, token
+                user_id, sso_provider, auth_token
             )
 
             # If an SSO provider is present and the user exists,
@@ -542,8 +542,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                 if updates_to_make:
                     Users.update_user_by_id(user_id, updates_to_make)
                     print(f"User '{user_id}' updated successfully.")
-                    
-                
+                  
             # For existing and new users, trigger user file data sync from the SSO provider if enabled
             if ENABLE_SSO_DATA_SYNC:
                 # Add background tasks to sync user file data from the SSO provider
@@ -552,7 +551,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                     return await loop.run_in_executor(
                         None,  # Use default thread pool
                         lambda: asyncio.run(get_user_file_data_from_sso_provider(
-                            user_id, sso_provider, token
+                            user_id, sso_provider, auth_token
                         ))
                     )
                 
@@ -1146,13 +1145,13 @@ async def get_api_key(user=Depends(get_current_user)):
         raise HTTPException(404, detail=ERROR_MESSAGES.API_KEY_NOT_FOUND)
 
 # User file sync, placed here to avoid a circular dependecy when using socket
-async def get_user_file_data_from_sso_provider(user_id: str, provider: str, token: str):
+async def get_user_file_data_from_sso_provider(user_id: str, provider: str, auth_token: str):
         try:
             match provider:
                 case 'google':
-                    await initiate_google_file_sync(user_id, token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME)
+                    await initiate_google_file_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME)
                 case 'microsoft':
-                    await initiate_microsoft_sync(user_id, token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
+                    await initiate_microsoft_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
 
         except Exception as e:
             log.error(f"Error fetching user data: {e}")
