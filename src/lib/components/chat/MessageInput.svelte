@@ -64,6 +64,9 @@
 
 	import { fetchDocxFiles, fetchCsvFiles } from '$lib/apis/tokenizedFiles';
 
+	import Eye from '../icons/Eye.svelte';
+	import FilePreviewDialog from './MessageInput/FilePreviewDialog.svelte';
+
 	const i18n = getContext('i18n');
 
 	export let transparentBackground = false;
@@ -548,8 +551,16 @@ async function fetchTokenFiles() {
 	loadingFiles = true;
 	const docxResult = await fetchDocxFiles();
 	const csvResult = await fetchCsvFiles();
-	docxFiles = (Array.isArray(docxResult) ? docxResult : (docxResult?.files ?? [])).map((file, idx) => ({ ...file, idx }));
-	csvFiles = (Array.isArray(csvResult) ? csvResult : (csvResult?.files ?? [])).map((file, idx) => ({ ...file, idx }));
+	docxFiles = (Array.isArray(docxResult) ? docxResult : (docxResult?.files ?? [])).map((file, idx) => ({
+		...file,
+		idx,
+		preview_url: file.path ? `${WEBUI_API_BASE_URL}/file/preview/docx/${file.path}` : undefined
+	}));
+	csvFiles = (Array.isArray(csvResult) ? csvResult : (csvResult?.files ?? [])).map((file, idx) => ({
+		...file,
+		idx,
+		preview_url: file.path ? `${WEBUI_API_BASE_URL}/file/preview/csv/${file.path}` : undefined
+	}));
 	loadingFiles = false;
 	filesFetched = true;
 }
@@ -603,6 +614,27 @@ $: if (
 ) {
   setPromptRTFormat('', '');
 }
+
+// Dialog state for file preview
+let showPreviewDialog = false;
+let previewFile = null;
+let previewType = null; // 'docx' | 'csv'
+
+function openPreviewDialog(type) {
+	if (type === 'docx') {
+		previewType = 'docx';
+		previewFile = docxFiles.find(f => String(f.idx) === String(selectedDocx));
+	} else if (type === 'csv') {
+		previewType = 'csv';
+		previewFile = csvFiles.find(f => String(f.idx) === String(selectedCsv));
+	}
+	showPreviewDialog = true;
+}
+function closePreviewDialog() {
+	showPreviewDialog = false;
+	previewFile = null;
+	previewType = null;
+}
 </script>
 
 <!-- Token Replacer LLM file selection UI -->
@@ -626,6 +658,17 @@ $: if (
 						<option value={file.idx}>{file.name}</option>
 					{/each}
 				</select>
+				<!-- Preview button for mineral file -->
+				<Tooltip content="Preview Mineral File" placement="top">
+					<button
+						class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
+						disabled={selectedDocx === ""}
+						aria-label="Preview Mineral File"
+						on:click={() => openPreviewDialog('docx')}
+					>
+						<Eye class="w-5 h-5" />
+					</button>
+				</Tooltip>
 				<select
 					key={csvFiles.map(f => f.idx).join(',')}
 					class="text-sm px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
@@ -637,12 +680,32 @@ $: if (
 						<option value={file.idx}>{file.name}</option>
 					{/each}
 				</select>
+				<!-- Preview button for csv file, always visible, disabled if none selected -->
+				<Tooltip content="Preview Values File" placement="top">
+					<button
+						class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
+						disabled={selectedCsv === ""}
+						aria-label="Preview Values File"
+						on:click={() => openPreviewDialog('csv')}
+					>
+						<Eye class="w-5 h-5" />
+					</button>
+				</Tooltip>
 			</div>
 			{#if showFileSelectionError}
 				<div class="text-gray-500 text-xs mt-1">Please select both a DOCX and a CSV file.</div>
 			{/if}
 		{/if}
 	</div>
+{/if}
+
+{#if showPreviewDialog}
+	<FilePreviewDialog
+		show={showPreviewDialog}
+		file={previewFile}
+		previewType={previewType}
+		on:close={closePreviewDialog}
+	/>
 {/if}
 
 <FilesOverlay show={dragged} />
