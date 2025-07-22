@@ -384,6 +384,8 @@
 					eventConfirmationMessage = data.message;
 					eventConfirmationInputPlaceholder = data.placeholder;
 					eventConfirmationInputValue = data?.value ?? '';
+				} else if (type === 'metadata') {
+					message.metadata = data;
 				} else {
 					console.log('Unknown message type', data);
 				}

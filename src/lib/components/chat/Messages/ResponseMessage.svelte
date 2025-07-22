@@ -52,6 +52,7 @@
 	import { fade } from 'svelte/transition';
 	import { flyAndScale } from '$lib/utils/transitions';
 	import SkeletonRag from './SkeletonRag.svelte';
+	import ToolsUsed from '$lib/components/chat/Messages/ToolsUsed.svelte';
 
 	interface MessageType {
 		id: string;
@@ -114,7 +115,6 @@
 			message = JSON.parse(JSON.stringify(history.messages[messageId]));
 		}
 	}
-
 	export let siblings;
 
 	export let gotoMessage: Function = () => {};
@@ -859,6 +859,10 @@
 
 								{#if message.code_executions}
 									<CodeExecutions codeExecutions={message.code_executions} />
+								{/if}
+
+								{#if message.metadata?.tool_calls}
+									<ToolsUsed tool_calls={message.metadata.tool_calls} id={message.id} />
 								{/if}
 							</div>
 						{/if}
