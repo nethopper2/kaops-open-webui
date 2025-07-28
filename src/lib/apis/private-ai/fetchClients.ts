@@ -8,6 +8,5 @@ export const apiFetch = ofetch.create({
 		options.baseURL = `${backendConfig.private_ai.rest_api_base_url}/api`,
 		options.headers ??= new Headers();
 		options.headers.set('Authorization', `Bearer ${localStorage.getItem('token')}`);
-		console.log('apiFetch request:', request, options);
 	}
 });
