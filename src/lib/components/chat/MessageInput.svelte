@@ -579,6 +579,12 @@ async function fetchTokenFiles() {
 
 $: if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !filesFetched) {
 	fetchTokenFiles();
+	// Reset filesFetched after 5 minutes to allow for fresh data
+	setTimeout(() => {
+		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
+			filesFetched = false;
+		}
+	}, 5 * 60 * 1000); // 5 minutes
 }
 
 // Reset filesFetched when model changes
