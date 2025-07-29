@@ -473,8 +473,8 @@
 		shiftKey = false;
 	};
 
-	function setPromptRTFormat(docxName = '', csvName = '') {
-		const promptText = `Mineral file: ${docxName}\nValues file: ${csvName}`;
+	function setPromptRTFormat(docxPath = '', csvPath = '') {
+		const promptText = `Mineral file: ${docxPath}\nValues file: ${csvPath}`;
 		if ($settings?.richTextInput ?? true) {
 			prompt = promptText.replace(/\n/g, '<br>');
 			promptHtml = prompt;
@@ -513,9 +513,11 @@
 		dropzoneElement?.addEventListener('dragleave', onDragLeave);
 
 		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
-			const docxName = docxFiles.find(f => String(f.idx) === String(selectedDocx))?.name || '';
-			const csvName = csvFiles.find(f => String(f.idx) === String(selectedCsv))?.name || '';
-			setPromptRTFormat(docxName, csvName);
+			const docxFile = docxFiles.find(f => String(f.idx) === String(selectedDocx));
+			const csvFile = csvFiles.find(f => String(f.idx) === String(selectedCsv));
+			const docxUrl = docxFile?.url || '';
+			const csvUrl = csvFile?.url || '';
+			setPromptRTFormat(docxUrl, csvUrl);
 		}
 	});
 
@@ -553,13 +555,11 @@ async function fetchTokenFiles() {
 	const csvResult = await fetchCsvFiles();
 	docxFiles = (Array.isArray(docxResult) ? docxResult : (docxResult?.files ?? [])).map((file, idx) => ({
 		...file,
-		idx,
-		preview_url: file.path ? `${WEBUI_API_BASE_URL}/file/preview/docx/${file.path}` : undefined
+		idx
 	}));
 	csvFiles = (Array.isArray(csvResult) ? csvResult : (csvResult?.files ?? [])).map((file, idx) => ({
 		...file,
-		idx,
-		preview_url: file.path ? `${WEBUI_API_BASE_URL}/file/preview/csv/${file.path}` : undefined
+		idx
 	}));
 	loadingFiles = false;
 	filesFetched = true;
@@ -588,14 +588,14 @@ $: if (selectedDocx && selectedCsv) {
 
 // Change updatePromptWithFilenames to async
 async function updatePromptWithFilenames(type) {
-	let docxName = docxFiles.find(f => String(f.idx) === String(selectedDocx))?.name || '';
-	let csvName = csvFiles.find(f => String(f.idx) === String(selectedCsv))?.name || '';
-	if (type === 'docx') {
-		docxName = docxFiles.find(f => String(f.idx) === String(selectedDocx))?.name || '';
-	} else if (type === 'csv') {
-		csvName = csvFiles.find(f => String(f.idx) === String(selectedCsv))?.name || '';
-	}
-	setPromptRTFormat(docxName, csvName);
+	// Always get both current selections
+	const docxFile = docxFiles.find(f => String(f.idx) === String(selectedDocx));
+	const csvFile = csvFiles.find(f => String(f.idx) === String(selectedCsv));
+	
+	let docxUrl = docxFile?.url || '';
+	let csvUrl = csvFile?.url || '';
+	
+	setPromptRTFormat(docxUrl, csvUrl);
 	await tick();
 	const chatInputElement = document.getElementById('chat-input');
 	if (chatInputElement) {
