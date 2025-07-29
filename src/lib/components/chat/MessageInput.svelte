@@ -36,7 +36,7 @@
 	import { generateAutoCompletion } from '$lib/apis';
 	import { deleteFileById } from '$lib/apis/files';
 
-	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT } from '$lib/constants';
+	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT, TOKEN_REPLACER_MODEL_ID } from '$lib/constants';
 
 	import InputMenu from './MessageInput/InputMenu.svelte';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
@@ -62,6 +62,11 @@
 	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte';
 	import { appHooks } from '$lib/utils/hooks';
 
+	import { fetchDocxFiles, fetchCsvFiles } from '$lib/apis/tokenizedFiles';
+
+	import Eye from '../icons/Eye.svelte';
+	import FilePreviewDialog from './MessageInput/FilePreviewDialog.svelte';
+
 	const i18n = getContext('i18n');
 
 	export let transparentBackground = false;
@@ -74,6 +79,13 @@
 
 	export let atSelectedModel: Model | undefined = undefined;
 	export let selectedModels: [''];
+  $: {
+    if (selectedModels.length === 1 && selectedModels[0]) {
+      atSelectedModel = $models.find(m => m.id === selectedModels[0]);
+    } else {
+      atSelectedModel = undefined;
+    }
+  }
 
 	let selectedModelIds = [];
 	$: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
@@ -82,6 +94,7 @@
 	export let taskIds = null;
 
 	export let prompt = '';
+	let promptHtml = '';
 	export let files = [];
 
 	export let toolServers = [];
@@ -460,7 +473,44 @@
 		shiftKey = false;
 	};
 
-	onMount(async () => {
+	function setPromptRTFormat(docxPath = '', csvPath = '') {
+		const promptText = `Mineral file: ${docxPath}\n\nValues file: ${csvPath}`;
+		if ($settings?.richTextInput ?? true) {
+			prompt = promptText.replace(/\n/g, '<br>');
+			promptHtml = prompt;
+		} else {
+			prompt = promptText;
+			promptHtml = '';
+		}
+	}
+
+	function applyTokenReplacerFont() {
+		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
+			setTimeout(() => {
+				const chatInputElement = document.getElementById('chat-input');
+				if (chatInputElement && ($settings?.richTextInput ?? true)) {
+					chatInputElement.style.fontFamily = 'monospace';
+					chatInputElement.style.fontSize = '0.8em';
+				}
+			}, 0);
+		}
+	}
+
+	function resetToDefaultFont() {
+		if (atSelectedModel?.id !== TOKEN_REPLACER_MODEL_ID) {
+			setTimeout(() => {
+				const chatInputElement = document.getElementById('chat-input');
+				if (chatInputElement) {
+					chatInputElement.style.fontFamily = '';
+					chatInputElement.style.fontSize = '';
+				}
+			}, 0);
+		}
+	}
+
+
+
+	onMount(() => {
 		loaded = true;
 
 		window.setTimeout(() => {
@@ -474,13 +524,13 @@
 		window.addEventListener('focus', onFocus);
 		window.addEventListener('blur', onBlur);
 
-		await tick();
-
 		const dropzoneElement = document.getElementById('chat-container');
 
 		dropzoneElement?.addEventListener('dragover', onDragOver);
 		dropzoneElement?.addEventListener('drop', onDrop);
 		dropzoneElement?.addEventListener('dragleave', onDragLeave);
+
+		// Token Replacer model initialization handled reactively
 	});
 
 	onDestroy(() => {
@@ -498,8 +548,209 @@
 			dropzoneElement?.removeEventListener('drop', onDrop);
 			dropzoneElement?.removeEventListener('dragleave', onDragLeave);
 		}
+
+		// Clear the filesFetched timeout to prevent memory leaks
+		if (filesFetchedTimeout) {
+			clearTimeout(filesFetchedTimeout);
+			filesFetchedTimeout = null;
+		}
 	});
+
+	// Token Replacer LLM file selection state
+let docxFiles = [];
+let csvFiles = [];
+let selectedDocx = '';
+let selectedCsv = '';
+let loadingFiles = false;
+let filesFetched = false; // Add flag to prevent repeated fetching
+let filesFetchedTimeout = null; // Track timeout for cleanup
+
+$: showTokenFileInputs = atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !loadingFiles;
+
+async function fetchTokenFiles() {
+	if (filesFetched) return; // Prevent repeated fetching
+	loadingFiles = true;
+	const docxResult = await fetchDocxFiles();
+	const csvResult = await fetchCsvFiles();
+	docxFiles = (Array.isArray(docxResult) ? docxResult : (docxResult?.files ?? [])).map((file, idx) => ({
+		...file,
+		idx
+	}));
+	csvFiles = (Array.isArray(csvResult) ? csvResult : (csvResult?.files ?? [])).map((file, idx) => ({
+		...file,
+		idx
+	}));
+	loadingFiles = false;
+	filesFetched = true;
+}
+
+$: if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !filesFetched) {
+	fetchTokenFiles();
+	// Clear any existing timeout
+	if (filesFetchedTimeout) {
+		clearTimeout(filesFetchedTimeout);
+	}
+	// Reset filesFetched after 5 minutes to allow for fresh data
+	filesFetchedTimeout = setTimeout(() => {
+		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
+			filesFetched = false;
+		}
+		filesFetchedTimeout = null;
+	}, 5 * 60 * 1000); // 5 minutes
+}
+
+// Reset filesFetched when model changes
+$: if (atSelectedModel?.id !== TOKEN_REPLACER_MODEL_ID) {
+	filesFetched = false;
+	selectedDocx = selectedCsv = '';
+}
+
+let showFileSelectionError = false;
+
+// Reset error when user changes selection
+$: if (selectedDocx && selectedCsv) {
+	showFileSelectionError = false;
+}
+
+// Change updatePromptWithFilenames to async
+async function updatePromptWithFilenames(type) {
+	// Always get both current selections
+	const docxFile = docxFiles.find(f => String(f.idx) === String(selectedDocx));
+	const csvFile = csvFiles.find(f => String(f.idx) === String(selectedCsv));
+	
+	let docxUrl = docxFile?.url || '';
+	let csvUrl = csvFile?.url || '';
+	
+	// Remove query parameters if they exist
+	if (docxUrl.includes('?')) {
+		docxUrl = docxUrl.split('?')[0];
+	}
+	if (csvUrl.includes('?')) {
+		csvUrl = csvUrl.split('?')[0];
+	}
+	
+	setPromptRTFormat(docxUrl, csvUrl);
+	applyTokenReplacerFont();
+	await tick();
+	const chatInputElement = document.getElementById('chat-input');
+	if (chatInputElement) {
+		chatInputElement.focus();
+		chatInputElement.dispatchEvent(new Event('input'));
+	}
+	await tick();
+}
+
+// Handle prompt initialization when model changes
+let previousModelId = null;
+$: {
+  if (atSelectedModel?.id !== previousModelId) {
+    // Model has changed
+    if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
+      // Switching TO Token Replacer model - initialize prompt and apply font
+      setPromptRTFormat('', '');
+      applyTokenReplacerFont();
+    } else if (previousModelId === TOKEN_REPLACER_MODEL_ID) {
+      // Switching AWAY from Token Replacer model - clear prompt and reset font
+      prompt = '';
+      promptHtml = '';
+      resetToDefaultFont();
+    }
+    previousModelId = atSelectedModel?.id;
+  }
+}
+
+// Dialog state for file preview
+let showPreviewDialog = false;
+let previewFile = null;
+let previewType = null; // 'docx' | 'csv'
+
+function openPreviewDialog(type) {
+	if (type === 'docx') {
+		previewType = 'docx';
+		previewFile = docxFiles.find(f => String(f.idx) === String(selectedDocx));
+	} else if (type === 'csv') {
+		previewType = 'csv';
+		previewFile = csvFiles.find(f => String(f.idx) === String(selectedCsv));
+	}
+	showPreviewDialog = true;
+}
+function closePreviewDialog() {
+	showPreviewDialog = false;
+	previewFile = null;
+	previewType = null;
+}
 </script>
+
+<!-- Token Replacer LLM file selection UI -->
+{#if atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID}
+	<div class="ml-4 mb-2 p-2 rounded bg-white dark:bg-gray-900">
+		{#if loadingFiles}
+			<div class="text-gray-500 text-sm">Loading files...</div>
+		{:else}
+			<div class="text-xs text-gray-500 mb-1 text-left">
+				Selecting Mineral and Values files auto-populates the prompt box for you.
+			</div>
+			<div class="flex gap-2 items-center">
+				<select
+					key={docxFiles.map(f => f.idx).join(',')}
+					class="text-sm px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+					bind:value={selectedDocx}
+					on:change={async () => await updatePromptWithFilenames('docx')}
+				>
+					<option value="">Select Mineral File</option>
+					{#each docxFiles ?? [] as file}
+						<option value={file.idx}>{file.name}</option>
+					{/each}
+				</select>
+				<!-- Preview button for mineral file -->
+				<Tooltip content="Preview Mineral File" placement="top">
+					<button
+						class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
+						disabled={selectedDocx === ""}
+						aria-label="Preview Mineral File"
+						on:click={() => openPreviewDialog('docx')}
+					>
+						<Eye class="w-5 h-5" />
+					</button>
+				</Tooltip>
+				<select
+					key={csvFiles.map(f => f.idx).join(',')}
+					class="text-sm px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+					bind:value={selectedCsv}
+					on:change={async () => await updatePromptWithFilenames('csv')}
+				>
+					<option value="">Select Values File</option>
+					{#each csvFiles ?? [] as file}
+						<option value={file.idx}>{file.name}</option>
+					{/each}
+				</select>
+				<!-- Preview button for csv file, always visible, disabled if none selected -->
+				<Tooltip content="Preview Values File" placement="top">
+					<button
+						class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
+						disabled={selectedCsv === ""}
+						aria-label="Preview Values File"
+						on:click={() => openPreviewDialog('csv')}
+					>
+						<Eye class="w-5 h-5" />
+					</button>
+				</Tooltip>
+			</div>
+			{#if showFileSelectionError}
+				<div class="text-gray-500 text-xs mt-1">Please select both a DOCX and a CSV file.</div>
+			{/if}
+		{/if}
+	</div>
+{/if}
+
+{#if showPreviewDialog}
+	<FilePreviewDialog
+		show={showPreviewDialog}
+		file={previewFile}
+		previewType={previewType}
+		on:close={closePreviewDialog}
+	/>
+{/if}
 
 <FilesOverlay show={dragged} />
 <ToolServersModal bind:show={showTools} {selectedToolIds} />
@@ -513,61 +764,16 @@
 					: 'max-w-6xl'} w-full"
 			>
 
-				{#if $isPublicModelChosen}
-					<div class="px-4 pb-1 text-xs w-full">
-						<div class="flex items-center gap-1">
-							<Tooltip content={$i18n.t('Do not send information you wish to keep private.')} placement="left">
-								<ExclamationTriangle/>
-							</Tooltip>
-
-							<span class="text-orange-700 dark:bg-transparent dark:text-amber-300 px-1">Warning! </span>
-							{$i18n.t('Public model chosen! Do not enter confidential information in this prompt.')}
-						</div>
-					</div>
-				{/if}
-
-				<div class="relative">
-					{#if autoScroll === false && history?.currentId}
-						<div
-							class=" absolute -top-12 left-0 right-0 flex justify-center z-30 pointer-events-none"
-						>
-							<button
-								class=" bg-white border border-gray-100 dark:border-none dark:bg-white/20 p-1.5 rounded-full pointer-events-auto"
-								on:click={() => {
-									autoScroll = true;
-									scrollToBottom();
-								}}
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									viewBox="0 0 20 20"
-									fill="currentColor"
-									class="w-5 h-5"
-								>
-									<path
-										fill-rule="evenodd"
-										d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z"
-										clip-rule="evenodd"
-									/>
-								</svg>
-							</button>
-						</div>
-					{/if}
-				</div>
-
 				<div class="w-full relative">
 					{#if atSelectedModel !== undefined}
-						<div
-							class="px-3 pb-0.5 pt-1.5 text-left w-full flex flex-col absolute bottom-0 left-0 right-0 bg-linear-to-t from-white dark:from-gray-900 z-10"
-						>
+						<div class="px-3 pb-0.5 pt-1.5 text-left w-full flex flex-col">
 							<div class="flex items-center justify-between w-full">
 								<div class="pl-[1px] flex items-center gap-2 text-sm dark:text-gray-500">
 									<img
 										crossorigin="anonymous"
 										alt="model profile"
 										class="size-3.5 max-w-[28px] object-cover rounded-full"
-										src={$models.find((model) => model.id === atSelectedModel.id)?.info?.meta
-											?.profile_image_url ??
+										src={$models.find((model) => model.id === atSelectedModel.id)?.info?.meta?.profile_image_url ??
 											($i18n.language === 'dg-DG'
 												? `/doge.png`
 												: `${WEBUI_BASE_URL}/static/favicon.png`)}
@@ -586,6 +792,18 @@
 										<XMark />
 									</button>
 								</div>
+							</div>
+						</div>
+					{/if}
+
+					{#if $isPublicModelChosen}
+						<div class="px-3 pb-1 text-xs w-full">
+							<div class="flex items-center gap-1">
+								<Tooltip content={$i18n.t('Do not send information you wish to keep private.')} placement="left">
+									<ExclamationTriangle/>
+								</Tooltip>
+								<span class="text-orange-700 dark:bg-transparent dark:text-amber-300 px-1">Warning! </span>
+								{$i18n.t('Public model chosen! Do not enter confidential information in this prompt.')}
 							</div>
 						</div>
 					{/if}
@@ -774,6 +992,7 @@
 											<RichTextInput
 												bind:this={chatInputElement}
 												bind:value={prompt}
+												html={promptHtml}
 												id="chat-input"
 												messageInput={true}
 												shiftEnter={!($settings?.ctrlEnterToSend ?? false) &&
