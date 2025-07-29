@@ -474,7 +474,7 @@
 	};
 
 	function setPromptRTFormat(docxPath = '', csvPath = '') {
-		const promptText = `Mineral file: ${docxPath}\nValues file: ${csvPath}`;
+		const promptText = `Mineral file: ${docxPath}\n\nValues file: ${csvPath}`;
 		if ($settings?.richTextInput ?? true) {
 			prompt = promptText.replace(/\n/g, '<br>');
 			promptHtml = prompt;
@@ -482,15 +482,33 @@
 			prompt = promptText;
 			promptHtml = '';
 		}
-		// Set font if chat input is present and rich text is enabled
-		setTimeout(() => {
-			const chatInputElement = document.getElementById('chat-input');
-			if (chatInputElement && ($settings?.richTextInput ?? true)) {
-				chatInputElement.style.fontFamily = 'monospace';
-				chatInputElement.style.fontSize = '0.8em';
-			}
-		}, 0);
 	}
+
+	function applyTokenReplacerFont() {
+		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
+			setTimeout(() => {
+				const chatInputElement = document.getElementById('chat-input');
+				if (chatInputElement && ($settings?.richTextInput ?? true)) {
+					chatInputElement.style.fontFamily = 'monospace';
+					chatInputElement.style.fontSize = '0.8em';
+				}
+			}, 0);
+		}
+	}
+
+	function resetToDefaultFont() {
+		if (atSelectedModel?.id !== TOKEN_REPLACER_MODEL_ID) {
+			setTimeout(() => {
+				const chatInputElement = document.getElementById('chat-input');
+				if (chatInputElement) {
+					chatInputElement.style.fontFamily = '';
+					chatInputElement.style.fontSize = '';
+				}
+			}, 0);
+		}
+	}
+
+
 
 	onMount(() => {
 		loaded = true;
@@ -512,13 +530,7 @@
 		dropzoneElement?.addEventListener('drop', onDrop);
 		dropzoneElement?.addEventListener('dragleave', onDragLeave);
 
-		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
-			const docxFile = docxFiles.find(f => String(f.idx) === String(selectedDocx));
-			const csvFile = csvFiles.find(f => String(f.idx) === String(selectedCsv));
-			const docxUrl = docxFile?.url || '';
-			const csvUrl = csvFile?.url || '';
-			setPromptRTFormat(docxUrl, csvUrl);
-		}
+		// Token Replacer model initialization handled reactively
 	});
 
 	onDestroy(() => {
@@ -577,10 +589,6 @@ $: if (atSelectedModel?.id !== TOKEN_REPLACER_MODEL_ID) {
 
 let showFileSelectionError = false;
 
-// Initialize prompt with two lines in RT format for Token Replacer
-prompt = 'Mineral file: <br>Values file: ';
-promptHtml = prompt;
-
 // Reset error when user changes selection
 $: if (selectedDocx && selectedCsv) {
 	showFileSelectionError = false;
@@ -595,7 +603,16 @@ async function updatePromptWithFilenames(type) {
 	let docxUrl = docxFile?.url || '';
 	let csvUrl = csvFile?.url || '';
 	
+	// Remove query parameters if they exist
+	if (docxUrl.includes('?')) {
+		docxUrl = docxUrl.split('?')[0];
+	}
+	if (csvUrl.includes('?')) {
+		csvUrl = csvUrl.split('?')[0];
+	}
+	
 	setPromptRTFormat(docxUrl, csvUrl);
+	applyTokenReplacerFont();
 	await tick();
 	const chatInputElement = document.getElementById('chat-input');
 	if (chatInputElement) {
@@ -605,14 +622,23 @@ async function updatePromptWithFilenames(type) {
 	await tick();
 }
 
-$: if (
-  atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID &&
-  docxFiles &&
-  csvFiles &&
-  !selectedDocx &&
-  !selectedCsv
-) {
-  setPromptRTFormat('', '');
+// Handle prompt initialization when model changes
+let previousModelId = null;
+$: {
+  if (atSelectedModel?.id !== previousModelId) {
+    // Model has changed
+    if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
+      // Switching TO Token Replacer model - initialize prompt and apply font
+      setPromptRTFormat('', '');
+      applyTokenReplacerFont();
+    } else if (previousModelId === TOKEN_REPLACER_MODEL_ID) {
+      // Switching AWAY from Token Replacer model - clear prompt and reset font
+      prompt = '';
+      promptHtml = '';
+      resetToDefaultFont();
+    }
+    previousModelId = atSelectedModel?.id;
+  }
 }
 
 // Dialog state for file preview
