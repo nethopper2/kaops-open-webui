@@ -548,15 +548,22 @@
 			dropzoneElement?.removeEventListener('drop', onDrop);
 			dropzoneElement?.removeEventListener('dragleave', onDragLeave);
 		}
+
+		// Clear the filesFetched timeout to prevent memory leaks
+		if (filesFetchedTimeout) {
+			clearTimeout(filesFetchedTimeout);
+			filesFetchedTimeout = null;
+		}
 	});
 
 	// Token Replacer LLM file selection state
-	let docxFiles = [];
-	let csvFiles = [];
-	let selectedDocx = '';
+let docxFiles = [];
+let csvFiles = [];
+let selectedDocx = '';
 let selectedCsv = '';
 let loadingFiles = false;
 let filesFetched = false; // Add flag to prevent repeated fetching
+let filesFetchedTimeout = null; // Track timeout for cleanup
 
 $: showTokenFileInputs = atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !loadingFiles;
 
@@ -579,11 +586,16 @@ async function fetchTokenFiles() {
 
 $: if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !filesFetched) {
 	fetchTokenFiles();
+	// Clear any existing timeout
+	if (filesFetchedTimeout) {
+		clearTimeout(filesFetchedTimeout);
+	}
 	// Reset filesFetched after 5 minutes to allow for fresh data
-	setTimeout(() => {
+	filesFetchedTimeout = setTimeout(() => {
 		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
 			filesFetched = false;
 		}
+		filesFetchedTimeout = null;
 	}, 5 * 60 * 1000); // 5 minutes
 }
 
