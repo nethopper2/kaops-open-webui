@@ -8,6 +8,7 @@
 
 	import { config, mobile, settings, socket } from '$lib/stores';
 	import { blobToFile, compressImage } from '$lib/utils';
+	import { checkFileUploadPermission } from '$lib/utils/fileUploadPermissions';
 
 	import Tooltip from '../common/Tooltip.svelte';
 	import RichTextInput from '../common/RichTextInput.svelte';
@@ -246,6 +247,12 @@
 
 	const onDrop = async (e) => {
 		e.preventDefault();
+
+		// Check file upload permissions before processing dropped files
+		if (!checkFileUploadPermission($_user, selectedModels, $models, $i18n)) {
+			draggedOver = false;
+			return;
+		}
 
 		if (e.dataTransfer?.files) {
 			const inputFiles = Array.from(e.dataTransfer?.files);

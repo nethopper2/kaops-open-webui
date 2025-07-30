@@ -63,6 +63,7 @@
 	import { appHooks } from '$lib/utils/hooks';
 
 	import { fetchDocxFiles, fetchCsvFiles } from '$lib/apis/tokenizedFiles';
+	import { checkFileUploadPermission } from '$lib/utils/fileUploadPermissions';
 
 	import Eye from '../icons/Eye.svelte';
 	import FilePreviewDialog from './MessageInput/FilePreviewDialog.svelte';
@@ -438,6 +439,12 @@
 	const onDrop = async (e) => {
 		e.preventDefault();
 		console.log(e);
+
+		// Check file upload permissions before processing dropped files
+		if (!checkFileUploadPermission($_user, selectedModels, $models, $i18n)) {
+			dragged = false;
+			return;
+		}
 
 		if (e.dataTransfer?.files) {
 			const inputFiles = Array.from(e.dataTransfer?.files);
