@@ -558,7 +558,7 @@
 				</div>
 
 				<div class="flex self-center translate-y-[0.5px]">
-					<div class=" self-center font-medium text-sm font-primary">{$i18n.t('Chat Search')}</div>
+					<div class=" self-center font-medium text-sm font-primary">{$i18n.t('Chat History Search')}</div>
 				</div>
 			</button>
 		</div>
