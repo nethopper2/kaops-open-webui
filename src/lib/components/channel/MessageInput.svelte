@@ -247,6 +247,26 @@
 	const onDrop = async (e) => {
 		e.preventDefault();
 
+		// Check user permissions (same logic as uploadFileHandler)
+		if ($_user?.role !== 'admin' && !($_user?.permissions?.chat?.file_upload ?? true)) {
+			toast.error($i18n.t('You do not have permission to upload files.'));
+			draggedOver = false;
+			return;
+		}
+
+		// Check model capabilities (same logic as fileUploadCapableModels)
+		const selectedModelIds = atSelectedModel?.id ? [atSelectedModel.id] : selectedModels;
+		const modelsSupportUpload = selectedModelIds.every((modelId) => {
+			const model = $models.find((m) => m.id === modelId);
+			return model?.info?.meta?.capabilities?.file_upload ?? true;
+		});
+
+		if (!modelsSupportUpload) {
+			toast.error($i18n.t('Selected model(s) do not support file upload'));
+			draggedOver = false;
+			return;
+		}
+
 		if (e.dataTransfer?.files) {
 			const inputFiles = Array.from(e.dataTransfer?.files);
 			if (inputFiles && inputFiles.length > 0) {
