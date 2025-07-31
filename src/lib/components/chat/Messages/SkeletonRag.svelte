@@ -1,121 +1,91 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-	import { config } from '$lib/stores';
 
   export let initialProgress = 1;
 
-  // Each status milestone: text, progress %, and random duration range (seconds)
-  const statuses = [
-    { text: "Analyzing your question...", progress: 1, min: 0.8, max: 1.5 },
-    { text: "Searching knowledge sources...", progress: 30, min: 2.5, max: 5.5 },
-    { text: "Reviewing relevant information...", progress: 60, min: 2.5, max: 5.5 },
-    { text: "Formulating a detailed response...", progress: 80, min: 1.0, max: 2.0 },
-    { text: "Refining for clarity and accuracy...", progress: 88, min: 0.7, max: 1.3 },
-    { text: "Almost ready...", progress: 94, min: 0.5, max: 1.0 },
-    { text: "Wait for it...", progress: 99, min: 1.0, max: 2.0 },
+  // Simple loading states with realistic timing
+  const loadingStates = [
+    { text: "Processing your request...", duration: 1000 },
+    { text: "Analyzing content...", duration: 1500 },
+    { text: "Generating response...", duration: 2000 },
+    { text: "Almost ready...", duration: 1000 },
   ];
 
-  let statusText = statuses[0].text;
+  let currentStateIndex = 0;
+  let currentText = loadingStates[0].text;
   let progress = initialProgress;
-  let cancelled = false; // For cleanup if component unmounts
+  let cancelled = false;
 
-  // Utility: get a random duration in ms between min and max (seconds)
-  function randomDelayMs(min, max) {
-    return Math.floor(min * 1000 + Math.random() * (max - min) * 1000);
-  }
-  // Utility: random pause between animation segments (ms)
-  function randomPauseMs() {
-    return 250 + Math.random() * 500;
-  }
-
-  // Animate progress from current to next over given duration, with intermittent pauses
-  async function animateTo(next, duration) {
-    const start = progress;
-    const distance = next - start;
-    const startTime = Date.now();
-    let elapsed = 0;
-
-    while (elapsed < duration && !cancelled) {
-      // Move for a random short duration
-      const moveDuration = Math.min(120 + Math.random() * 200, duration - elapsed);
-      const pauseDuration = Math.min(randomPauseMs(), duration - elapsed - moveDuration);
-
-      // Animate progress for moveDuration
-      const moveStart = Date.now();
-      const moveStartValue = progress;
-      const targetValue = start + distance * ((elapsed + moveDuration) / duration);
-
-      while ((Date.now() - moveStart < moveDuration) && !cancelled) {
-        const t = (Date.now() - moveStart) / moveDuration;
-        progress = moveStartValue + (targetValue - moveStartValue) * t;
-        await new Promise(r => setTimeout(r, 16));
+  // Animate progress smoothly
+  function animateProgress(targetProgress: number, duration: number): Promise<void> {
+    return new Promise((resolve) => {
+      const startProgress = progress;
+      const startTime = Date.now();
+      
+      function update() {
+        if (cancelled) {
+          resolve();
+          return;
+        }
+        
+        const elapsed = Date.now() - startTime;
+        const t = Math.min(elapsed / duration, 1);
+        
+        // Ease out function for smooth animation
+        const easeOut = 1 - Math.pow(1 - t, 3);
+        progress = startProgress + (targetProgress - startProgress) * easeOut;
+        
+        if (t < 1) {
+          requestAnimationFrame(update);
+        } else {
+          resolve();
+        }
       }
-      progress = targetValue;
-      elapsed = Date.now() - startTime;
-
-      // Pause if time remains
-      if (elapsed < duration && pauseDuration > 0 && !cancelled) {
-        await new Promise(r => setTimeout(r, pauseDuration));
-        elapsed = Date.now() - startTime;
-      }
-    }
-    progress = next;
+      
+      requestAnimationFrame(update);
+    });
   }
 
-  // Main status/progress loop
-  async function runStatuses() {
-    progress = initialProgress;
-    statusText = statuses[0].text;
-    for (let i = 0; i < statuses.length && !cancelled; i++) {
-      const { text, progress: next, min, max } = statuses[i];
-      const duration = randomDelayMs(min, max);
-      await animateTo(next, duration);
-      statusText = text;
+  // Cycle through loading states
+  async function runLoadingStates(): Promise<void> {
+    for (let i = 0; i < loadingStates.length && !cancelled; i++) {
+      const state = loadingStates[i];
+      currentText = state.text;
+      currentStateIndex = i;
+      
+      // Animate progress to next milestone
+      const targetProgress = ((i + 1) / loadingStates.length) * 90; // Cap at 90% until done
+      await animateProgress(targetProgress, state.duration);
     }
-    // Optional: show a final message after all milestones
-    // statusText = "Done!";
+    
+    // Final animation to 100%
+    if (!cancelled) {
+      currentText = "Complete!";
+      await animateProgress(100, 500);
+    }
   }
-
-  let bgImageAuth = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom)?.bgImageAuth : '';
 
   onMount(() => {
     cancelled = false;
-    runStatuses();
+    runLoadingStates();
+    
     return () => {
-      cancelled = true; // Stop animation if component unmounts
+      cancelled = true;
     };
   });
 </script>
 
-<div class="relative min-h-[200px] flex items-center justify-center overflow-hidden rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 mt-0">
-  <!-- Background Image Layer -->
-  <div
-    class="absolute inset-0 w-full h-full object-cover opacity-20 dark:opacity-30 pointer-events-none !mt-0"
-    style="background-image: url('{bgImageAuth}'); background-size: cover; background-position: center;"
-    aria-hidden="true"
-  ></div>
-
-  <!-- Overlay for content -->
-  <div class="relative z-10 flex flex-col items-center w-full px-8 py-6 bg-white/70 dark:bg-gray-900/70 backdrop-blur rounded-xl">
-    <div class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2 tracking-wide select-none">
-      Preparing your response
-    </div>
-    <div class="text-sm text-gray-600 dark:text-gray-400 font-normal min-h-[1.5em] mb-5 transition-colors duration-300 select-none">
-      {statusText}
-    </div>
-    <div class="w-full max-w-xs mx-auto h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
-      <div
-        class="h-2 bg-green-500 dark:bg-green-400 rounded-full transition-all duration-100"
-        style="width: {progress}%;"
-      ></div>
-    </div>
-    <!-- <div class="text-xs mt-2 text-gray-400 select-none">Progress: {Math.round(progress)}%</div> -->
+<div class="flex flex-col items-center w-full px-6 py-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+  <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 select-none">
+    Preparing your response
+  </div>
+  <div class="text-xs text-gray-500 dark:text-gray-400 font-normal min-h-[1em] mb-3 transition-colors duration-300 select-none">
+    {currentText}
+  </div>
+  <div class="w-full max-w-xs mx-auto h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+    <div
+      class="h-1.5 bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-300 ease-out"
+      style="width: {progress}%;"
+    ></div>
   </div>
 </div>
-
-<style>
-  .backdrop-blur {
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-  }
-</style>

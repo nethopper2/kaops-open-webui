@@ -63,7 +63,6 @@
 	import { appHooks } from '$lib/utils/hooks';
 
 	import { fetchDocxFiles, fetchCsvFiles } from '$lib/apis/tokenizedFiles';
-	import { checkFileUploadPermission } from '$lib/utils/fileUploadPermissions';
 
 	import Eye from '../icons/Eye.svelte';
 	import QuestionMarkCircle from '../icons/QuestionMarkCircle.svelte';
@@ -441,8 +440,22 @@
 		e.preventDefault();
 		console.log(e);
 
-		// Check file upload permissions before processing dropped files
-		if (!checkFileUploadPermission($_user, selectedModels, $models, $i18n)) {
+		// Check user permissions (same logic as uploadFileHandler)
+		if ($_user?.role !== 'admin' && !($_user?.permissions?.chat?.file_upload ?? true)) {
+			toast.error($i18n.t('You do not have permission to upload files.'));
+			dragged = false;
+			return;
+		}
+
+		// Check model capabilities (same logic as fileUploadCapableModels)
+		const selectedModelIds = atSelectedModel?.id ? [atSelectedModel.id] : selectedModels;
+		const modelsSupportUpload = selectedModelIds.every((modelId) => {
+			const model = $models.find((m) => m.id === modelId);
+			return model?.info?.meta?.capabilities?.file_upload ?? true;
+		});
+
+		if (!modelsSupportUpload) {
+			toast.error($i18n.t('Selected model(s) do not support file upload'));
 			dragged = false;
 			return;
 		}
