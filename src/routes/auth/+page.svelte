@@ -28,7 +28,9 @@
 
 	let ldapUsername = '';
 
-	let brandingLogo = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom)?.logo : '';
+	const webuiCustom = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom) : {};
+	let brandingLogo = webuiCustom?.logo || '';
+	let logoMaxHeight = webuiCustom?.logoMaxHeight || '25px';
 	let bgImageAuth = '';
 
 	const querystringValue = (key) => {
@@ -251,7 +253,7 @@
 										src={brandingLogo}
 										alt="Logo"
 										class="mx-auto mb-8"
-                    style="max-height:25px;"
+										style="max-height:{logoMaxHeight};"
 									/>              
 								{/if}                
 								<div class=" text-2xl font-medium">

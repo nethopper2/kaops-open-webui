@@ -238,6 +238,7 @@ type Config = {
 		rest_api_base_url: string;
 		webui_custom?: {
 			logo?: string;
+			logoMaxHeight?: string;
 			bgImageAuth?: string;
 			bgImageAuthLight?: string;
 		};
