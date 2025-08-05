@@ -496,7 +496,22 @@
 	};
 
 	function setPromptRTFormat(docxPath = '', csvPath = '') {
-		const promptText = `Mineral file: ${docxPath}\n\nValues file: ${csvPath}`;
+		let promptText = '';
+		
+		// Only add mineral file if one is selected
+		if (docxPath) {
+			promptText += `Mineral file: ${docxPath}`;
+		}
+		
+		// Only add values file if one is selected
+		if (csvPath) {
+			// Add newline if we already have mineral file content
+			if (promptText) {
+				promptText += '\n\n';
+			}
+			promptText += `Values file: ${csvPath}`;
+		}
+		
 		if ($settings?.richTextInput ?? true) {
 			prompt = promptText.replace(/\n/g, '<br>');
 			promptHtml = prompt;
@@ -583,6 +598,8 @@ let docxFiles = [];
 let csvFiles = [];
 let selectedDocx = '';
 let selectedCsv = '';
+let selectedDocxValue = ''; // Store the actual selected value separately from UI
+let selectedCsvValue = ''; // Store the actual selected value separately from UI
 let loadingFiles = false;
 let filesFetched = false; // Add flag to prevent repeated fetching
 let filesFetchedTimeout = null; // Track timeout for cleanup
@@ -625,6 +642,7 @@ $: if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !filesFetched) {
 $: if (atSelectedModel?.id !== TOKEN_REPLACER_MODEL_ID) {
 	filesFetched = false;
 	selectedDocx = selectedCsv = '';
+	selectedDocxValue = selectedCsvValue = '';
 }
 
 let showFileSelectionError = false;
@@ -636,9 +654,9 @@ $: if (selectedDocx && selectedCsv) {
 
 // Change updatePromptWithFilenames to async
 async function updatePromptWithFilenames(type) {
-	// Always get both current selections
-	const docxFile = docxFiles.find(f => String(f.idx) === String(selectedDocx));
-	const csvFile = csvFiles.find(f => String(f.idx) === String(selectedCsv));
+	// Always get both current selections using the stored values
+	const docxFile = docxFiles.find(f => String(f.idx) === String(selectedDocxValue));
+	const csvFile = csvFiles.find(f => String(f.idx) === String(selectedCsvValue));
 	
 	let docxUrl = docxFile?.url || '';
 	let csvUrl = csvFile?.url || '';
@@ -660,6 +678,13 @@ async function updatePromptWithFilenames(type) {
 		chatInputElement.dispatchEvent(new Event('input'));
 	}
 	await tick();
+	
+	// Clear the select boxes after updating the prompt
+	if (type === 'docx') {
+		selectedDocx = '';
+	} else if (type === 'csv') {
+		selectedCsv = '';
+	}
 }
 
 // Handle prompt initialization when model changes
@@ -689,10 +714,10 @@ let previewType = null; // 'docx' | 'csv'
 function openPreviewDialog(type) {
 	if (type === 'docx') {
 		previewType = 'docx';
-		previewFile = docxFiles.find(f => String(f.idx) === String(selectedDocx));
+		previewFile = docxFiles.find(f => String(f.idx) === String(selectedDocxValue));
 	} else if (type === 'csv') {
 		previewType = 'csv';
-		previewFile = csvFiles.find(f => String(f.idx) === String(selectedCsv));
+		previewFile = csvFiles.find(f => String(f.idx) === String(selectedCsvValue));
 	}
 	showPreviewDialog = true;
 }
@@ -720,6 +745,7 @@ function closePreviewDialog() {
 						placeholder="Select Mineral File"
 						onSelect={async (value) => {
 							selectedDocx = value;
+							selectedDocxValue = value;
 							await updatePromptWithFilenames('docx');
 						}}
 					/>
@@ -750,6 +776,7 @@ function closePreviewDialog() {
 						placeholder="Select Values File"
 						onSelect={async (value) => {
 							selectedCsv = value;
+							selectedCsvValue = value;
 							await updatePromptWithFilenames('csv');
 						}}
 					/>
@@ -1680,7 +1707,7 @@ function closePreviewDialog() {
 
 										{#if prompt !== '' || files.length > 0}
 											<button
-												class="text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full px-3 py-1.5 mr-0.5 self-center text-sm font-medium"
+												class="text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full px-3 py-1.5 mr-0.5 self-center text-sm font-thin"
 												type="button"
 												on:click={() => {
 													prompt = '';
@@ -1695,7 +1722,7 @@ function closePreviewDialog() {
 												}}
 												aria-label="Clear input"
 											>
-												Clear
+												clear
 											</button>
 										{/if}
 
