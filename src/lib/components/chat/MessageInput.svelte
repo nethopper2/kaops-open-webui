@@ -67,6 +67,7 @@
 	import Eye from '../icons/Eye.svelte';
 	import QuestionMarkCircle from '../icons/QuestionMarkCircle.svelte';
 	import FilePreviewDialog from './MessageInput/FilePreviewDialog.svelte';
+	import FilterSelect from './MessageInput/FilterSelect.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -713,17 +714,15 @@ function closePreviewDialog() {
 			</div>
 			<div class="flex gap-2 items-center">
 				{#if (docxFiles ?? []).length > 0}
-					<select
-						key={docxFiles.map(f => f.idx).join(',')}
-						class="text-sm px-2 py-1 pr-8 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 appearance-none bg-no-repeat bg-right bg-[length:16px_12px] bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2216%22%20height%3D%2212%22%20viewBox%3D%220%200%2016%2012%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M8%2011L1%204h14z%22/%3E%3C/svg%3E')] dark:bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2216%22%20height%3D%2212%22%20viewBox%3D%220%200%2016%2012%22%3E%3Cpath%20fill%3D%22%23aaa%22%20d%3D%22M8%2011L1%204h14z%22/%3E%3C/svg%3E')]"
+					<FilterSelect
 						bind:value={selectedDocx}
-						on:change={async () => await updatePromptWithFilenames('docx')}
-					>
-						<option value="">Select Mineral File</option>
-						{#each docxFiles ?? [] as file}
-							<option value={file.idx}>{file.name}</option>
-						{/each}
-					</select>
+						items={docxFiles}
+						placeholder="Select Mineral File"
+						onSelect={async (value) => {
+							selectedDocx = value;
+							await updatePromptWithFilenames('docx');
+						}}
+					/>
 					<!-- Preview button for mineral file -->
 					<Tooltip content="Preview Mineral File" placement="top">
 						<button
@@ -732,30 +731,28 @@ function closePreviewDialog() {
 							aria-label="Preview Mineral File"
 							on:click={() => openPreviewDialog('docx')}
 						>
-							<Eye class="w-5 h-5" />
+							<Eye className="w-5 h-5" />
 						</button>
 					</Tooltip>
 				{:else}
 					<div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
 						<span class="text-sm text-gray-600 dark:text-gray-400">No mineral files available</span>
 						<Tooltip content="Upload DOCX files to the workspace to use them here." placement="top">
-							<QuestionMarkCircle class="w-4 h-4 text-gray-500 dark:text-gray-400" />
+							<QuestionMarkCircle className="w-4 h-4 text-gray-500 dark:text-gray-400" />
 						</Tooltip>
 					</div>
 				{/if}
 				
 				{#if (csvFiles ?? []).length > 0}
-					<select
-						key={csvFiles.map(f => f.idx).join(',')}
-						class="text-sm px-2 py-1 pr-8 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 appearance-none bg-no-repeat bg-right bg-[length:16px_12px] bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2216%22%20height%3D%2212%22%20viewBox%3D%220%200%2016%2012%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M8%2011L1%204h14z%22/%3E%3C/svg%3E')] dark:bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2216%22%20height%3D%2212%22%20viewBox%3D%220%200%2016%2012%22%3E%3Cpath%20fill%3D%22%23aaa%22%20d%3D%22M8%2011L1%204h14z%22/%3E%3C/svg%3E')]"
+					<FilterSelect
 						bind:value={selectedCsv}
-						on:change={async () => await updatePromptWithFilenames('csv')}
-					>
-						<option value="">Select Values File</option>
-						{#each csvFiles ?? [] as file}
-							<option value={file.idx}>{file.name}</option>
-						{/each}
-					</select>
+						items={csvFiles}
+						placeholder="Select Values File"
+						onSelect={async (value) => {
+							selectedCsv = value;
+							await updatePromptWithFilenames('csv');
+						}}
+					/>
 					<!-- Preview button for csv file, always visible, disabled if none selected -->
 					<Tooltip content="Preview Values File" placement="top">
 						<button
@@ -764,14 +761,14 @@ function closePreviewDialog() {
 							aria-label="Preview Values File"
 							on:click={() => openPreviewDialog('csv')}
 						>
-							<Eye class="w-5 h-5" />
+							<Eye className="w-5 h-5" />
 						</button>
 					</Tooltip>
 				{:else}
 					<div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
 						<span class="text-sm text-gray-600 dark:text-gray-400">No values files available</span>
 						<Tooltip content="Upload CSV files to the workspace to use them here." placement="top">
-							<QuestionMarkCircle class="w-4 h-4 text-gray-500 dark:text-gray-400" />
+							<QuestionMarkCircle className="w-4 h-4 text-gray-500 dark:text-gray-400" />
 						</Tooltip>
 					</div>
 				{/if}
@@ -1680,6 +1677,27 @@ function closePreviewDialog() {
 									</div>
 
 									<div class="self-end flex space-x-1 mr-1 shrink-0">
+
+										{#if prompt !== '' || files.length > 0}
+											<button
+												class="text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full px-3 py-1.5 mr-0.5 self-center text-sm font-medium"
+												type="button"
+												on:click={() => {
+													prompt = '';
+													promptHtml = '';
+													files = [];
+													selectedToolIds = [];
+													selectedFilterIds = [];
+													webSearchEnabled = false;
+													imageGenerationEnabled = false;
+													codeInterpreterEnabled = false;
+													atSelectedModel = undefined;
+												}}
+												aria-label="Clear input"
+											>
+												Clear
+											</button>
+										{/if}
 
 										{#if $isPublicModelChosen}
 										<Tooltip content={$i18n.t('Use private model')}>
