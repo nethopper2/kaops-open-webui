@@ -600,47 +600,75 @@ let selectedDocx = '';
 let selectedCsv = '';
 let selectedDocxValue = ''; // Store the actual selected value separately from UI
 let selectedCsvValue = ''; // Store the actual selected value separately from UI
-let loadingFiles = false;
-let filesFetched = false; // Add flag to prevent repeated fetching
+let loadingFiles = false;     // initial blocking load (shows message only if no data yet)
+let refreshingFiles = false;  // background refresh (no blocking UI)
+let filesFetched = false;     // prevents repeated initial fetch
+let filesRefreshAllowed = false; // becomes true after timeout; next open triggers refresh
 let filesFetchedTimeout = null; // Track timeout for cleanup
 
-$: showTokenFileInputs = atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !loadingFiles;
-
-async function fetchTokenFiles() {
-	if (filesFetched) return; // Prevent repeated fetching
-	loadingFiles = true;
-	const docxResult = await fetchDocxFiles();
-	const csvResult = await fetchCsvFiles();
-	docxFiles = (Array.isArray(docxResult) ? docxResult : (docxResult?.files ?? [])).map((file, idx) => ({
-		...file,
-		idx
-	}));
-	csvFiles = (Array.isArray(csvResult) ? csvResult : (csvResult?.files ?? [])).map((file, idx) => ({
-		...file,
-		idx
-	}));
-	loadingFiles = false;
-	filesFetched = true;
-}
-
-$: if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !filesFetched) {
-	fetchTokenFiles();
-	// Clear any existing timeout
+function scheduleRefreshAllowTimer() {
+	// Allow background refresh after a delay
 	if (filesFetchedTimeout) {
 		clearTimeout(filesFetchedTimeout);
 	}
-	// Reset filesFetched after 5 minutes to allow for fresh data
 	filesFetchedTimeout = setTimeout(() => {
 		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
-			filesFetched = false;
+			filesRefreshAllowed = true;
 		}
 		filesFetchedTimeout = null;
 	}, 5 * 60 * 1000); // 5 minutes
 }
 
+async function fetchTokenFiles(refresh = false) {
+	// Prevent redundant calls
+	if (!refresh && filesFetched) return;
+	if (refresh ? refreshingFiles : loadingFiles) return;
+
+	// Do not show blocking loader when we already have files
+	filesRefreshAllowed = false;
+	const haveFiles = (docxFiles?.length ?? 0) > 0 || (csvFiles?.length ?? 0) > 0;
+	if (refresh || haveFiles) {
+		refreshingFiles = true;
+	} else {
+		loadingFiles = true;
+	}
+
+	try {
+		const [docxResult, csvResult] = await Promise.all([fetchDocxFiles(), fetchCsvFiles()]);
+		docxFiles = (Array.isArray(docxResult) ? docxResult : (docxResult?.files ?? [])).map((file, idx) => ({
+			...file,
+			idx
+		}));
+		csvFiles = (Array.isArray(csvResult) ? csvResult : (csvResult?.files ?? [])).map((file, idx) => ({
+			...file,
+			idx
+		}));
+		filesFetched = true;
+	} finally {
+		if (refreshingFiles) {
+			refreshingFiles = false;
+		} else {
+			loadingFiles = false;
+		}
+		// Start/restart the timer that allows the next refresh window
+		scheduleRefreshAllowTimer();
+	}
+}
+
+$: if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !filesFetched) {
+	// Initial load only; subsequent refresh is deferred until user opens the selector
+	fetchTokenFiles();
+}
+
 // Reset filesFetched when model changes
 $: if (atSelectedModel?.id !== TOKEN_REPLACER_MODEL_ID) {
 	filesFetched = false;
+	filesRefreshAllowed = false;
+	refreshingFiles = false;
+	if (filesFetchedTimeout) {
+		clearTimeout(filesFetchedTimeout);
+		filesFetchedTimeout = null;
+	}
 	selectedDocx = selectedCsv = '';
 	selectedDocxValue = selectedCsvValue = '';
 }
@@ -678,13 +706,14 @@ async function updatePromptWithFilenames(type) {
 		chatInputElement.dispatchEvent(new Event('input'));
 	}
 	await tick();
-	
+
+	// NOTE: This is commented out since there is now a clear button in FilterSelect
 	// Clear the select boxes after updating the prompt
-	if (type === 'docx') {
-		selectedDocx = '';
-	} else if (type === 'csv') {
-		selectedCsv = '';
-	}
+	// if (type === 'docx') {
+	// 	// selectedDocx = '';
+	// } else if (type === 'csv') {
+	// 	// selectedCsv = '';
+	// }
 }
 
 // Handle prompt initialization when model changes
@@ -731,8 +760,8 @@ function closePreviewDialog() {
 <!-- Token Replacer LLM file selection UI -->
 {#if atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID}
 	<div class="ml-4 mb-2 p-2 rounded bg-white dark:bg-gray-900">
-		{#if loadingFiles}
-			<div class="text-gray-500 text-sm">Loading files...</div>
+		{#if loadingFiles && (docxFiles.length === 0 && csvFiles.length === 0)}
+			<div class="text-gray-500 text-sm">Loading available token files...</div>
 		{:else}
 			<div class="text-xs text-gray-500 mb-1 text-left">
 				Selecting Mineral and Values files auto-populates the prompt box for you.
@@ -743,6 +772,12 @@ function closePreviewDialog() {
 						bind:value={selectedDocx}
 						items={docxFiles}
 						placeholder="Select Mineral File"
+						onOpen={() => {
+							// If files are stale and not already refreshing, refresh in background without blocking UI
+							if (filesRefreshAllowed && !refreshingFiles) {
+								fetchTokenFiles(true);
+							}
+						}}
 						onSelect={async (value) => {
 							selectedDocx = value;
 							selectedDocxValue = value;
@@ -774,6 +809,12 @@ function closePreviewDialog() {
 						bind:value={selectedCsv}
 						items={csvFiles}
 						placeholder="Select Values File"
+						onOpen={() => {
+							// If files are stale and not already refreshing, refresh in background without blocking UI
+							if (filesRefreshAllowed && !refreshingFiles) {
+								fetchTokenFiles(true);
+							}
+						}}
 						onSelect={async (value) => {
 							selectedCsv = value;
 							selectedCsvValue = value;
