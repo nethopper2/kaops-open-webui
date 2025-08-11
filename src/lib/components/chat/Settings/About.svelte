@@ -41,7 +41,9 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 			return '';
 		});
 
-		checkForVersionUpdates();
+		if ($config?.features?.enable_version_update_check) {
+			checkForVersionUpdates();
+		}
 	});
 </script>
 
@@ -54,7 +56,6 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 					{$i18n.t('Version')}
 				</div>
 			</div>
-
 			<div class="flex w-full justify-between items-center">
 				<div class="flex flex-col text-xs text-gray-700 dark:text-gray-200">
 					<div class="flex gap-1">
@@ -63,6 +64,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 						</Tooltip>
 
 						{#if $config?.private_ai?.enable_upstream_ui}
+						{#if $config?.features?.enable_version_update_check}
 							<a
 								href="https://github.com/open-webui/open-webui/releases/tag/v{version.latest}"
 								target="_blank"
@@ -73,6 +75,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 										? `(v${version.latest} ${$i18n.t('available!')})`
 										: $i18n.t('(latest)')}
 							</a>
+						{/if}
 						{/if}
 					</div>
 
@@ -89,6 +92,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 				</div>
 
 				{#if $config?.private_ai?.enable_upstream_ui}
+				{#if $config?.features?.enable_version_update_check}
 					<button
 						class=" text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-850 dark:hover:bg-gray-800 transition rounded-lg font-medium"
 						on:click={() => {
@@ -97,6 +101,7 @@ import { getBackendConfig, getVersionUpdates } from '$lib/apis';
 					>
 						{$i18n.t('Check for updates')}
 					</button>
+				{/if}
 				{/if}
 			</div>
 		</div>
