@@ -70,29 +70,12 @@
 		sortedPrompts = [...(suggestionPrompts ?? [])];
 		getFilteredPrompts(inputValue);
 	}
-
-	// Computed property to determine if there is text input
-	$: hasInput = inputValue.length > 0;
-
-	// Function to clear the input value
-	function clearInput() {
-		inputValue = '';
-		dispatch('setInput', { value: ''})
-	}
 </script>
 
 <div class="mb-1 flex gap-1 text-xs font-medium items-center text-gray-600 dark:text-gray-400">
 	{#if filteredPrompts.length > 0}
 		<Bolt />
 		{$i18n.t('Suggested')}
-		{#if hasInput}
-			<button
-				on:click={clearInput}
-				class="ml-4 text-neutral-500 text-xs"
-			>
-				{$i18n.t('clear')}
-			</button>
-		{/if}
 	{:else}
 		<!-- Keine Vorschläge -->
 
