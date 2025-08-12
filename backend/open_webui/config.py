@@ -62,7 +62,9 @@ def run_migrations():
         migrations_path = OPEN_WEBUI_DIR / "migrations"
         alembic_cfg.set_main_option("script_location", str(migrations_path))
 
-        command.upgrade(alembic_cfg, "head")
+        # REMINDER: This was changed from "head" to "heads" when we had migration issues upgrading to 0.6.22,
+        #           but this issue likely appears between 0.6.16 & 0.6.18
+        command.upgrade(alembic_cfg, "heads")
     except Exception as e:
         log.exception(f"Error running migrations: {e}")
 
