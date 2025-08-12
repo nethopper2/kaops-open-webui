@@ -111,7 +111,6 @@
 	export let taskIds = null;
 
 	export let prompt = '';
-	let promptHtml = '';
 	export let files = [];
 
 	export let toolServers = [];
@@ -820,18 +819,12 @@
 		if (csvPath) {
 			// Add newline if we already have mineral file content
 			if (promptText) {
-				promptText += '\n\n';
+				promptText += '\n\n\n';
 			}
 			promptText += `Values file: ${csvPath}`;
 		}
 
-		if ($settings?.richTextInput ?? true) {
-			prompt = promptText.replace(/\n/g, '<br>');
-			promptHtml = prompt;
-		} else {
-			prompt = promptText;
-			promptHtml = '';
-		}
+		setText(promptText);
 	}
 
 	function applyTokenReplacerFont() {
@@ -857,8 +850,6 @@
 			}, 0);
 		}
 	}
-
-
 
 	onMount(() => {
 		loaded = true;
@@ -907,6 +898,7 @@
 	});
 
 	// Token Replacer LLM file selection state
+	// TODO: Model specific tools & UI can't grow in this file, we should cleanup and determine where they live.
 let docxFiles = [];
 let csvFiles = [];
 let selectedDocx = '';
@@ -1040,8 +1032,7 @@ $: {
       applyTokenReplacerFont();
     } else if (previousModelId === TOKEN_REPLACER_MODEL_ID) {
       // Switching AWAY from Token Replacer model - clear prompt and reset font
-      prompt = '';
-      promptHtml = '';
+      setText('')
       resetToDefaultFont();
     }
     previousModelId = atSelectedModel?.id;
@@ -1189,6 +1180,34 @@ function closePreviewDialog() {
 					? 'max-w-full'
 					: 'max-w-6xl'} w-full"
 			>
+				<div class="relative">
+					{#if autoScroll === false && history?.currentId}
+						<div
+							class=" absolute -top-8 left-0 right-0 flex justify-center z-30 pointer-events-none"
+						>
+							<button
+								class=" bg-white border border-gray-100 dark:border-none dark:bg-white/20 p-1.5 rounded-full pointer-events-auto"
+								on:click={() => {
+									autoScroll = true;
+									scrollToBottom();
+								}}
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									viewBox="0 0 20 20"
+									fill="currentColor"
+									class="w-5 h-5"
+								>
+									<path
+										fill-rule="evenodd"
+										d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z"
+										clip-rule="evenodd"
+									/>
+								</svg>
+							</button>
+						</div>
+					{/if}
+				</div>
 
 				<div class="w-full relative">
 					{#if atSelectedModel !== undefined}
@@ -1432,8 +1451,6 @@ function closePreviewDialog() {
 											{#key $settings?.showFormattingToolbar ?? false}
 												<RichTextInput
 													bind:this={chatInputElement}
-													bind:value={prompt}
-													html={promptHtml}
 													id="chat-input"
 													onChange={(e) => {
 														prompt = e.md;
@@ -2138,8 +2155,8 @@ function closePreviewDialog() {
 												class="text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full px-3 py-1.5 mr-0.5 self-center text-sm font-thin"
 												type="button"
 												on:click={() => {
+													setText('');
 													prompt = '';
-													promptHtml = '';
 													files = [];
 													selectedToolIds = [];
 													selectedFilterIds = [];
