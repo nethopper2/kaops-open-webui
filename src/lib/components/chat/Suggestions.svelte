@@ -53,7 +53,7 @@
 			filteredPrompts = [];
 		} else {
 			const newFilteredPrompts =
-				inputValue.trim() && fuse
+				inputValue.trim?.() && fuse
 					? fuse.search(inputValue.trim()).map((result) => result.item)
 					: sortedPrompts;
 
