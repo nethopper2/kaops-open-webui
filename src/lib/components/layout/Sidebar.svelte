@@ -713,7 +713,14 @@
 
 				<a href="/" class="flex flex-1 px-1.5" on:click={newChatHandler}>
 					<div class=" self-center font-medium text-gray-850 dark:text-white font-primary">
-						{$WEBUI_NAME}
+						<!-- TODO: cleanup - OK to do this under lic? -->
+						{#if $config?.private_ai?.enable_upstream_ui}
+							{$WEBUI_NAME}
+						{:else}
+							{$WEBUI_NAME.replace('(Open WebUI)', '')}
+							<div class="text-[9px]">Open WebUI</div>
+						{/if}
+						<!--{$WEBUI_NAME}-->
 					</div>
 				</a>
 				<Tooltip
