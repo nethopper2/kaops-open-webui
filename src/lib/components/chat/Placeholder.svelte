@@ -18,9 +18,6 @@
 	} from '$lib/stores';
 	import { sanitizeResponseContent, extractCurlyBraceWords } from '$lib/utils';
 	import { WEBUI_BASE_URL } from '$lib/constants';
-
-  // NOTE: Keeping the original import for Suggestions.svelte for reference
-  //       May allow users to switch between the two components in the future
 	import Suggestions from './Suggestions.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
@@ -30,7 +27,6 @@
 	import { getChatList } from '$lib/apis/chats';
 	import { isPrivateAiModel } from '$lib/utils/privateAi';
 	import LockClosed from '$lib/components/icons/LockClosed.svelte';
-	import SuggestionButtons from './SuggestionButtons.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -71,18 +67,6 @@
 	}
 
 	$: models = selectedModels.map((id) => $_models.find((m) => m.id === id));
-
-  // Listen for input events from SuggestionButtons.svelte
-  // Can set it to any text, but initially only used when clearing the input field
-  async function setInputPrompt(event) {
-    prompt = event.detail.value;
-    const chatInputElement = document.getElementById('chat-input');
-		await tick();
-		if (chatInputElement) {
-			chatInputElement.focus();
-			chatInputElement.dispatchEvent(new Event('input'));
-		}
-  }
 
 	onMount(() => {});
 </script>
