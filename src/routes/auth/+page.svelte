@@ -139,6 +139,8 @@
     const isDarkMode = document.documentElement.classList.contains('dark');
     const webuiCustom = $config?.private_ai?.webui_custom ? JSON.parse($config?.private_ai?.webui_custom) : {};
 
+		console.log('@@ webuiCustom: ', webuiCustom);
+
     // Set background image based on theme
     if (isDarkMode) {
       console.log('Dark mode detected');
@@ -338,7 +340,7 @@
 													bind:value={email}
 													type="email"
 													id="email"
-													class="my-0.5 w-full text-sm outline-hidden bg-transparent placeholder:text-gray-300 dark:placeholder:text-gray-600"
+                        class="transition rounded-sm font-medium p-2 my-0.5 w-full text-sm text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white placeholder:text-gray-300 dark:placeholder:text-gray-600"
 													autocomplete="email"
 													name="email"
 													placeholder={$i18n.t('Enter Your Email')}
@@ -355,7 +357,7 @@
 												bind:value={password}
 												type="password"
 												id="password"
-												class="my-0.5 w-full text-sm outline-hidden bg-transparent placeholder:text-gray-300 dark:placeholder:text-gray-600"
+                      	inputClassName="transition rounded-sm font-medium p-2 my-0.5 w-full text-sm text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white placeholder:text-gray-300 dark:placeholder:text-gray-600"
 												placeholder={$i18n.t('Enter Your Password')}
 												autocomplete={mode === 'signup' ? 'new-password' : 'current-password'}
 												name="password"
@@ -374,7 +376,7 @@
 													bind:value={confirmPassword}
 													type="password"
 													id="confirm-password"
-													class="my-0.5 w-full text-sm outline-hidden bg-transparent"
+													inputClassName="transition rounded-sm font-medium p-2 my-0.5 w-full text-sm text-gray-600 bg-gray-600/5 hover:bg-gray-100/10 hover:text-white dark:text-gray-300 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:hover:text-white placeholder:text-gray-300 dark:placeholder:text-gray-600"
 													placeholder={$i18n.t('Confirm Your Password')}
 													autocomplete="new-password"
 													name="confirm-password"
