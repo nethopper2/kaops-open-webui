@@ -1,7 +1,7 @@
 <script lang="ts">
 	import DOMPurify from 'dompurify';
 
-	import { getVersionUpdates, getWebhookUrl, updateWebhookUrl } from '$lib/apis';
+	import { getBackendConfig, getVersionUpdates, getWebhookUrl, updateWebhookUrl } from '$lib/apis';
 	import {
 		getAdminConfig,
 		getLdapConfig,
