@@ -6,6 +6,14 @@
 
 	import { WEBUI_VERSION } from '$lib/constants';
 
+	/**
+	 * ===============================================================
+	 * ===============================================================
+	 * TODO: THIS COMPONENT MAY BE TRASH IF WE NO LONGER NEED IT
+	 * ===============================================================
+	 * ===============================================================
+	 */
+
 	const i18n = getContext('i18n');
 	const dispatch = createEventDispatcher();
 

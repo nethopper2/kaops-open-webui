@@ -14,8 +14,8 @@
 	import { page } from '$app/stores';
 	import { config } from '$lib/stores';
 	import { goto } from '$app/navigation';
-
-	import MenuLines from '$lib/components/icons/MenuLines.svelte';
+	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import Sidebar from '$lib/components/icons/Sidebar.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -62,22 +62,28 @@
 			? 'md:max-w-[calc(100%-260px)]'
 			: ''} max-w-full"
 	>
-		<nav class="   px-2.5 pt-1 backdrop-blur-xl drag-region">
+		<nav class="   px-2.5 pt-1.5 backdrop-blur-xl drag-region">
 			<div class=" flex items-center gap-1">
-				<div class="{$showSidebar ? 'md:hidden' : ''} self-center flex flex-none items-center">
-					<button
-						id="sidebar-toggle-button"
-						class="cursor-pointer p-1.5 flex rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition"
-						on:click={() => {
-							showSidebar.set(!$showSidebar);
-						}}
-						aria-label="Toggle Sidebar"
-					>
-						<div class=" m-auto self-center">
-							<MenuLines />
-						</div>
-					</button>
-				</div>
+				{#if $mobile}
+					<div class="{$showSidebar ? 'md:hidden' : ''} self-center flex flex-none items-center">
+						<Tooltip
+							content={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}
+							interactive={true}
+						>
+							<button
+								id="sidebar-toggle-button"
+								class=" cursor-pointer flex rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition cursor-"
+								on:click={() => {
+									showSidebar.set(!$showSidebar);
+								}}
+							>
+								<div class=" self-center p-1.5">
+									<Sidebar />
+								</div>
+							</button>
+						</Tooltip>
+					</div>
+				{/if}
 
 				<div class="">
 					<div
@@ -85,9 +91,7 @@
 					>
 						{#if $user?.role === 'admin' || $user?.permissions?.workspace?.models}
 							<a
-								class="min-w-fit rounded-full p-1.5 {$page.url.pathname.includes(
-									'/workspace/models'
-								)
+								class="min-w-fit p-1.5 {$page.url.pathname.includes('/workspace/models')
 									? ''
 									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
 								href="/workspace/models">{$i18n.t('Models')}</a
@@ -96,9 +100,7 @@
 
 						{#if $user?.role === 'admin' || $user?.permissions?.workspace?.knowledge}
 							<a
-								class="min-w-fit rounded-full p-1.5 {$page.url.pathname.includes(
-									'/workspace/knowledge'
-								)
+								class="min-w-fit p-1.5 {$page.url.pathname.includes('/workspace/knowledge')
 									? ''
 									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
 								href="/workspace/knowledge"
@@ -109,9 +111,7 @@
 
 						{#if $user?.role === 'admin' || $user?.permissions?.workspace?.prompts}
 							<a
-								class="min-w-fit rounded-full p-1.5 {$page.url.pathname.includes(
-									'/workspace/prompts'
-								)
+								class="min-w-fit p-1.5 {$page.url.pathname.includes('/workspace/prompts')
 									? ''
 									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
 								href="/workspace/prompts">{$i18n.t('Prompts')}</a
@@ -120,7 +120,7 @@
 
 						{#if $user?.role === 'admin' || $user?.permissions?.workspace?.tools}
 							<a
-								class="min-w-fit rounded-full p-1.5 {$page.url.pathname.includes('/workspace/tools')
+								class="min-w-fit p-1.5 {$page.url.pathname.includes('/workspace/tools')
 									? ''
 									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
 								href="/workspace/tools"

@@ -56,6 +56,8 @@ def downgrade():
             existing_type=sa.BigInteger(),
             existing_nullable=False,
             server_default=sa.func.now(),  # Restoring server default on downgrade
+            # REMINDER: postgresql_using was added when downgrade failed locally. (shawn)
+            postgresql_using="to_timestamp(created_at)::timestamp without time zone",  # Conversion for PostgreSQL
         )
         batch_op.alter_column(
             "updated_at",
@@ -64,4 +66,6 @@ def downgrade():
             existing_nullable=False,
             server_default=sa.func.now(),  # Restoring server default on downgrade
             onupdate=sa.func.now(),  # Restoring onupdate behavior if it was there
+            # REMINDER: postgresql_using was added when downgrade failed locally. (shawn)
+            postgresql_using="to_timestamp(updated_at)::timestamp without time zone",  # Conversion for PostgreSQL
         )

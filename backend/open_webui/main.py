@@ -36,7 +36,6 @@ from fastapi import (
     applications,
     BackgroundTasks,
 )
-
 from fastapi.openapi.docs import get_swagger_ui_html
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +48,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response, StreamingResponse
+from starlette.datastructures import Headers
 
 
 from open_webui.utils import logger
@@ -85,11 +85,13 @@ from open_webui.routers import (
     tools,
     users,
     utils,
+    scim,
     data
 )
 
 from open_webui.routers.retrieval import (
     get_embedding_function,
+    get_reranking_function,
     get_ef,
     get_rf,
 )
@@ -102,7 +104,6 @@ from open_webui.models.users import UserModel, Users
 from open_webui.models.chats import Chats
 
 from open_webui.config import (
-    LICENSE_KEY,
     # Ollama
     ENABLE_OLLAMA_API,
     OLLAMA_BASE_URLS,
@@ -117,6 +118,8 @@ from open_webui.config import (
     OPENAI_API_CONFIGS,
     # Direct Connections
     ENABLE_DIRECT_CONNECTIONS,
+    # Model list
+    ENABLE_BASE_MODELS_CACHE,
     # Thread pool size for FastAPI/AnyIO
     THREAD_POOL_SIZE,
     # Tool Server Configs
@@ -225,12 +228,14 @@ from open_webui.config import (
     CHUNK_SIZE,
     CONTENT_EXTRACTION_ENGINE,
     DATALAB_MARKER_API_KEY,
-    DATALAB_MARKER_LANGS,
+    DATALAB_MARKER_API_BASE_URL,
+    DATALAB_MARKER_ADDITIONAL_CONFIG,
     DATALAB_MARKER_SKIP_CACHE,
     DATALAB_MARKER_FORCE_OCR,
     DATALAB_MARKER_PAGINATE,
     DATALAB_MARKER_STRIP_EXISTING_OCR,
     DATALAB_MARKER_DISABLE_IMAGE_EXTRACTION,
+    DATALAB_MARKER_FORMAT_LINES,
     DATALAB_MARKER_OUTPUT_FORMAT,
     DATALAB_MARKER_USE_LLM,
     EXTERNAL_DOCUMENT_LOADER_URL,
@@ -399,10 +404,13 @@ from open_webui.config import (
     NH_DOCKER_IMAGE,
 )
 from open_webui.env import (
+    LICENSE_KEY,
     AUDIT_EXCLUDED_PATHS,
     AUDIT_LOG_LEVEL,
     CHANGELOG,
     REDIS_URL,
+    REDIS_CLUSTER,
+    REDIS_KEY_PREFIX,
     REDIS_SENTINEL_HOSTS,
     REDIS_SENTINEL_PORT,
     GLOBAL_LOG_LEVEL,
@@ -415,13 +423,18 @@ from open_webui.env import (
     WEBUI_SECRET_KEY,
     WEBUI_SESSION_COOKIE_SAME_SITE,
     WEBUI_SESSION_COOKIE_SECURE,
+    ENABLE_SIGNUP_PASSWORD_CONFIRMATION,
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
     WEBUI_AUTH_TRUSTED_NAME_HEADER,
     WEBUI_AUTH_SIGNOUT_REDIRECT_URL,
+    # SCIM
+    SCIM_ENABLED,
+    SCIM_TOKEN,
+    ENABLE_COMPRESSION_MIDDLEWARE,
     ENABLE_WEBSOCKET_SUPPORT,
     BYPASS_MODEL_ACCESS_CONTROL,
     RESET_CONFIG_ON_START,
-    OFFLINE_MODE,
+    ENABLE_VERSION_UPDATE_CHECK,
     ENABLE_OTEL,
     EXTERNAL_PWA_MANIFEST_URL,
     AIOHTTP_CLIENT_SESSION_SSL,
@@ -459,12 +472,15 @@ from open_webui.utils.redis import get_redis_connection
 
 from open_webui.tasks import (
     redis_task_command_listener,
-    list_task_ids_by_chat_id,
+    list_task_ids_by_item_id,
     stop_task,
     list_tasks,
 )  # Import from tasks.py
 
 from open_webui.utils.redis import get_sentinels_from_env
+
+
+from open_webui.constants import ERROR_MESSAGES
 
 
 if SAFE_MODE:
@@ -529,6 +545,7 @@ async def lifespan(app: FastAPI):
         redis_sentinels=get_sentinels_from_env(
             REDIS_SENTINEL_HOSTS, REDIS_SENTINEL_PORT
         ),
+        redis_cluster=REDIS_CLUSTER,
         async_mode=True,
     )
 
@@ -542,6 +559,27 @@ async def lifespan(app: FastAPI):
         limiter.total_tokens = THREAD_POOL_SIZE
 
     asyncio.create_task(periodic_usage_pool_cleanup())
+
+    if app.state.config.ENABLE_BASE_MODELS_CACHE:
+        await get_all_models(
+            Request(
+                # Creating a mock request object to pass to get_all_models
+                {
+                    "type": "http",
+                    "asgi.version": "3.0",
+                    "asgi.spec_version": "2.0",
+                    "method": "GET",
+                    "path": "/internal",
+                    "query_string": b"",
+                    "headers": Headers({}).raw,
+                    "client": ("127.0.0.1", 12345),
+                    "server": ("127.0.0.1", 80),
+                    "scheme": "http",
+                    "app": app,
+                }
+            ),
+            None,
+        )
 
     yield
 
@@ -563,6 +601,8 @@ app.state.instance_id = None
 app.state.config = AppConfig(
     redis_url=REDIS_URL,
     redis_sentinels=get_sentinels_from_env(REDIS_SENTINEL_HOSTS, REDIS_SENTINEL_PORT),
+    redis_cluster=REDIS_CLUSTER,
+    redis_key_prefix=REDIS_KEY_PREFIX,
 )
 app.state.redis = None
 
@@ -624,6 +664,24 @@ app.state.TOOL_SERVERS = []
 ########################################
 
 app.state.config.ENABLE_DIRECT_CONNECTIONS = ENABLE_DIRECT_CONNECTIONS
+
+########################################
+#
+# SCIM
+#
+########################################
+
+app.state.SCIM_ENABLED = SCIM_ENABLED
+app.state.SCIM_TOKEN = SCIM_TOKEN
+
+########################################
+#
+# MODELS
+#
+########################################
+
+app.state.config.ENABLE_BASE_MODELS_CACHE = ENABLE_BASE_MODELS_CACHE
+app.state.BASE_MODELS = []
 
 ########################################
 #
@@ -741,7 +799,8 @@ app.state.config.ENABLE_WEB_LOADER_SSL_VERIFICATION = ENABLE_WEB_LOADER_SSL_VERI
 
 app.state.config.CONTENT_EXTRACTION_ENGINE = CONTENT_EXTRACTION_ENGINE
 app.state.config.DATALAB_MARKER_API_KEY = DATALAB_MARKER_API_KEY
-app.state.config.DATALAB_MARKER_LANGS = DATALAB_MARKER_LANGS
+app.state.config.DATALAB_MARKER_API_BASE_URL = DATALAB_MARKER_API_BASE_URL
+app.state.config.DATALAB_MARKER_ADDITIONAL_CONFIG = DATALAB_MARKER_ADDITIONAL_CONFIG
 app.state.config.DATALAB_MARKER_SKIP_CACHE = DATALAB_MARKER_SKIP_CACHE
 app.state.config.DATALAB_MARKER_FORCE_OCR = DATALAB_MARKER_FORCE_OCR
 app.state.config.DATALAB_MARKER_PAGINATE = DATALAB_MARKER_PAGINATE
@@ -749,6 +808,7 @@ app.state.config.DATALAB_MARKER_STRIP_EXISTING_OCR = DATALAB_MARKER_STRIP_EXISTI
 app.state.config.DATALAB_MARKER_DISABLE_IMAGE_EXTRACTION = (
     DATALAB_MARKER_DISABLE_IMAGE_EXTRACTION
 )
+app.state.config.DATALAB_MARKER_FORMAT_LINES = DATALAB_MARKER_FORMAT_LINES
 app.state.config.DATALAB_MARKER_USE_LLM = DATALAB_MARKER_USE_LLM
 app.state.config.DATALAB_MARKER_OUTPUT_FORMAT = DATALAB_MARKER_OUTPUT_FORMAT
 app.state.config.EXTERNAL_DOCUMENT_LOADER_URL = EXTERNAL_DOCUMENT_LOADER_URL
@@ -853,6 +913,7 @@ app.state.config.FIRECRAWL_API_KEY = FIRECRAWL_API_KEY
 app.state.config.TAVILY_EXTRACT_DEPTH = TAVILY_EXTRACT_DEPTH
 
 app.state.EMBEDDING_FUNCTION = None
+app.state.RERANKING_FUNCTION = None
 app.state.ef = None
 app.state.rf = None
 
@@ -881,8 +942,8 @@ except Exception as e:
 app.state.EMBEDDING_FUNCTION = get_embedding_function(
     app.state.config.RAG_EMBEDDING_ENGINE,
     app.state.config.RAG_EMBEDDING_MODEL,
-    app.state.ef,
-    (
+    embedding_function=app.state.ef,
+    url=(
         app.state.config.RAG_OPENAI_API_BASE_URL
         if app.state.config.RAG_EMBEDDING_ENGINE == "openai"
         else (
@@ -891,7 +952,7 @@ app.state.EMBEDDING_FUNCTION = get_embedding_function(
             else app.state.config.RAG_AZURE_OPENAI_BASE_URL
         )
     ),
-    (
+    key=(
         app.state.config.RAG_OPENAI_API_KEY
         if app.state.config.RAG_EMBEDDING_ENGINE == "openai"
         else (
@@ -900,12 +961,18 @@ app.state.EMBEDDING_FUNCTION = get_embedding_function(
             else app.state.config.RAG_AZURE_OPENAI_API_KEY
         )
     ),
-    app.state.config.RAG_EMBEDDING_BATCH_SIZE,
+    embedding_batch_size=app.state.config.RAG_EMBEDDING_BATCH_SIZE,
     azure_api_version=(
         app.state.config.RAG_AZURE_OPENAI_API_VERSION
         if app.state.config.RAG_EMBEDDING_ENGINE == "azure_openai"
         else None
     ),
+)
+
+app.state.RERANKING_FUNCTION = get_reranking_function(
+    app.state.config.RAG_RERANKING_ENGINE,
+    app.state.config.RAG_RERANKING_MODEL,
+    reranking_function=app.state.rf,
 )
 
 ########################################
@@ -1093,7 +1160,9 @@ class RedirectMiddleware(BaseHTTPMiddleware):
 
 
 # Add the middleware to the app
-app.add_middleware(CompressMiddleware)
+if ENABLE_COMPRESSION_MIDDLEWARE:
+    app.add_middleware(CompressMiddleware)
+
 app.add_middleware(RedirectMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
@@ -1188,6 +1257,10 @@ app.include_router(
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
 app.include_router(data.router, prefix="/api/v1/data", tags=["data"])
 
+# SCIM 2.0 API for identity management
+if SCIM_ENABLED:
+    app.include_router(scim.router, prefix="/api/v1/scim/v2", tags=["scim"])
+
 
 try:
     audit_level = AuditLevel(AUDIT_LOG_LEVEL)
@@ -1210,7 +1283,10 @@ if audit_level != AuditLevel.NONE:
 
 
 @app.get("/api/models")
-async def get_models(request: Request, user=Depends(get_verified_user)):
+@app.get("/api/v1/models")  # Experimental: Compatibility with OpenAI API
+async def get_models(
+    request: Request, refresh: bool = False, user=Depends(get_verified_user)
+):
     def get_filtered_models(models, user):
         filtered_models = []
         for model in models:
@@ -1234,7 +1310,7 @@ async def get_models(request: Request, user=Depends(get_verified_user)):
 
         return filtered_models
 
-    all_models = await get_all_models(request, user=user)
+    all_models = await get_all_models(request, refresh=refresh, user=user)
 
     models = []
     for model in all_models:
@@ -1271,7 +1347,7 @@ async def get_models(request: Request, user=Depends(get_verified_user)):
         models = get_filtered_models(models, user)
 
     log.debug(
-        f"/api/models returned filtered models accessible to the user: {json.dumps([model['id'] for model in models])}"
+        f"/api/models returned filtered models accessible to the user: {json.dumps([model.get('id') for model in models])}"
     )
     return {"data": models}
 
@@ -1288,6 +1364,7 @@ async def get_base_models(request: Request, user=Depends(get_admin_user)):
 
 
 @app.post("/api/embeddings")
+@app.post("/api/v1/embeddings")  # Experimental: Compatibility with OpenAI API
 async def embeddings(
     request: Request, form_data: dict, user=Depends(get_verified_user)
 ):
@@ -1314,6 +1391,7 @@ async def embeddings(
 
 
 @app.post("/api/chat/completions")
+@app.post("/api/v1/chat/completions")  # Experimental: Compatibility with OpenAI API
 async def chat_completion(
     request: Request,
     form_data: dict,
@@ -1322,13 +1400,13 @@ async def chat_completion(
     if not request.app.state.MODELS:
         await get_all_models(request, user=user)
 
+    model_id = form_data.get("model", None)
     model_item = form_data.pop("model_item", {})
     tasks = form_data.pop("background_tasks", None)
 
     metadata = {}
     try:
         if not model_item.get("direct", False):
-            model_id = form_data.get("model", None)
             if model_id not in request.app.state.MODELS:
                 raise Exception("Model not found")
 
@@ -1348,6 +1426,19 @@ async def chat_completion(
             request.state.direct = True
             request.state.model = model
 
+        model_info_params = (
+            model_info.params.model_dump() if model_info and model_info.params else {}
+        )
+
+        # Chat Params
+        stream_delta_chunk_size = form_data.get("params", {}).get(
+            "stream_delta_chunk_size"
+        )
+
+        # Model Params
+        if model_info_params.get("stream_delta_chunk_size"):
+            stream_delta_chunk_size = model_info_params.get("stream_delta_chunk_size")
+
         metadata = {
             "user_id": user.id,
             "chat_id": form_data.pop("chat_id", None),
@@ -1361,17 +1452,26 @@ async def chat_completion(
             "variables": form_data.get("variables", {}),
             "model": model,
             "direct": model_item.get("direct", False),
-            **(
-                {"function_calling": "native"}
-                if form_data.get("params", {}).get("function_calling") == "native"
-                or (
-                    model_info
-                    and model_info.params.model_dump().get("function_calling")
-                    == "native"
-                )
-                else {}
-            ),
+            "params": {
+                "stream_delta_chunk_size": stream_delta_chunk_size,
+                "function_calling": (
+                    "native"
+                    if (
+                        form_data.get("params", {}).get("function_calling") == "native"
+                        or model_info_params.get("function_calling") == "native"
+                    )
+                    else "default"
+                ),
+            },
         }
+
+        if metadata.get("chat_id") and (user and user.role != "admin"):
+            chat = Chats.get_chat_by_id_and_user_id(metadata["chat_id"], user.id)
+            if chat is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=ERROR_MESSAGES.DEFAULT(),
+                )
 
         request.state.metadata = metadata
         form_data["metadata"] = metadata
@@ -1379,7 +1479,6 @@ async def chat_completion(
         form_data, metadata, events = await process_chat_payload(
             request, form_data, user, metadata, model
         )
-
     except Exception as e:
         log.debug(f"Error processing chat payload: {e}")
         if metadata.get("chat_id") and metadata.get("message_id"):
@@ -1399,6 +1498,14 @@ async def chat_completion(
 
     try:
         response = await chat_completion_handler(request, form_data, user)
+        if metadata.get("chat_id") and metadata.get("message_id"):
+            Chats.upsert_message_to_chat_by_id_and_message_id(
+                metadata["chat_id"],
+                metadata["message_id"],
+                {
+                    "model": model_id,
+                },
+            )
 
         return await process_chat_response(
             request, response, form_data, user, metadata, model, events, tasks
@@ -1469,7 +1576,7 @@ async def stop_task_endpoint(
     request: Request, task_id: str, user=Depends(get_verified_user)
 ):
     try:
-        result = await stop_task(request, task_id)
+        result = await stop_task(request.app.state.redis, task_id)
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -1477,7 +1584,7 @@ async def stop_task_endpoint(
 
 @app.get("/api/tasks")
 async def list_tasks_endpoint(request: Request, user=Depends(get_verified_user)):
-    return {"tasks": await list_tasks(request)}
+    return {"tasks": await list_tasks(request.app.state.redis)}
 
 
 @app.get("/api/tasks/chat/{chat_id}")
@@ -1488,9 +1595,9 @@ async def list_tasks_by_chat_id_endpoint(
     if chat is None or chat.user_id != user.id:
         return {"task_ids": []}
 
-    task_ids = await list_task_ids_by_chat_id(request, chat_id)
+    task_ids = await list_task_ids_by_item_id(request.app.state.redis, chat_id)
 
-    print(f"Task IDs for chat {chat_id}: {task_ids}")
+    log.debug(f"Task IDs for chat {chat_id}: {task_ids}")
     return {"task_ids": task_ids}
 
 
@@ -1538,11 +1645,13 @@ async def get_app_config(request: Request):
         "features": {
             "auth": WEBUI_AUTH,
             "auth_trusted_header": bool(app.state.AUTH_TRUSTED_EMAIL_HEADER),
+            "enable_signup_password_confirmation": ENABLE_SIGNUP_PASSWORD_CONFIRMATION,
             "enable_ldap": app.state.config.ENABLE_LDAP,
             "enable_api_key": app.state.config.ENABLE_API_KEY,
             "enable_signup": app.state.config.ENABLE_SIGNUP,
             "enable_login_form": app.state.config.ENABLE_LOGIN_FORM,
             "enable_websocket": ENABLE_WEBSOCKET_SUPPORT,
+            "enable_version_update_check": ENABLE_VERSION_UPDATE_CHECK,
             "enable_file_ingestion": ENABLE_SSO_DATA_SYNC if isinstance(ENABLE_SSO_DATA_SYNC, bool) else (ENABLE_SSO_DATA_SYNC.lower() == 'true' if isinstance(ENABLE_SSO_DATA_SYNC, str) else False),
             "overide_socket_url": OVERIDE_WEB_SOCKET_URL,
             **(
@@ -1624,8 +1733,23 @@ async def get_app_config(request: Request):
                     else {}
                 ),
             }
-            if user is not None
-            else {}
+            if user is not None and (user.role in ["admin", "user"])
+            else {
+                **(
+                    {
+                        "metadata": {
+                            "login_footer": app.state.LICENSE_METADATA.get(
+                                "login_footer", ""
+                            ),
+                            "auth_logo_position": app.state.LICENSE_METADATA.get(
+                                "auth_logo_position", ""
+                            ),
+                        }
+                    }
+                    if app.state.LICENSE_METADATA
+                    else {}
+                )
+            }
         ),
     }
 
@@ -1657,9 +1781,9 @@ async def get_app_version():
 
 @app.get("/api/version/updates")
 async def get_app_latest_release_version(user=Depends(get_verified_user)):
-    if OFFLINE_MODE:
+    if not ENABLE_VERSION_UPDATE_CHECK:
         log.debug(
-            f"Offline mode is enabled, returning current version as latest version"
+            f"Version update check is disabled, returning current version as latest version"
         )
         return {"current": VERSION, "latest": VERSION}
     try:
@@ -1736,11 +1860,10 @@ async def get_manifest_json():
         return {
             "name": app.state.WEBUI_NAME,
             "short_name": app.state.WEBUI_NAME,
-            "description": "Open WebUI is an open, extensible, user-friendly interface for AI that adapts to your workflow.",
+            "description": f"{app.state.WEBUI_NAME} is an open, extensible, user-friendly interface for AI that adapts to your workflow.",
             "start_url": "/",
             "display": "standalone",
             "background_color": "#343541",
-            "orientation": "any",
             "icons": [
                 {
                     "src": "/static/logo.png",

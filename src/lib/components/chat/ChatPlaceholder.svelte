@@ -3,17 +3,14 @@
 	import { marked } from 'marked';
 
 	import { config, user, models as _models, temporaryChatEnabled } from '$lib/stores';
-	import { onMount, getContext, tick } from 'svelte';
+	import { onMount, getContext } from 'svelte';
 
 	import { blur, fade } from 'svelte/transition';
 
-  // NOTE: Keeping the original import for Suggestions.svelte for reference
-  //       May allow users to switch between the two components in the future
 	import Suggestions from './Suggestions.svelte';
 	import { sanitizeResponseContent } from '$lib/utils';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
-	import SuggestionButtons from './SuggestionButtons.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -21,7 +18,7 @@
 	export let models = [];
 	export let atSelectedModel;
 
-	export let submitPrompt;
+	export let onSelect = (e) => {};
 
 	let mounted = false;
 	let selectedModelIdx = 0;
@@ -31,18 +28,6 @@
 	}
 
 	$: models = modelIds.map((id) => $_models.find((m) => m.id === id));
-
-  // Listen for input events from SuggestionButtons.svelte
-  // Can set it to any text, but initially only used when clearing the input field
-  async function setInputPrompt(event) {
-    submitPrompt = event.detail.value;
-    const chatInputElement = document.getElementById('chat-input');
-		await tick();
-		if (chatInputElement) {
-			chatInputElement.focus();
-			chatInputElement.dispatchEvent(new Event('input'));
-		}
-  }
 
 	onMount(() => {
 		mounted = true;
@@ -61,7 +46,9 @@
 					>
 						<Tooltip
 							content={marked.parse(
-								sanitizeResponseContent(models[selectedModelIdx]?.info?.meta?.description ?? '')
+								sanitizeResponseContent(
+									models[selectedModelIdx]?.info?.meta?.description ?? ''
+								).replaceAll('\n', '<br>')
 							)}
 							placement="right"
 						>
@@ -69,7 +56,7 @@
 								crossorigin="anonymous"
 								src={model?.info?.meta?.profile_image_url ??
 									($i18n.language === 'dg-DG'
-										? `/doge.png`
+										? `${WEBUI_BASE_URL}/doge.png`
 										: `${WEBUI_BASE_URL}/static/favicon.png`)}
 								class=" size-[2.7rem] rounded-full border-[1px] border-gray-100 dark:border-none"
 								alt="logo"
@@ -83,7 +70,7 @@
 
 		{#if $temporaryChatEnabled}
 			<Tooltip
-				content={$i18n.t('This chat won’t appear in history and your messages will not be saved.')}
+				content={$i18n.t("This chat won't appear in history and your messages will not be saved.")}
 				className="w-full flex justify-start mb-0.5"
 				placement="top"
 			>
@@ -115,7 +102,9 @@
 							class="mt-0.5 text-base font-normal text-gray-500 dark:text-gray-400 line-clamp-3 markdown"
 						>
 							{@html marked.parse(
-								sanitizeResponseContent(models[selectedModelIdx]?.info?.meta?.description)
+								sanitizeResponseContent(
+									models[selectedModelIdx]?.info?.meta?.description
+								).replaceAll('\n', '<br>')
 							)}
 						</div>
 						{#if models[selectedModelIdx]?.info?.meta?.user}
@@ -144,31 +133,14 @@
 		</div>
 
 		<div class=" w-full font-primary" in:fade={{ duration: 200, delay: 300 }}>
-      {#if $config?.private_ai?.enable_upstream_ui}
 			<Suggestions
 				className="grid grid-cols-2"
 				suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
 					models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
 					$config?.default_prompt_suggestions ??
 					[]}
-				on:select={(e) => {
-					submitPrompt(e.detail);
-				}}
-				on:setInput={setInputPrompt}
+				{onSelect}
 			/>
-      {:else}        
-      <SuggestionButtons
-        className="grid grid-cols-2"
-        suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
-          models[selectedModelIdx]?.info?.meta?.suggestion_prompts ??
-          $config?.default_prompt_suggestions ??
-          []}
-        on:select={(e) => {
-          submitPrompt(e.detail);
-        }}
-        on:setInput={setInputPrompt}
-      />
-      {/if}
 		</div>
 	</div>
 {/key}
