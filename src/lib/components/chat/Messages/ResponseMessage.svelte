@@ -52,7 +52,6 @@
 	import { fade } from 'svelte/transition';
 	import { flyAndScale } from '$lib/utils/transitions';
 	import RegenerateMenu from './ResponseMessage/RegenerateMenu.svelte';
-	import SkeletonRag from './SkeletonRag.svelte';
 	import ToolsUsed from '$lib/components/chat/Messages/ToolsUsed.svelte';
 
 	interface MessageType {
@@ -796,11 +795,7 @@
 						{:else}
 							<div class="w-full flex flex-col relative" id="response-content-container">
 								{#if message.content === '' && !message.error && (message?.statusHistory ?? [...(message?.status ? [message?.status] : [])]).length === 0}
-									{#if $config?.private_ai?.enable_upstream_ui}
 									<Skeleton />
-                  {:else}
-                  <SkeletonRag />
-                  {/if}
 								{:else if message.content && message.error !== true}
 									<!-- always show message contents even if there's an error -->
 									<!-- unless message.error === true which is legacy error handling, where the error message is stored in message.content -->
