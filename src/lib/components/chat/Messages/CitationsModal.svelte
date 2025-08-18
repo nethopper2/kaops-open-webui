@@ -5,6 +5,9 @@ import Tooltip from '$lib/components/common/Tooltip.svelte';
 import { config } from '$lib/stores';
 import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue';
 
+	import XMark from '$lib/components/icons/XMark.svelte';
+	import Textarea from '$lib/components/common/Textarea.svelte';
+
  let TModalRef: Modal
 
 // The PopupMetadataEdit component instance.
@@ -72,16 +75,7 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 					show = false;
 				}}
 			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 20 20"
-					fill="currentColor"
-					class="w-5 h-5"
-				>
-					<path
-						d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
-					/>
-				</svg>
+				<XMark className={'size-5'} />
 			</button>
 		</div>
 
@@ -151,15 +145,12 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 								</div>
 							</Tooltip>
 							{#if document.metadata?.parameters}
-								<div class="text-sm font-medium dark:text-gray-300 mt-2">
+								<div class="text-sm font-medium dark:text-gray-300 mt-2 mb-0.5">
 									{$i18n.t('Parameters')}
 								</div>
-								<pre
-									class="text-sm dark:text-gray-400 bg-gray-50 dark:bg-gray-800 p-2 rounded-md overflow-auto max-h-40">{JSON.stringify(
-										document.metadata.parameters,
-										null,
-										2
-									)}</pre>
+
+								<Textarea readonly value={JSON.stringify(document.metadata.parameters, null, 2)}
+								></Textarea>
 							{/if}
 							{#if showRelevance}
 								<div class="text-sm font-medium dark:text-gray-300 mt-2">
