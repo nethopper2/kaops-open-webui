@@ -18,6 +18,8 @@
 	let show = false;
 	let inputElement: HTMLInputElement;
 	let dropdownElement: HTMLDivElement;
+	let listElement: HTMLDivElement;
+	let openUp = false;
 	let focusedIndex = -1;
 	let displayValue = ''; // Separate value for display
 
@@ -90,12 +92,38 @@
 		}
 	}
 
+	function updatePlacement() {
+		if (!dropdownElement) return;
+		const rect = dropdownElement.getBoundingClientRect();
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const spaceAbove = rect.top;
+		const margin = 8;
+		const desired = 320; // 20rem
+		const preferUp = spaceBelow < desired && spaceAbove > spaceBelow;
+		openUp = preferUp;
+		if (listElement) {
+			const avail = preferUp ? (spaceAbove - margin) : (spaceBelow - margin);
+			const max = Math.max(120, Math.min(desired, avail));
+			if (isFinite(max)) {
+				listElement.style.maxHeight = `${max}px`;
+			}
+		}
+	}
+
 	onMount(() => {
 		const handler = () => {
 			recalcOverflows();
+			if (show) updatePlacement();
+		};
+		const scrollHandler = () => {
+			if (show) updatePlacement();
 		};
 		window.addEventListener('resize', handler);
-		return () => window.removeEventListener('resize', handler);
+		window.addEventListener('scroll', scrollHandler, true);
+		return () => {
+			window.removeEventListener('resize', handler);
+			window.removeEventListener('scroll', scrollHandler, true);
+		};
 	});
 
 	// Reactive checks
@@ -104,6 +132,7 @@
 	}
 	$: if (show) {
 		recalcItemOverflows();
+		updatePlacement();
 	}
 
 	$: filteredItems = (searchValue
@@ -125,7 +154,7 @@
 	}
 
 	// Handle option selection
-	function handleSelect(item: any) {
+	function handleSelect(item: { idx: string; name: string; url?: string }) {
 		value = item.idx;
 		onSelect(item.idx);
 		show = false;
@@ -195,6 +224,7 @@
 			const selectedIdx = filteredItems.findIndex((it) => String(it.idx) === String(value));
 			focusedIndex = selectedIdx;
 			tick().then(() => {
+				updatePlacement();
 				scrollToIndex(selectedIdx);
 			});
 		} else {
@@ -290,9 +320,10 @@
 		<div 
 			id="filter-select-list"
 			role="listbox"
-			class="absolute top-full left-0 rounded-lg bg-white dark:bg-gray-900 dark:text-white shadow-lg border border-gray-300/30 dark:border-gray-700/40 z-50 max-h-80 overflow-y-auto"
+			bind:this={listElement}
+			class="absolute left-0 rounded-lg bg-white dark:bg-gray-900 dark:text-white shadow-lg border border-gray-300/30 dark:border-gray-700/40 z-50 max-h-80 overflow-y-auto {openUp ? 'bottom-full mb-1' : 'top-full mt-1'}"
 			style="min-width: 100%; width: max-content; max-width: min(90vw, 40rem);"
-			transition:fly={{ y: -10, duration: 200 }}
+			transition:fly={{ y: openUp ? 10 : -10, duration: 200 }}
 		>
 			{#each filteredItems as item, index}
 				<button
