@@ -70,11 +70,31 @@ function formatDate(dateStr: string) {
 $: if (show && file) {
 	(async () => { await fetchPreviewHtml(); })();
 }
+function portal(node: HTMLElement, target: HTMLElement | null = null) {
+  if (typeof document === 'undefined') return {} as any;
+  const t = target ?? document.body;
+  if (!t) return {} as any;
+  t.appendChild(node);
+  return {
+    destroy() {
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+    }
+  };
+}
 </script>
 
+<svelte:window on:keydown={(e) => { if (show && (e.key === 'Escape' || e.key === 'Esc')) closeDialog(); }} />
+
 {#if show}
+  <div use:portal>
+   <!-- Backdrop -->
+   <div class="fixed inset-0 bg-black/30 z-[1000]" on:click={closeDialog} aria-hidden="true"></div>
    <!-- Right-anchored dialog -->
-	<div class="fixed right-0 w-full max-w-md z-50 flex flex-col bg-white dark:bg-gray-850 shadow-lg rounded-l-xl transition-transform duration-200" style="top:0; bottom:0; margin-top:8px; margin-bottom:8px; height:auto; max-height:calc(100vh - 16px); transform: translateX(0);">
+	<div class="fixed right-0 w-full max-w-md z-[1001] flex flex-col bg-white dark:bg-gray-850 shadow-lg rounded-l-xl transition-transform duration-200" style="top:0; bottom:0; margin-top:8px; margin-bottom:8px; height:auto; max-height:calc(100vh - 16px); transform: translateX(0);">
+		<!-- Prominent top-right close button -->
+		<button class="absolute top-2 right-2 p-2  rounded-full bg-white text-gray-700 shadow border border-gray-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700" on:click={closeDialog} aria-label="Close" title="Close">
+			<XMark className="w-5 h-5" />
+		</button>
 		<div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
 			<div class="text-base truncate">
 				{#if previewType === 'csv'}
@@ -92,7 +112,7 @@ $: if (show && file) {
 			</button>
 		</div>
 		<!-- Preview HTML section -->
-		<div class="overflow-auto max-h-60 min-h-[120px] border-b border-gray-100 dark:border-gray-800 px-4 py-3">
+		<div class="overflow-auto max-h-[65vh] min-h-[120px] border-b border-gray-100 dark:border-gray-800 px-4 py-3">
 			{#if previewLoading}
 				<div class="flex items-center justify-center text-gray-400">Loading preview...</div>
 			{:else if previewError}
@@ -212,6 +232,7 @@ $: if (show && file) {
 			{/if}
 		</div>
 	</div>
+  </div>
 {/if} 
 
 <style>
