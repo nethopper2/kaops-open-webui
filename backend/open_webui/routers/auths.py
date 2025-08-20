@@ -553,8 +553,10 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                         ))
                     )
 
-                await create_task(request, get_user_file_data(), id=f"get_user_file_data_{user_id}")
+                # Extract Redis connection from request
+                redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
 
+                await create_task(redis_connection, get_user_file_data(), id=f"get_user_file_data_{user_id}")
         # Authenticate the user using the trusted email
         user = Auths.authenticate_user_by_email(trusted_email)
 
