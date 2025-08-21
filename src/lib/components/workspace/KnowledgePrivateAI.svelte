@@ -17,6 +17,13 @@ const i18n = getContext('i18n');
 let loaded = false;
 let showInfo = false;
 
+// Ensure the custom element receives i18n as a DOM property (not an attribute)
+$: {
+  if (TRefFileMgr && i18n) {
+    TRefFileMgr.i18n = i18n;
+  }
+}
+
 onMount(async () => {
 	// knowledgeBases = await getKnowledgeBaseList(localStorage.token);
 	// TODO: Possibly load data here?
@@ -68,7 +75,7 @@ onMount(async () => {
 
 
 		<div class="relative grow flex flex-col">
-			<file-manager class="absolute inset-0" i18n={$i18n} bind:this={TRefFileMgr} />
+			<file-manager class="absolute inset-0" bind:this={TRefFileMgr} />
 		</div>
 	</div>
 {:else}
