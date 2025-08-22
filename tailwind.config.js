@@ -2,16 +2,9 @@ import typography from '@tailwindcss/typography';
 import containerQuries from '@tailwindcss/container-queries';
 
 /** @type {import('tailwindcss').Config} */
-export default {
+	export default {
 	darkMode: 'class',
-	content: ['./src/**/*.{html,js,svelte,ts}'],
-	safelist: [
-		'input-prose',
-		'input-prose-sm',
-		'markdown-prose',
-		'markdown-prose-sm',
-		'markdown-prose-xs'
-	],
+	content: ['./src/**/*.{html,js,svelte,ts,vue}'],
 	theme: {
 		extend: {
 			colors: {
