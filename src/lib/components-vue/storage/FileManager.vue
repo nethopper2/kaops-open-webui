@@ -14,7 +14,7 @@ import type {
 	ContextMenuItemClickEvent,
 	ContextMenuShowingEvent
 } from 'devextreme/ui/file_manager';
-import { onBeforeMount, onMounted, ref, useHost } from 'vue';
+import { computed, onBeforeMount, onMounted, ref, useHost, watch } from 'vue';
 import { getBackendConfig } from '$lib/apis';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
 import PopupMetadataEdit from './PopupMetadataEdit.vue';
@@ -22,6 +22,39 @@ import { useTheme } from '../composables/useTheme';
 
 const props = defineProps(['i18n']);
 const svelteHost = useHost();
+
+const i18nRef = ref<any>(null);
+const i18nReady = computed(() => !!(i18nRef.value && typeof i18nRef.value.t === 'function'));
+
+// Sync when prop arrives (if the CE prop bridge ever sets it)
+watch(
+	() => props.i18n,
+	(val) => {
+		if (val && typeof (val as any).t === 'function') {
+			i18nRef.value = val;
+		}
+	},
+	{ immediate: true }
+);
+
+// Also read from the host DOM property until it’s usable
+onMounted(() => {
+	// Try immediate pick up
+	const initial = (svelteHost as any)?.i18n;
+	if (initial) i18nRef.value = initial;
+
+	if (!i18nReady.value) {
+		const interval = setInterval(() => {
+			const candidate = (svelteHost as any)?.i18n;
+			if (candidate && typeof candidate.t === 'function') {
+				i18nRef.value = candidate;
+				clearInterval(interval);
+			}
+		}, 50);
+		// Optional: stop after some time to avoid infinite polling
+		setTimeout(() => clearInterval(interval), 5000);
+	}
+});
 
 // Left as a reminder on how to expose methods as a custom element.
 // if (svelteHost) {
@@ -53,14 +86,12 @@ function handleContextMenuShowing(e: ContextMenuShowingEvent) {
 const showEditMetadataPopup = ref(false);
 
 // Use the theme composable
-const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme(
-	{
-		themeChangedCallback: () => {
-			// and tell the FileManager to redraw
-			TRefFileManager.value?.instance?.repaint?.();
-		}
+const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme({
+	themeChangedCallback: () => {
+		// and tell the FileManager to redraw
+		TRefFileManager.value?.instance?.repaint?.();
 	}
-);
+});
 
 onBeforeMount(() => {
 	setupTheme();
@@ -89,7 +120,7 @@ onMounted(async () => {
 		:file-system-provider="fileSystemProvider"
 		:on-context-menu-item-click="handleContextMenuItemClick"
 		:on-context-menu-showing="handleContextMenuShowing"
-		:root-folder-name="i18n.t('Knowledge Data')"
+		:root-folder-name="(i18nRef?.t?.('Knowledge Data')) ?? 'Knowledge Data'"
 		v-bind="$attrs"
 	>
 		<dx-permissions
@@ -103,7 +134,7 @@ onMounted(async () => {
 		/>
 
 		<dx-context-menu>
-			<dx-item text="Edit Metadata" :options="{ action: 'editMetadata' }" />
+			<dx-item :text="(i18nRef?.t?.('Edit Metadata')) ?? 'Edit Metadata'" :options="{ action: 'editMetadata' }" />
 		</dx-context-menu>
 
 		<dx-item-view>
@@ -113,7 +144,7 @@ onMounted(async () => {
 				<dx-column
 					data-field="dateModified"
 					dataType="datetime"
-					caption="Date Modified"
+					:caption="(i18nRef?.t?.('Date Modified')) ?? 'Date Modified'"
 					width="auto"
 				/>
 				<dx-column data-field="size" />
@@ -131,7 +162,7 @@ onMounted(async () => {
 	<popup-metadata-edit
 		v-model:visible="showEditMetadataPopup"
 		:file-item="currentFileItem as FileSystemItem"
-		:i18n="i18n"
+		:i18n="i18nRef || props.i18n"
 	/>
 </template>
 

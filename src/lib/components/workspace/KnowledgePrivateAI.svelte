@@ -7,6 +7,7 @@ import Spinner from '../common/Spinner.svelte';
 import Link from '$lib/components/icons/Link.svelte';
 import Info from '$lib/components/icons/Info.svelte';
 import Modal from '$lib/components/common/Modal.svelte';
+import XMark from '$lib/components/icons/XMark.svelte';
 
 dayjs.extend(relativeTime);
 
@@ -16,6 +17,13 @@ const i18n = getContext('i18n');
 
 let loaded = false;
 let showInfo = false;
+
+// Ensure the custom element receives the live i18n instance as a DOM property
+$: {
+  if (TRefFileMgr && i18n) {
+    TRefFileMgr.i18n = i18n;
+	}
+}
 
 onMount(async () => {
 	// knowledgeBases = await getKnowledgeBaseList(localStorage.token);
@@ -55,6 +63,12 @@ onMount(async () => {
 					<Modal bind:show={showInfo}>
 						<!-- Popover Info Box -->
 						<div class="flex flex-col gap-2 p-4 dark:text-white">
+							<!-- focusable element to satisfy focus-trap -->
+							<div class="flex justify-end relative">
+								<button type="button" class="absolute top-0 right-0 p-1 text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white" on:click={() => (showInfo = false)} aria-label="Close" title="Close">
+									<XMark className="w-5 h-5" />
+								</button>
+							</div>
 							<div class="text-xl font-medium">{$i18n.t('Knowledge')}</div>
 							<div class="text-pretty">
 								<p>{$i18n.t('Data automatically populates collections based on their sources, using SSO credentials and group information. This setup supports cross-service searching and AI-driven insight, while enforcing access controls through SSO authentication and maintaining privacy safeguards with role-based permissions.')}</p>
@@ -66,9 +80,8 @@ onMount(async () => {
 			</div>
 		</div>
 
-
 		<div class="relative grow flex flex-col">
-			<file-manager class="absolute inset-0" i18n={$i18n} bind:this={TRefFileMgr} />
+			<file-manager class="absolute inset-0" bind:this={TRefFileMgr} />
 		</div>
 	</div>
 {:else}

@@ -5,6 +5,13 @@ import containerQuries from '@tailwindcss/container-queries';
 export default {
 	darkMode: 'class',
 	content: ['./src/**/*.{html,js,svelte,ts}'],
+	safelist: [
+		'input-prose',
+		'input-prose-sm',
+		'markdown-prose',
+		'markdown-prose-sm',
+		'markdown-prose-xs'
+	],
 	theme: {
 		extend: {
 			colors: {

@@ -1061,97 +1061,6 @@ function closePreviewDialog() {
 }
 </script>
 
-<!-- Token Replacer LLM file selection UI -->
-{#if atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID}
-	<div class="ml-4 mb-2 p-2 rounded bg-white dark:bg-gray-900">
-		{#if loadingFiles && (docxFiles.length === 0 && csvFiles.length === 0)}
-			<div class="text-gray-500 text-sm">Loading available token files...</div>
-		{:else}
-			<div class="text-xs text-gray-500 mb-1 text-left">
-				Selecting Mineral and Values files auto-populates the prompt box for you.
-			</div>
-			<div class="flex gap-2 items-center">
-				{#if (docxFiles ?? []).length > 0}
-					<FilterSelect
-						bind:value={selectedDocx}
-						items={docxFiles}
-						placeholder="Select Mineral File"
-						onOpen={() => {
-							// If files are stale and not already refreshing, refresh in background without blocking UI
-							if (filesRefreshAllowed && !refreshingFiles) {
-								fetchTokenFiles(true);
-							}
-						}}
-						onSelect={async (value) => {
-							selectedDocx = value;
-							selectedDocxValue = value;
-							await updatePromptWithFilenames('docx');
-						}}
-					/>
-					<!-- Preview button for mineral file -->
-					<Tooltip content="Preview Mineral File" placement="top">
-						<button
-							class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
-							disabled={selectedDocx === ""}
-							aria-label="Preview Mineral File"
-							on:click={() => openPreviewDialog('docx')}
-						>
-							<Eye className="w-5 h-5" />
-						</button>
-					</Tooltip>
-				{:else}
-					<div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-						<span class="text-sm text-gray-600 dark:text-gray-400">No mineral files available</span>
-						<Tooltip content="Upload DOCX files to the workspace to use them here." placement="top">
-							<QuestionMarkCircle className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-						</Tooltip>
-					</div>
-				{/if}
-
-				{#if (csvFiles ?? []).length > 0}
-					<FilterSelect
-						bind:value={selectedCsv}
-						items={csvFiles}
-						placeholder="Select Values File"
-						onOpen={() => {
-							// If files are stale and not already refreshing, refresh in background without blocking UI
-							if (filesRefreshAllowed && !refreshingFiles) {
-								fetchTokenFiles(true);
-							}
-						}}
-						onSelect={async (value) => {
-							selectedCsv = value;
-							selectedCsvValue = value;
-							await updatePromptWithFilenames('csv');
-						}}
-					/>
-					<!-- Preview button for csv file, always visible, disabled if none selected -->
-					<Tooltip content="Preview Values File" placement="top">
-						<button
-							class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
-							disabled={selectedCsv === ""}
-							aria-label="Preview Values File"
-							on:click={() => openPreviewDialog('csv')}
-						>
-							<Eye className="w-5 h-5" />
-						</button>
-					</Tooltip>
-				{:else}
-					<div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-						<span class="text-sm text-gray-600 dark:text-gray-400">No values files available</span>
-						<Tooltip content="Upload CSV files to the workspace to use them here." placement="top">
-							<QuestionMarkCircle className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-						</Tooltip>
-					</div>
-				{/if}
-			</div>
-			{#if showFileSelectionError}
-				<div class="text-gray-500 text-xs mt-1">Please select both a DOCX and a CSV file.</div>
-			{/if}
-		{/if}
-	</div>
-{/if}
-
 {#if showPreviewDialog}
 	<FilePreviewDialog
 		show={showPreviewDialog}
@@ -1181,6 +1090,98 @@ function closePreviewDialog() {
 					: 'max-w-6xl'} w-full"
 			>
 				<div class="relative">
+
+					<!-- Token Replacer LLM file selection UI -->
+					{#if atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID}
+						<div class="ml-4 mb-2 p-2 rounded bg-white dark:bg-gray-900">
+							{#if loadingFiles && (docxFiles.length === 0 && csvFiles.length === 0)}
+								<div class="text-gray-500 text-sm">Loading available token files...</div>
+							{:else}
+								<div class="text-xs text-gray-500 mb-1 text-left">
+									Selecting Mineral and Values files auto-populates the prompt box for you.
+								</div>
+								<div class="flex gap-2 items-center">
+									{#if (docxFiles ?? []).length > 0}
+										<FilterSelect
+											bind:value={selectedDocx}
+											items={docxFiles}
+											placeholder="Select Mineral File"
+											onOpen={() => {
+												// If files are stale and not already refreshing, refresh in background without blocking UI
+												if (filesRefreshAllowed && !refreshingFiles) {
+													fetchTokenFiles(true);
+												}
+											}}
+											onSelect={async (value) => {
+												selectedDocx = value;
+												selectedDocxValue = value;
+												await updatePromptWithFilenames('docx');
+											}}
+										/>
+										<!-- Preview button for mineral file -->
+										<Tooltip content="Preview Mineral File" placement="top">
+											<button
+												class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
+												disabled={selectedDocx === ""}
+												aria-label="Preview Mineral File"
+												on:click={() => openPreviewDialog('docx')}
+											>
+												<Eye className="w-5 h-5" />
+											</button>
+										</Tooltip>
+									{:else}
+										<div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+											<span class="text-sm text-gray-600 dark:text-gray-400">No mineral files available</span>
+											<Tooltip content="Upload DOCX files to the workspace to use them here." placement="top">
+												<QuestionMarkCircle className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+											</Tooltip>
+										</div>
+									{/if}
+
+									{#if (csvFiles ?? []).length > 0}
+										<FilterSelect
+											bind:value={selectedCsv}
+											items={csvFiles}
+											placeholder="Select Values File"
+											onOpen={() => {
+												// If files are stale and not already refreshing, refresh in background without blocking UI
+												if (filesRefreshAllowed && !refreshingFiles) {
+													fetchTokenFiles(true);
+												}
+											}}
+											onSelect={async (value) => {
+												selectedCsv = value;
+												selectedCsvValue = value;
+												await updatePromptWithFilenames('csv');
+											}}
+										/>
+										<!-- Preview button for csv file, always visible, disabled if none selected -->
+										<Tooltip content="Preview Values File" placement="top">
+											<button
+												class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
+												disabled={selectedCsv === ""}
+												aria-label="Preview Values File"
+												on:click={() => openPreviewDialog('csv')}
+											>
+												<Eye className="w-5 h-5" />
+											</button>
+										</Tooltip>
+									{:else}
+										<div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+											<span class="text-sm text-gray-600 dark:text-gray-400">No values files available</span>
+											<Tooltip content="Upload CSV files to the workspace to use them here." placement="top">
+												<QuestionMarkCircle className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+											</Tooltip>
+										</div>
+									{/if}
+								</div>
+								{#if showFileSelectionError}
+									<div class="text-gray-500 text-xs mt-1">Please select both a DOCX and a CSV file.</div>
+								{/if}
+							{/if}
+						</div>
+					{/if}
+
 					{#if autoScroll === false && history?.currentId}
 						<div
 							class=" absolute -top-8 left-0 right-0 flex justify-center z-30 pointer-events-none"
