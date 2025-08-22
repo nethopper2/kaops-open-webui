@@ -491,8 +491,11 @@ async def google_callback(request: Request):
                         user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
                     ))
                 )
+
+            # Extract Redis connection from request
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
             
-            await create_task(request, run_google_sync(), id=f"google_sync_{user_id}")
+            await create_task(redis_connection, run_google_sync(), id=f"google_sync_{user_id}")
 
             await update_data_source_sync_status(user_id, 'google', 'syncing')
 
@@ -746,7 +749,10 @@ async def manual_google_sync(
                 ))
             )
         
-        await create_task(request, run_google_sync(), id=f"google_sync_{user.id}")
+        # Extract Redis connection from request
+        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+        
+        await create_task(redis_connection, run_google_sync(), id=f"google_sync_{user.id}")
 
         await update_data_source_sync_status(user.id, 'google', 'syncing')
 
@@ -932,7 +938,10 @@ async def disconnect_google(request: Request, user=Depends(get_verified_user),
                     lambda: asyncio.run(delete_gcs_folder(google_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
                 )
             
-            await create_task(request, delete_sync(), id=f"delete_google_sync_{user.id}")
+            # Extract Redis connection from request
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+            
+            await create_task(redis_connection, delete_sync(), id=f"delete_google_sync_{user.id}")
 
             msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Google folder."
             log.info(msg)
@@ -1110,7 +1119,10 @@ async def microsoft_callback(request: Request):
                     ))
                 )
             
-            await create_task(request, run_microsoft_sync(), id=f"microsoft_sync_{user_id}")
+            # Extract Redis connection from request
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+            
+            await create_task(redis_connection, run_microsoft_sync(), id=f"microsoft_sync_{user_id}")
 
             await update_data_source_sync_status(user_id, 'microsoft', 'syncing')
 
@@ -1350,7 +1362,10 @@ async def manual_microsoft_sync(
                 ))
             )
         
-        await create_task(request, run_microsoft_sync(), id=f"microsoft_sync_{user.id}")
+        # Extract Redis connection from request
+        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+        
+        await create_task(redis_connection, run_microsoft_sync(), id=f"microsoft_sync_{user.id}")
 
         await update_data_source_sync_status(user.id, 'microsoft', 'syncing')
 
@@ -1525,7 +1540,10 @@ async def disconnect_microsoft(request: Request, user=Depends(get_verified_user)
                     lambda: asyncio.run(delete_gcs_folder(microsoft_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
                 )
             
-            await create_task(request, delete_microsoft_sync(), id=f"delete_google_sync_{user.id}")
+            # Extract Redis connection from request
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+            
+            await create_task(redis_connection, delete_microsoft_sync(), id=f"delete_google_sync_{user.id}")
 
             msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Microsoft folder."
             log.info(msg)
@@ -1737,7 +1755,10 @@ async def slack_callback(request: Request):
                     ))
                 )
             
-            await create_task(request, run_slack_sync(), id=f"slack_sync_{user_id}")
+            # Extract Redis connection from request
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+            
+            await create_task(redis_connection, run_slack_sync(), id=f"slack_sync_{user_id}")
 
             await update_data_source_sync_status(user_id, 'slack', 'syncing')
 
@@ -1925,7 +1946,10 @@ async def manual_slack_sync(
                 ))
             )
         
-        await create_task(request, run_slack_sync(), id=f"slack_sync_{user.id}")
+        # Extract Redis connection from request
+        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+        
+        await create_task(redis_connection, run_slack_sync(), id=f"slack_sync_{user.id}")
 
         await update_data_source_sync_status(user.id, 'slack', 'syncing')
 
@@ -2109,7 +2133,10 @@ async def disconnect_slack(request: Request,user=Depends(get_verified_user),
                     lambda: asyncio.run(delete_gcs_folder(slack_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
                 )
             
-            await create_task(request, delete_slack_sync(), id=f"delete_slack_sync_{user.id}")
+            # Extract Redis connection from request
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+            
+            await create_task(redis_connection, delete_slack_sync(), id=f"delete_slack_sync_{user.id}")
 
             msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Slack folder."
             log.info(msg)
@@ -2298,7 +2325,10 @@ async def atlassian_callback(request: Request):
                     ))
                 )
             
-            await create_task(request, run_atlassian_sync(), id=f"run_atlassian_sync_{user_id}")
+            # Extract Redis connection from request
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+            
+            await create_task(redis_connection, run_atlassian_sync(), id=f"run_atlassian_sync_{user_id}")
 
             await update_data_source_sync_status(user_id, 'atlassian', 'syncing')
 
@@ -2512,7 +2542,10 @@ async def manual_atlassian_sync(request: Request, user=Depends(get_verified_user
                 ))
             )
         
-        await create_task(request, run_atlassian_sync(), id=f"run_atlassian_sync_{user.id}")
+        # Extract Redis connection from request
+        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+        
+        await create_task(redis_connection, run_atlassian_sync(), id=f"run_atlassian_sync_{user.id}")
 
         await update_data_source_sync_status(user.id, 'atlassian', 'syncing')
 
@@ -2668,7 +2701,10 @@ async def disconnect_atlassian(request: Request, user=Depends(get_verified_user)
                     lambda: asyncio.run(delete_gcs_folder(atlassian_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
                 )
             
-            await create_task(request, delete_atlassian_sync(), id=f"delete_atlassian_sync_{user.id}")
+            # Extract Redis connection from request
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+            
+            await create_task(redis_connection, delete_atlassian_sync(), id=f"delete_atlassian_sync_{user.id}")
 
             msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Atlassian folder."
             log.info(msg)
