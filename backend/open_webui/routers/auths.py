@@ -15,10 +15,9 @@ from open_webui.models.auths import (
     SigninResponse,
     SignupForm,
     UpdatePasswordForm,
-    UpdateProfileForm,
     UserResponse,
 )
-from open_webui.models.users import Users
+from open_webui.models.users import Users, UpdateProfileForm
 from open_webui.models.data import DataSources
 
 from open_webui.utils.data.google import initiate_google_file_sync
@@ -87,7 +86,13 @@ class SessionUserResponse(Token, UserResponse):
     permissions: Optional[dict] = None
 
 
-@router.get("/", response_model=SessionUserResponse)
+class SessionUserInfoResponse(SessionUserResponse):
+    bio: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[datetime.date] = None
+
+
+@router.get("/", response_model=SessionUserInfoResponse)
 async def get_session_user(
     request: Request, response: Response, user=Depends(get_current_user)
 ):
@@ -135,6 +140,9 @@ async def get_session_user(
         "name": user.name,
         "role": user.role,
         "profile_image_url": user.profile_image_url,
+        "bio": user.bio,
+        "gender": user.gender,
+        "date_of_birth": user.date_of_birth,
         "permissions": user_permissions,
     }
 
@@ -151,7 +159,7 @@ async def update_profile(
     if session_user:
         user = Users.update_user_by_id(
             session_user.id,
-            {"profile_image_url": form_data.profile_image_url, "name": form_data.name},
+            form_data.model_dump(),
         )
         if user:
             return user
@@ -715,7 +723,7 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
             )
 
             if request.app.state.config.WEBHOOK_URL:
-                post_webhook(
+                await post_webhook(
                     request.app.state.WEBUI_NAME,
                     request.app.state.config.WEBHOOK_URL,
                     WEBHOOK_MESSAGES.USER_SIGNUP(user.name),

@@ -141,6 +141,7 @@
 	export let readOnly = false;
 	export let topPadding = false;
 
+	let citationsElement: HTMLDivElement;
 	let buttonsContainerElement: HTMLDivElement;
 	let showDeleteConfirm = false;
 
@@ -529,7 +530,7 @@
 		if (!details) {
 			showRateComment = true;
 
-			if (!updatedMessage.annotation?.tags) {
+			if (!updatedMessage.annotation?.tags && (message?.content ?? '') !== '') {
 				// attempt to generate tags
 				const tags = await generateTags(localStorage.token, message.model, messages, chatId).catch(
 					(error) => {
@@ -626,7 +627,10 @@
 
 				{#if message.timestamp}
 					<div
-						class=" self-center text-xs invisible group-hover:visible text-gray-400 font-medium first-letter:capitalize ml-0.5 translate-y-[1px]"
+						class="self-center text-xs font-medium first-letter:capitalize ml-0.5 translate-y-[1px] {($settings?.highContrastMode ??
+						false)
+							? 'dark:text-gray-100 text-gray-900'
+							: 'invisible group-hover:visible transition text-gray-400'}"
 					>
 						<Tooltip content={dayjs(message.timestamp * 1000).format('LLLL')}>
 							<span class="line-clamp-1">{formatDate(message.timestamp * 1000)}</span>
@@ -821,29 +825,9 @@
 										}}
 										onSourceClick={async (id, idx) => {
 											console.log(id, idx);
-											let sourceButton = document.getElementById(`source-${message.id}-${idx}`);
-											const sourcesCollapsible = document.getElementById(
-												`collapsible-${message.id}`
-											);
 
-											if (sourceButton) {
-												sourceButton.click();
-											} else if (sourcesCollapsible) {
-												// Open sources collapsible so we can click the source button
-												sourcesCollapsible
-													.querySelector('div:first-child')
-													.dispatchEvent(new PointerEvent('pointerup', {}));
-
-												// Wait for next frame to ensure DOM updates
-												await new Promise((resolve) => {
-													requestAnimationFrame(() => {
-														requestAnimationFrame(resolve);
-													});
-												});
-
-												// Try clicking the source button again
-												sourceButton = document.getElementById(`source-${message.id}-${idx}`);
-												sourceButton && sourceButton.click();
+											if (citationsElement) {
+												citationsElement?.showSourceModal(idx - 1);
 											}
 										}}
 										onAddMessages={({ modelId, parentId, messages }) => {
@@ -864,7 +848,11 @@
 								{/if}
 
 								{#if (message?.sources || message?.citations) && (model?.info?.meta?.capabilities?.citations ?? true)}
-									<Citations id={message?.id} sources={message?.sources ?? message?.citations} />
+									<Citations
+										bind:this={citationsElement}
+										id={message?.id}
+										sources={message?.sources ?? message?.citations}
+									/>
 								{/if}
 
 								{#if message.code_executions}
@@ -988,7 +976,7 @@
 										<Tooltip content={$i18n.t('Edit')} placement="bottom">
 											<button
 												aria-label={$i18n.t('Edit')}
-												class="{isLastMessage
+												class="{isLastMessage || ($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 												on:click={() => {
@@ -1018,7 +1006,7 @@
 								<Tooltip content={$i18n.t('Copy')} placement="bottom">
 									<button
 										aria-label={$i18n.t('Copy')}
-										class="{isLastMessage
+										class="{isLastMessage || ($settings?.highContrastMode ?? false)
 											? 'visible'
 											: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition copy-response-button"
 										on:click={() => {
@@ -1048,7 +1036,7 @@
 										<button
 											aria-label={$i18n.t('Read Aloud')}
 											id="speak-button-{message.id}"
-											class="{isLastMessage
+											class="{isLastMessage || ($settings?.highContrastMode ?? false)
 												? 'visible'
 												: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 											on:click={() => {
@@ -1131,7 +1119,7 @@
 									<Tooltip content={$i18n.t('Generate Image')} placement="bottom">
 										<button
 											aria-label={$i18n.t('Generate Image')}
-											class="{isLastMessage
+											class="{isLastMessage || ($settings?.highContrastMode ?? false)
 												? 'visible'
 												: 'invisible group-hover:visible'}  p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 											on:click={() => {
@@ -1211,7 +1199,7 @@
 									>
 										<button
 											aria-hidden="true"
-											class=" {isLastMessage
+											class=" {isLastMessage || ($settings?.highContrastMode ?? false)
 												? 'visible'
 												: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition whitespace-pre-wrap"
 											on:click={() => {
@@ -1243,7 +1231,7 @@
 										<Tooltip content={$i18n.t('Good Response')} placement="bottom">
 											<button
 												aria-label={$i18n.t('Good Response')}
-												class="{isLastMessage
+												class="{isLastMessage || ($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg {(
 													message?.annotation?.rating ?? ''
@@ -1281,7 +1269,7 @@
 										<Tooltip content={$i18n.t('Bad Response')} placement="bottom">
 											<button
 												aria-label={$i18n.t('Bad Response')}
-												class="{isLastMessage
+												class="{isLastMessage || ($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg {(
 													message?.annotation?.rating ?? ''
@@ -1323,7 +1311,7 @@
 												aria-label={$i18n.t('Continue Response')}
 												type="button"
 												id="continue-response-button"
-												class="{isLastMessage
+												class="{isLastMessage || ($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 												on:click={() => {
@@ -1469,7 +1457,7 @@
 												type="button"
 												aria-label={$i18n.t('Delete')}
 												id="delete-response-button"
-												class="{isLastMessage
+												class="{isLastMessage || ($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 												on:click={() => {
@@ -1501,7 +1489,7 @@
 												<button
 													type="button"
 													aria-label={action.name}
-													class="{isLastMessage
+													class="{isLastMessage || ($settings?.highContrastMode ?? false)
 														? 'visible'
 														: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
 													on:click={() => {
@@ -1561,12 +1549,6 @@
 					{/if}
 				{/if}
 			</div>
-
-			{#if message?.done}
-				<div aria-live="polite" class="sr-only">
-					{message?.content ?? ''}
-				</div>
-			{/if}
 		</div>
 	</div>
 {/key}
