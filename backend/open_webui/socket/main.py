@@ -294,7 +294,9 @@ async def connect(sid, environ, auth):
             user = Users.get_user_by_id(data["id"])
 
         if user:
-            SESSION_POOL[sid] = user.model_dump()
+            SESSION_POOL[sid] = user.model_dump(
+                exclude=["date_of_birth", "bio", "gender"]
+            )
             if user.id in USER_POOL:
                 USER_POOL[user.id] = USER_POOL[user.id] + [sid]
             else:
@@ -316,7 +318,7 @@ async def user_join(sid, data):
     if not user:
         return
 
-    SESSION_POOL[sid] = user.model_dump()
+    SESSION_POOL[sid] = user.model_dump(exclude=["date_of_birth", "bio", "gender"])
     if user.id in USER_POOL:
         USER_POOL[user.id] = USER_POOL[user.id] + [sid]
     else:

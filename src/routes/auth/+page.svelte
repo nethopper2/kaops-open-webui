@@ -14,7 +14,7 @@
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 	import { WEBUI_NAME, config, user, socket } from '$lib/stores';
 
-	import { generateInitialsImage, canvasPixelTest } from '$lib/utils';
+	import { generateInitialsImage, canvasPixelTest, querystringValue } from '$lib/utils';
 
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import OnBoarding from '$lib/components/OnBoarding.svelte';
@@ -37,12 +37,6 @@
 	let brandingLogo = webuiCustom?.logo || '';
 	let logoMaxHeight = webuiCustom?.logoMaxHeight || '25px';
 	let bgImageAuth = '';
-
-	const querystringValue = (key) => {
-		const querystring = window.location.search;
-		const urlParams = new URLSearchParams(querystring);
-		return urlParams.get(key);
-	};
 
 	const setSessionUser = async (sessionUser) => {
 		if (sessionUser) {

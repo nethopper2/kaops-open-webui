@@ -39,6 +39,7 @@
 		extractContentFromFile,
 		extractCurlyBraceWords,
 		extractInputVariables,
+		getAge,
 		getCurrentDateTime,
 		getFormattedDate,
 		getFormattedTime,
@@ -74,6 +75,7 @@
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
 	import InputVariablesModal from './MessageInput/InputVariablesModal.svelte';
 	import Voice from '../icons/Voice.svelte';
+	import { getSessionUser } from '$lib/apis/auths';
 	import NethopperLogo from '$lib/components/private-ai/NethopperLogo.svelte';
 	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte';
 	import { appHooks } from '$lib/utils/hooks';
@@ -195,9 +197,45 @@
 			text = text.replaceAll('{{USER_LOCATION}}', String(location));
 		}
 
+		const sessionUser = await getSessionUser(localStorage.token);
+
 		if (text.includes('{{USER_NAME}}')) {
-			const name = $_user?.name || 'User';
+			const name = sessionUser?.name || 'User';
 			text = text.replaceAll('{{USER_NAME}}', name);
+		}
+
+		if (text.includes('{{USER_BIO}}')) {
+			const bio = sessionUser?.bio || '';
+
+			if (bio) {
+				text = text.replaceAll('{{USER_BIO}}', bio);
+			}
+		}
+
+		if (text.includes('{{USER_GENDER}}')) {
+			const gender = sessionUser?.gender || '';
+
+			if (gender) {
+				text = text.replaceAll('{{USER_GENDER}}', gender);
+			}
+		}
+
+		if (text.includes('{{USER_BIRTH_DATE}}')) {
+			const birthDate = sessionUser?.date_of_birth || '';
+
+			if (birthDate) {
+				text = text.replaceAll('{{USER_BIRTH_DATE}}', birthDate);
+			}
+		}
+
+		if (text.includes('{{USER_AGE}}')) {
+			const birthDate = sessionUser?.date_of_birth || '';
+
+			if (birthDate) {
+				// calculate age using date
+				const age = getAge(birthDate);
+				text = text.replaceAll('{{USER_AGE}}', age);
+			}
 		}
 
 		if (text.includes('{{USER_LANGUAGE}}')) {
@@ -851,7 +889,7 @@
 		}
 	}
 
-	onMount(() => {
+	onMount(async () => {
 		loaded = true;
 
 		window.setTimeout(() => {
@@ -864,6 +902,8 @@
 
 		window.addEventListener('focus', onFocus);
 		window.addEventListener('blur', onBlur);
+
+		await tick();
 
 		const dropzoneElement = document.getElementById('chat-container');
 
@@ -1225,7 +1265,8 @@ function closePreviewDialog() {
 												: `${WEBUI_BASE_URL}/static/favicon.png`)}
 									/>
 									<div class="translate-y-[0.5px]">
-										Talking to <span class=" font-medium">{atSelectedModel.name}</span>
+										{$i18n.t('Talk to model')}:
+										<span class=" font-medium">{atSelectedModel.name}</span>
 									</div>
 								</div>
 								<div>
@@ -1495,7 +1536,20 @@ function closePreviewDialog() {
 														return res;
 													}}
 													oncompositionstart={() => (isComposing = true)}
-													oncompositionend={() => (isComposing = false)}
+													oncompositionend={() => {
+														const isSafari = /^((?!chrome|android).)*safari/i.test(
+															navigator.userAgent
+														);
+
+														if (isSafari) {
+															// Safari has a bug where compositionend is not triggered correctly #16615
+															// when using the virtual keyboard on iOS.
+															// We use a timeout to ensure that the composition is ended after a short delay.
+															setTimeout(() => (isComposing = false));
+														} else {
+															isComposing = false;
+														}
+													}}
 													on:keydown={async (e) => {
 														e = e.detail.event;
 
@@ -1706,7 +1760,18 @@ function closePreviewDialog() {
 												command = getCommand();
 											}}
 											on:compositionstart={() => (isComposing = true)}
-											on:compositionend={() => (isComposing = false)}
+											on:compositionend={() => {
+												const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+												if (isSafari) {
+													// Safari has a bug where compositionend is not triggered correctly #16615
+													// when using the virtual keyboard on iOS.
+													// We use a timeout to ensure that the composition is ended after a short delay.
+													setTimeout(() => (isComposing = false));
+												} else {
+													isComposing = false;
+												}
+											}}
 											on:keydown={async (e) => {
 												const isCtrlPressed = e.ctrlKey || e.metaKey; // metaKey is for Cmd key on Mac
 
@@ -2017,7 +2082,6 @@ function closePreviewDialog() {
 											/>
 
 											<div class="flex gap-1 items-center overflow-x-auto scrollbar-none flex-1">
-
 												{#if showToolsButton}
 													<Tooltip
 														content={$i18n.t('{{COUNT}} Available Tools', {
