@@ -1569,7 +1569,7 @@ FOLLOW_UP_GENERATION_PROMPT_TEMPLATE = PersistentConfig(
 DEFAULT_FOLLOW_UP_GENERATION_PROMPT_TEMPLATE = """### Task:
 Suggest 3-5 relevant follow-up questions or prompts that the user might naturally ask next in this conversation as a **user**, based on the chat history, to help continue or deepen the discussion.
 ### Guidelines:
-- Write all follow-up questions from the user’s point of view, directed to the assistant.
+- Write all follow-up questions from the user's point of view, directed to the assistant.
 - Make questions concise, clear, and directly related to the discussed topic(s).
 - Only suggest follow-ups that make sense given the chat content and do not repeat what was already covered.
 - If the conversation is very short or not specific, suggest more general (but relevant) follow-ups the user might ask.
@@ -3361,6 +3361,10 @@ NH_ENABLE_UPSTREAM_UI = PersistentConfig(
 # The base url for the private-ai-rest dependency
 NH_API_BASE_URL = PersistentConfig(
     "NH_API_BASE_URL", "private_ai.api_base_url", os.environ.get("NH_API_BASE_URL", "http://localhost:3000")
+)
+# The base url for the nh-pai-data-service
+NH_DATA_SERVICE_URL = PersistentConfig(
+    "NH_DATA_SERVICE_URL", "nh_data_service.url", os.environ.get("NH_DATA_SERVICE_URL", "http://localhost:4500")
 )
 # Custom NH settings for the WebUI model directly from environment variable
 NH_DOCKER_IMAGE = os.environ.get("DOCKER_IMAGE", "")
