@@ -3,6 +3,7 @@ from typing import Sequence, Union
 
 from open_webui.internal.db import get_db
 from open_webui.models.users import Users 
+from open_webui.models.data import DataSources
 
 from alembic import op
 import sqlalchemy as sa
@@ -79,7 +80,7 @@ def upgrade() -> None:
             # Call the method directly on the Users class, not on an instance
             for user_id in user_ids:
                 try:
-                    Users.create_default_data_sources_for_user(user_id)
+                    DataSources.create_default_data_sources_for_user(user_id)
                     log.info(f"Created default data sources for user: {user_id}")
                 except Exception as user_error:
                     log.warning(f"Failed to create default data sources for user {user_id}: {user_error}")
