@@ -1,4 +1,4 @@
-import { APP_NAME } from '$lib/constants';
+import { APP_NAME, WEBUI_BASE_URL } from '$lib/constants';
 import { type Writable, writable, derived } from 'svelte/store';
 import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
@@ -122,6 +122,18 @@ export const privateAiModelToolbarComponent = derived(currentSelectedModelId, (i
 
 // Derived: whether Private AI Model Toolbar can be used with the selected model
 export const canShowPrivateAiModelToolbar = derived(privateAiModelToolbarComponent, (comp) => Boolean(comp));
+
+// Derived: avatar URL for the selected model (matches ModelSelector avatar)
+export const privateAiSelectedModelAvatarUrl = derived(
+	[currentSelectedModelId, models],
+	([id, $models]) => {
+		if (!id) return `${WEBUI_BASE_URL}/static/favicon.png`;
+		const model = ($models || []).find((m) => m.id === id);
+		return (
+			(model?.info as any)?.meta?.profile_image_url ?? `${WEBUI_BASE_URL}/static/favicon.png`
+		);
+	}
+);
 
 export const artifactCode = writable(null);
 

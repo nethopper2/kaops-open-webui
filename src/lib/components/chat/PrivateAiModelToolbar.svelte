@@ -4,7 +4,10 @@ import { Pane, PaneResizer } from 'paneforge';
 import { createEventDispatcher, getContext, onDestroy, onMount } from 'svelte';
 import Drawer from '../common/Drawer.svelte';
 import EllipsisVertical from '../icons/EllipsisVertical.svelte';
-import { showPrivateAiModelToolbar, activeRightPane, privateAiModelToolbarComponent, currentSelectedModelId } from '$lib/stores';
+import {
+	showPrivateAiModelToolbar, activeRightPane, privateAiModelToolbarComponent, currentSelectedModelId,
+	privateAiSelectedModelAvatarUrl
+} from '$lib/stores';
 import { calcMinSize, createPaneBehavior, isPaneHandle, type PaneHandle, rightPaneSize } from '$lib/utils/pane';
 import XMark from '$lib/components/icons/XMark.svelte';
 
@@ -159,7 +162,10 @@ onDestroy(() => {
 						<div
 							class="w-full px-4 py-4 bg-white dark:shadow-lg dark:bg-gray-850 border border-gray-100 dark:border-gray-850 z-40 pointer-events-auto overflow-y-auto scrollbar-hidden">
 							<div class=" flex items-center justify-between dark:text-gray-100 mb-2">
-								<div class=" text-lg font-medium self-center font-primary">{$i18n.t('Model Toolbar')}</div>
+								<div class="flex items-center gap-2">
+									<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover" draggable="false" />
+									<div class=" text-lg font-medium self-center font-primary">{$i18n.t('Model Toolbar')}</div>
+								</div>
 								<button
 									class="self-center"
 									on:click={() => {

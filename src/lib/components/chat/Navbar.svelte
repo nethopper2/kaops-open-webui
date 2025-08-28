@@ -15,7 +15,8 @@
 		temporaryChatEnabled,
 		user,
 		showPrivateAiModelToolbar,
-		canShowPrivateAiModelToolbar
+		canShowPrivateAiModelToolbar,
+		privateAiSelectedModelAvatarUrl
 	} from '$lib/stores';
 
 	import { slide } from 'svelte/transition';
@@ -38,7 +39,6 @@
 
 	import EllipsisHorizontal from '../icons/EllipsisHorizontal.svelte';
  import ChatPlus from '../icons/ChatPlus.svelte';
- import PrivateAiToolbar from '../icons/PrivateAiToolbar.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -199,8 +199,11 @@
 									<AdjustmentsHorizontal className=" size-5" strokeWidth="1" />
 								</div>
 							</button>
+						</Tooltip>
+					{/if}
 
-       {#if $canShowPrivateAiModelToolbar}
+					{#if $canShowPrivateAiModelToolbar}
+					<Tooltip content={$i18n.t('Model Toolbar')}>
 						<button
 							class="flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
 							on:click={async () => {
@@ -209,11 +212,10 @@
 							aria-label="Model Toolbar"
 						>
 							<div class=" m-auto self-center">
-								<PrivateAiToolbar className="size-5" strokeWidth="1.5" />
+								<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover" draggable="false" />
 							</div>
 						</button>
-					{/if}
-						</Tooltip>
+					</Tooltip>
 					{/if}
 
 					{#if $mobile}
