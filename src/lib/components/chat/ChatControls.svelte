@@ -4,7 +4,7 @@
 	import { Pane, PaneResizer } from 'paneforge';
 
 	import { onDestroy, onMount, tick } from 'svelte';
-	import { mobile, showControls, showCallOverlay, showOverview, showArtifacts, showPrivateAiModelToolbar } from '$lib/stores';
+ import { mobile, showControls, showCallOverlay, showOverview, showArtifacts, activeRightPane } from '$lib/stores';
 
 	import Modal from '../common/Modal.svelte';
 	import Controls from './Controls/Controls.svelte';
@@ -32,7 +32,7 @@
 	export let pane;
 	// When false, keep component mounted but do not render its Pane/Resizer inside the PaneGroup (prevents interference)
 	let activeInPaneGroup: boolean = true;
-	$: activeInPaneGroup = $showControls && !$showPrivateAiModelToolbar;
+	$: activeInPaneGroup = $activeRightPane === 'controls';
 	
 	let mediaQuery;
 	let largeScreen = false;

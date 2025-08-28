@@ -4,7 +4,7 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import Drawer from '../common/Drawer.svelte';
   import EllipsisVertical from '../icons/EllipsisVertical.svelte';
-  import { showPrivateAiModelToolbar, showControls } from '$lib/stores';
+  import { showPrivateAiModelToolbar, activeRightPane } from '$lib/stores';
 
   type PaneHandle = { resize: (n: number) => void; isExpanded: () => boolean; getSize: () => number };
   const isPaneHandle = (x: unknown): x is PaneHandle =>
@@ -12,7 +12,7 @@
 
   export let pane: unknown;
   let activeInPaneGroup = false;
-  $: activeInPaneGroup = $showPrivateAiModelToolbar && !$showControls;
+  $: activeInPaneGroup = $activeRightPane === 'private';
 
   let mediaQuery: MediaQueryList;
   let largeScreen = false;

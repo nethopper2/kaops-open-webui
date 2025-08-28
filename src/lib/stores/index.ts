@@ -1,5 +1,5 @@
 import { APP_NAME } from '$lib/constants';
-import { type Writable, writable } from 'svelte/store';
+import { type Writable, writable, derived } from 'svelte/store';
 import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
 import type { Socket } from 'socket.io-client';
@@ -102,6 +102,12 @@ showPrivateAiModelToolbar.subscribe((v) => {
 		__enforcingExclusivePanels = false;
 	}
 });
+
+// Single source of truth for which right-side pane is active in the PaneGroup
+export const activeRightPane = derived(
+	[showControls, showPrivateAiModelToolbar],
+	([controls, privateAi]) => (controls ? 'controls' : privateAi ? 'private' : null) as 'controls' | 'private' | null
+);
 
 export const artifactCode = writable(null);
 
