@@ -406,6 +406,7 @@ from open_webui.config import (
     NH_API_BASE_URL,
     NH_WEBUI_CUSTOM,
     NH_DOCKER_IMAGE,
+    NH_DATA_SERVICE_URL,
 )
 from open_webui.env import (
     LICENSE_KEY,
@@ -1139,6 +1140,7 @@ app.state.config.AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH = (
 
 app.state.config.NH_ENABLE_UPSTREAM_UI = NH_ENABLE_UPSTREAM_UI
 app.state.config.NH_API_BASE_URL = NH_API_BASE_URL
+app.state.config.NH_DATA_SERVICE_URL = NH_DATA_SERVICE_URL
 app.state.NH_WEBUI_CUSTOM = NH_WEBUI_CUSTOM
 app.state.NH_DOCKER_IMAGE = NH_DOCKER_IMAGE
 
@@ -1730,6 +1732,9 @@ async def get_app_config(request: Request):
             "rest_api_base_url": app.state.config.NH_API_BASE_URL,
             "webui_custom": app.state.NH_WEBUI_CUSTOM,
             "docker_image": app.state.NH_DOCKER_IMAGE,
+        },
+        "nh_data_service": {
+            "url": app.state.config.NH_DATA_SERVICE_URL,
         },
         **(
             {
