@@ -138,16 +138,38 @@
  	currentSelectedModelId.set(singleId);
  }
  
- // When the selected model supports a Private AI toolbar, automatically open it
- $: if ($canShowPrivateAiModelToolbar) {
- 	if (!$showPrivateAiModelToolbar) {
- 		showPrivateAiModelToolbar.set(true);
- 		// Try to expand the pane on large screens once mounted
- 		Promise.resolve().then(() => {
- 			privateAiPaneComponent?.openPane?.();
- 		});
- 	}
- }
+// Auto-open behavior with user-intent guards
+let allowAutoOpen = true;
+let lastAutoOpenModelId: string | null = null;
+let __prevShowPrivateAi = false;
+
+// Reset auto-open permission when the selected model changes
+$: {
+	const mid = $currentSelectedModelId;
+	if (mid !== lastAutoOpenModelId) {
+		lastAutoOpenModelId = mid;
+		allowAutoOpen = true;
+	}
+}
+
+// If user opens Controls, suppress auto-open of Private AI toolbar
+$: if ($showControls) {
+	allowAutoOpen = false;
+}
+
+// If Private AI toolbar transitions from open -> closed, treat as user intent and suppress auto-open until model changes
+$: if (__prevShowPrivateAi && !$showPrivateAiModelToolbar) {
+	allowAutoOpen = false;
+}
+$: __prevShowPrivateAi = $showPrivateAiModelToolbar;
+
+// When the selected model supports a Private AI toolbar, auto-open only on eligible transitions
+$: if ($canShowPrivateAiModelToolbar && allowAutoOpen && !$showPrivateAiModelToolbar) {
+	showPrivateAiModelToolbar.set(true);
+	Promise.resolve().then(() => {
+		privateAiPaneComponent?.openPane?.();
+	});
+}
 
 	let selectedToolIds = [];
 	let selectedFilterIds = [];
