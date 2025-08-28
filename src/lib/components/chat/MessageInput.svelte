@@ -96,6 +96,7 @@
 	export let autoScroll = false;
 	export let generating = false;
 
+	// The currently selected Model object when exactly one model is selected; otherwise undefined.
 	export let atSelectedModel: Model | undefined = undefined;
 	export let selectedModels: [''];
   $: {
