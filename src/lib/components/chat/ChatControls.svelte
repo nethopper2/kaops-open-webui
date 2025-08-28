@@ -4,7 +4,7 @@
 	import { Pane, PaneResizer } from 'paneforge';
 
 	import { onDestroy, onMount, tick } from 'svelte';
-	import { mobile, showControls, showCallOverlay, showOverview, showArtifacts } from '$lib/stores';
+	import { mobile, showControls, showCallOverlay, showOverview, showArtifacts, showPrivateAiModelToolbar } from '$lib/stores';
 
 	import Modal from '../common/Modal.svelte';
 	import Controls from './Controls/Controls.svelte';
@@ -31,7 +31,8 @@
 
 	export let pane;
 	// When false, keep component mounted but do not render its Pane/Resizer inside the PaneGroup (prevents interference)
-	export let activeInPaneGroup: boolean = true;
+	let activeInPaneGroup: boolean = true;
+	$: activeInPaneGroup = $showControls && !$showPrivateAiModelToolbar;
 	
 	let mediaQuery;
 	let largeScreen = false;
@@ -39,11 +40,40 @@
 
 	let minSize = 0;
 
+	let hasExpanded = false;
+	let opening = false;
+
+	let clampScheduled = false;
+	const scheduleClamp = () => {
+		if (clampScheduled) return;
+		clampScheduled = true;
+		setTimeout(() => {
+			clampScheduled = false;
+			if ($showControls && pane && typeof pane.isExpanded === "function" && typeof pane.getSize === "function") {
+				try {
+					if (pane.isExpanded() && pane.getSize() < minSize) {
+						pane.resize(minSize);
+					}
+				} catch (err) {
+					console.warn('Failed to clamp pane size', err);
+				}
+			}
+		}, 0);
+	};
+
 	export const openPane = () => {
-		if (parseInt(localStorage?.chatControlsSize)) {
-			pane.resize(parseInt(localStorage?.chatControlsSize));
-		} else {
-			pane.resize(minSize);
+		// Only attempt to resize when the desktop PaneGroup is active and this pane is participating
+		if (!largeScreen || !activeInPaneGroup || !pane) return;
+		const stored = parseInt(localStorage?.chatControlsSize);
+		const target = stored && stored > 0 ? stored : Math.max(minSize, 1);
+		try {
+			if (typeof pane.getSize === 'function') {
+				const current = pane.getSize();
+				if (current === target) return;
+			}
+			pane.resize(target);
+		} catch (e) {
+			// ignore resize errors to avoid noisy logs; safe because pane state will be reconciled by Paneforge
 		}
 	};
 
@@ -86,7 +116,7 @@
 		// Select the container element you want to observe
 		const container = document.getElementById('chat-container');
 
-		// initialize the minSize based on the container width
+ 	// initialize the minSize based on the container width
 		minSize = Math.floor((350 / container.clientWidth) * 100);
 
 		// Create a new ResizeObserver instance
@@ -99,8 +129,8 @@
 				minSize = Math.floor(percentage);
 
 				if ($showControls) {
-					if (pane && pane.isExpanded() && pane.getSize() < minSize) {
-						pane.resize(minSize);
+					if (pane && pane.isExpanded && pane.getSize && pane.isExpanded() && pane.getSize() < minSize) {
+						scheduleClamp();
 					}
 				}
 			}
@@ -133,6 +163,22 @@
 
 	$: if (!chatId) {
 		closeHandler();
+	}
+
+	// Ensure the pane actually opens to a visible width when activated in the PaneGroup (desktop)
+	$: if (largeScreen && activeInPaneGroup && $showControls && pane && !opening) {
+		opening = true;
+		// Defer to next frame to ensure pane binding is ready and avoid re-entrant resize
+		tick().then(() => {
+			requestAnimationFrame(() => {
+				try {
+					openPane?.();
+				} catch (err) {
+					// ignore
+				}
+				opening = false;
+			});
+		});
 	}
 </script>
 
@@ -210,11 +256,13 @@
 				bind:pane
 				defaultSize={0}
 				onResize={(size) => {
+					// Mark that the pane has expanded at least once when size > 0
+					hasExpanded = hasExpanded || size > 0;
 					console.log('size', size, minSize);
 
 					if ($showControls && pane.isExpanded()) {
 						if (size < minSize) {
-							pane.resize(minSize);
+							scheduleClamp();
 						}
 
 						if (size < minSize) {
@@ -225,7 +273,12 @@
 					}
 				}}
 				onCollapse={() => {
-					showControls.set(false);
+					// Ignore collapse events while we are in the process of opening to a visible size
+					if (opening) return;
+					// Only hide after the pane has actually expanded at least once; ignore initial mount collapse
+					if (hasExpanded) {
+						showControls.set(false);
+					}
 				}}
 				collapsible={true}
 				class=" z-10 "

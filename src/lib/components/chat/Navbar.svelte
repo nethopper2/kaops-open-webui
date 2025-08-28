@@ -13,7 +13,7 @@
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
-		user
+		user, showPrivateAiModelToolbar
 	} from '$lib/stores';
 
 	import { slide } from 'svelte/transition';
@@ -187,13 +187,25 @@
 						<Tooltip content={$i18n.t('Controls')}>
 							<button
 								class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
-								on:click={async () => {
-									await showControls.set(!$showControls);
-								}}
+        on:click={async () => {
+											await showControls.set(!$showControls);
+										}}
 								aria-label="Controls"
 							>
 								<div class=" m-auto self-center">
 									<AdjustmentsHorizontal className=" size-5" strokeWidth="1" />
+								</div>
+							</button>
+
+							<button
+								class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
+        on:click={async () => {
+											await showPrivateAiModelToolbar.set(!$showPrivateAiModelToolbar);
+										}}
+								aria-label="Controls"
+							>
+								<div class=" m-auto self-center">
+									TEMP
 								</div>
 							</button>
 						</Tooltip>

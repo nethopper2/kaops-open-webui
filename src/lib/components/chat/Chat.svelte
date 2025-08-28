@@ -515,12 +515,7 @@
 		showControls.subscribe(async (value) => {
 			if (controlPane && !$mobile) {
 				try {
-					if (value) {
-						await tick();
-						requestAnimationFrame(() => {
-							try { controlPaneComponent?.openPane?.(); } catch {}
-						});
-					} else {
+					if (!value) {
 						controlPane.collapse();
 					}
 				} catch (e) {
@@ -2432,10 +2427,9 @@
 					{stopResponse}
 					{showMessage}
 					{eventTarget}
-					activeInPaneGroup={!$showPrivateAiModelToolbar}
 				/>
 
-				<PrivateAiModelToolbar bind:this={privateAiPaneComponent} bind:pane={privateAiPane} activeInPaneGroup={$showPrivateAiModelToolbar} />
+				<PrivateAiModelToolbar bind:this={privateAiPaneComponent} bind:pane={privateAiPane} />
 			</PaneGroup>
 		</div>
 	{:else if loading}

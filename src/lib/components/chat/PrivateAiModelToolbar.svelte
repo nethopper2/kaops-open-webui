@@ -4,14 +4,15 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import Drawer from '../common/Drawer.svelte';
   import EllipsisVertical from '../icons/EllipsisVertical.svelte';
-  import { showPrivateAiModelToolbar } from '$lib/stores';
+  import { showPrivateAiModelToolbar, showControls } from '$lib/stores';
 
   type PaneHandle = { resize: (n: number) => void; isExpanded: () => boolean; getSize: () => number };
   const isPaneHandle = (x: unknown): x is PaneHandle =>
     !!x && typeof x === 'object' && 'resize' in x && 'isExpanded' in x && 'getSize' in x;
 
   export let pane: unknown;
-  export let activeInPaneGroup: boolean = false;
+  let activeInPaneGroup = false;
+  $: activeInPaneGroup = $showPrivateAiModelToolbar && !$showControls;
 
   let mediaQuery: MediaQueryList;
   let largeScreen = false;
