@@ -2429,7 +2429,13 @@
 					{eventTarget}
 				/>
 
-				<PrivateAiModelToolbar bind:this={privateAiPaneComponent} bind:pane={privateAiPane} />
+				<PrivateAiModelToolbar
+					bind:this={privateAiPaneComponent}
+					bind:pane={privateAiPane}
+					on:close={() => {
+						showPrivateAiModelToolbar.set(false);
+					}}
+				/>
 			</PaneGroup>
 		</div>
 	{:else if loading}
