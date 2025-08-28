@@ -94,17 +94,18 @@
 
 		// Select the container element you want to observe
 		const container = document.getElementById('chat-container');
+		const MIN_SIZE = 350;
 
  	// initialize the minSize based on the container width
-		minSize = calcMinSize(container, 350);
+		minSize = calcMinSize(container, MIN_SIZE);
 
 		// Create a new ResizeObserver instance
 		const resizeObserver = new ResizeObserver((entries) => {
 			for (let entry of entries) {
-				minSize = calcMinSize(entry.target as HTMLElement, 350);
+				minSize = calcMinSize(entry.target as HTMLElement, MIN_SIZE);
 
 				if ($showControls && paneHandle && paneHandle.isExpanded() && paneHandle.getSize() < minSize) {
-					behavior.scheduleClamp(paneHandle, minSize);
+					behavior.clamp(paneHandle, minSize);
 				}
 			}
 		});
@@ -138,10 +139,11 @@
 		closeHandler();
 	}
 
+	// TODO: cleanup
 	// Ensure the pane actually opens to a visible width when activated in the PaneGroup (desktop)
-	$: if (largeScreen && activeInPaneGroup && $showControls && paneHandle) {
-		openPane?.();
-	}
+	// $: if (largeScreen && activeInPaneGroup && $showControls && paneHandle) {
+	// 	openPane?.();
+	// }
 </script>
 
 <SvelteFlowProvider>
@@ -224,7 +226,7 @@
 
      			if ($showControls && paneHandle && paneHandle.isExpanded()) {
 						if (size < minSize) {
-							behavior.scheduleClamp(paneHandle, minSize);
+							behavior.clamp(paneHandle, minSize);
 						}
 						behavior.persistSize(size, minSize);
 						rightPaneSize.set(size);

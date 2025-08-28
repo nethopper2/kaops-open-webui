@@ -48,16 +48,18 @@
     handleMediaQuery(mediaQuery);
 
     const container = document.getElementById('chat-container');
+		const MIN_SIZE = 350;
+
     if (container) {
-      minSize = calcMinSize(container, 350);
+      minSize = calcMinSize(container, MIN_SIZE);
 
       const resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          minSize = calcMinSize(entry.target as HTMLElement, 350);
+          minSize = calcMinSize(entry.target as HTMLElement, MIN_SIZE);
 
           if ($showPrivateAiModelToolbar && activeInPaneGroup) {
             if (paneHandle && paneHandle.isExpanded() && paneHandle.getSize() < minSize) {
-              behavior.scheduleClamp(paneHandle, minSize);
+              behavior.clamp(paneHandle, minSize);
             }
           }
         }
@@ -70,17 +72,18 @@
     showPrivateAiModelToolbar.set(false);
   });
 
+	// TODO: cleanup
   // Keep Pane width in sync with visibility on desktop (defer resizes to avoid assertions)
-  $: if (largeScreen && activeInPaneGroup && paneHandle && $showPrivateAiModelToolbar) {
-    if (!paneHandle.isExpanded() || paneHandle.getSize() === 0) {
-      openPane?.();
-    }
-  }
-
+  // $: if (largeScreen && activeInPaneGroup && paneHandle && $showPrivateAiModelToolbar) {
+  //   if (!paneHandle.isExpanded() || paneHandle.getSize() === 0) {
+  //     openPane?.();
+  //   }
+  // }
+// TODO: cleanup
   // Ensure pane opens as soon as it becomes active in the PaneGroup (child-driven open)
-  $: if (largeScreen && activeInPaneGroup && $showPrivateAiModelToolbar) {
-    openPane?.();
-  }
+  // $: if (largeScreen && activeInPaneGroup && $showPrivateAiModelToolbar) {
+  //   openPane?.();
+  // }
 </script>
 
 <SvelteFlowProvider>
@@ -122,7 +125,7 @@
           }
           if ($showPrivateAiModelToolbar && paneHandle && paneHandle.isExpanded()) {
             if (size < minSize) {
-              behavior.scheduleClamp(paneHandle, minSize);
+              behavior.clamp(paneHandle, minSize);
             }
             behavior.persistSize(size, minSize);
             rightPaneSize.set(size);
