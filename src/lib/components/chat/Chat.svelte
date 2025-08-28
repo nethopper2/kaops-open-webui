@@ -29,6 +29,7 @@
 		socket,
 		showControls,
 		showCallOverlay,
+		showPrivateAiModelToolbar,
 		currentChatPage,
 		temporaryChatEnabled,
 		mobile,
@@ -80,7 +81,8 @@
 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
-	import ChatControls from './ChatControls.svelte';
+ import ChatControls from './ChatControls.svelte';
+ import PrivateAiModelToolbar from './PrivateAiModelToolbar.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import Placeholder from './Placeholder.svelte';
 	import NotificationToast from '../NotificationToast.svelte';
@@ -95,8 +97,11 @@
 	let loading = true;
 
 	const eventTarget = new EventTarget();
+
 	let controlPane;
 	let controlPaneComponent;
+	let privateAiPane;
+	let privateAiPaneComponent;
 
 	let messageInput;
 
@@ -511,7 +516,10 @@
 			if (controlPane && !$mobile) {
 				try {
 					if (value) {
-						controlPaneComponent.openPane();
+						await tick();
+						requestAnimationFrame(() => {
+							try { controlPaneComponent?.openPane?.(); } catch {}
+						});
 					} else {
 						controlPane.collapse();
 					}
@@ -2424,7 +2432,10 @@
 					{stopResponse}
 					{showMessage}
 					{eventTarget}
+					activeInPaneGroup={!$showPrivateAiModelToolbar}
 				/>
+
+				<PrivateAiModelToolbar bind:this={privateAiPaneComponent} bind:pane={privateAiPane} activeInPaneGroup={$showPrivateAiModelToolbar} />
 			</PaneGroup>
 		</div>
 	{:else if loading}

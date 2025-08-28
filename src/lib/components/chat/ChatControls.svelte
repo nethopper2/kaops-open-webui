@@ -30,7 +30,9 @@
 	export let modelId;
 
 	export let pane;
-
+	// When false, keep component mounted but do not render its Pane/Resizer inside the PaneGroup (prevents interference)
+	export let activeInPaneGroup: boolean = true;
+	
 	let mediaQuery;
 	let largeScreen = false;
 	let dragged = false;
@@ -192,7 +194,7 @@
 	{:else}
 		<!-- if $showControls -->
 
-		{#if $showControls}
+		{#if activeInPaneGroup && $showControls}
 			<PaneResizer
 				class="relative flex w-2 items-center justify-center bg-background group"
 				id="controls-resizer"
@@ -203,83 +205,85 @@
 			</PaneResizer>
 		{/if}
 
-		<Pane
-			bind:pane
-			defaultSize={0}
-			onResize={(size) => {
-				console.log('size', size, minSize);
+		{#if activeInPaneGroup}
+			<Pane
+				bind:pane
+				defaultSize={0}
+				onResize={(size) => {
+					console.log('size', size, minSize);
 
-				if ($showControls && pane.isExpanded()) {
-					if (size < minSize) {
-						pane.resize(minSize);
-					}
+					if ($showControls && pane.isExpanded()) {
+						if (size < minSize) {
+							pane.resize(minSize);
+						}
 
-					if (size < minSize) {
-						localStorage.chatControlsSize = 0;
-					} else {
-						localStorage.chatControlsSize = size;
+						if (size < minSize) {
+							localStorage.chatControlsSize = 0;
+						} else {
+							localStorage.chatControlsSize = size;
+						}
 					}
-				}
-			}}
-			onCollapse={() => {
-				showControls.set(false);
-			}}
-			collapsible={true}
-			class=" z-10 "
-		>
-			{#if $showControls}
-				<div class="flex max-h-full min-h-full">
-					<div
-						class="w-full {($showOverview || $showArtifacts) && !$showCallOverlay
-							? ' '
-							: 'px-4 py-4 bg-white dark:shadow-lg dark:bg-gray-850  border border-gray-100 dark:border-gray-850'} z-40 pointer-events-auto overflow-y-auto scrollbar-hidden"
-						id="controls-container"
-					>
-						{#if $showCallOverlay}
-							<div class="w-full h-full flex justify-center">
-								<CallOverlay
-									bind:files
-									{submitPrompt}
-									{stopResponse}
-									{modelId}
-									{chatId}
-									{eventTarget}
+				}}
+				onCollapse={() => {
+					showControls.set(false);
+				}}
+				collapsible={true}
+				class=" z-10 "
+			>
+				{#if $showControls}
+					<div class="flex max-h-full min-h-full">
+						<div
+							class="w-full {($showOverview || $showArtifacts) && !$showCallOverlay
+								? ' '
+								: 'px-4 py-4 bg-white dark:shadow-lg dark:bg-gray-850  border border-gray-100 dark:border-gray-850'} z-40 pointer-events-auto overflow-y-auto scrollbar-hidden"
+							id="controls-container"
+						>
+							{#if $showCallOverlay}
+								<div class="w-full h-full flex justify-center">
+									<CallOverlay
+										bind:files
+										{submitPrompt}
+										{stopResponse}
+										{modelId}
+										{chatId}
+										{eventTarget}
+										on:close={() => {
+											showControls.set(false);
+										}}
+									/>
+								</div>
+							{:else if $showArtifacts}
+								<Artifacts {history} overlay={dragged} />
+							{:else if $showOverview}
+								<Overview
+									{history}
+									on:nodeclick={(e) => {
+										if (e.detail.node.data.message.favorite) {
+											history.messages[e.detail.node.data.message.id].favorite = true;
+										} else {
+											history.messages[e.detail.node.data.message.id].favorite = null;
+										}
+
+										showMessage(e.detail.node.data.message);
+									}}
 									on:close={() => {
 										showControls.set(false);
 									}}
 								/>
-							</div>
-						{:else if $showArtifacts}
-							<Artifacts {history} overlay={dragged} />
-						{:else if $showOverview}
-							<Overview
-								{history}
-								on:nodeclick={(e) => {
-									if (e.detail.node.data.message.favorite) {
-										history.messages[e.detail.node.data.message.id].favorite = true;
-									} else {
-										history.messages[e.detail.node.data.message.id].favorite = null;
-									}
-
-									showMessage(e.detail.node.data.message);
-								}}
-								on:close={() => {
-									showControls.set(false);
-								}}
-							/>
-						{:else}
-							<Controls
-								on:close={() => {
-									showControls.set(false);
-								}}
-								{models}
-								bind:chatFiles
-								bind:params
-							/>
-						{/if}
+							{:else}
+								<Controls
+									on:close={() => {
+										showControls.set(false);
+									}}
+									{models}
+									bind:chatFiles
+									bind:params
+								/>
+							{/if}
+						</div>
 					</div>
-				</div>
-			{/if}
-		</Pane>
+				{/if}
+			</Pane>
+		{/if}
 	{/if}
 </SvelteFlowProvider>

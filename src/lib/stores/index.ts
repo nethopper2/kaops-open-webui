@@ -75,10 +75,33 @@ export const showShortcuts = writable(false);
 export const showArchivedChats = writable(false);
 export const showChangelog = writable(false);
 
+// Used to show a toolbar when the selected model supports it.
+export const showPrivateAiModelToolbar = writable(false);
+
 export const showControls = writable(false);
 export const showOverview = writable(false);
 export const showArtifacts = writable(false);
 export const showCallOverlay = writable(false);
+
+// Ensure mutual exclusivity between Controls and Private AI Toolbar globally
+// This centralizes the logic so only one of these can be true at a time
+let __enforcingExclusivePanels = false;
+showControls.subscribe((v) => {
+	if (__enforcingExclusivePanels) return;
+	if (v) {
+		__enforcingExclusivePanels = true;
+		showPrivateAiModelToolbar.set(false);
+		__enforcingExclusivePanels = false;
+	}
+});
+showPrivateAiModelToolbar.subscribe((v) => {
+	if (__enforcingExclusivePanels) return;
+	if (v) {
+		__enforcingExclusivePanels = true;
+		showControls.set(false);
+		__enforcingExclusivePanels = false;
+	}
+});
 
 export const artifactCode = writable(null);
 
