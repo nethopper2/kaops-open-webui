@@ -4,7 +4,7 @@ import { Pane, PaneResizer } from 'paneforge';
 import { createEventDispatcher, getContext, onDestroy, onMount } from 'svelte';
 import Drawer from '../common/Drawer.svelte';
 import EllipsisVertical from '../icons/EllipsisVertical.svelte';
-import { showPrivateAiModelToolbar, activeRightPane } from '$lib/stores';
+import { showPrivateAiModelToolbar, activeRightPane, privateAiModelToolbarComponent, currentSelectedModelId } from '$lib/stores';
 import { calcMinSize, createPaneBehavior, isPaneHandle, type PaneHandle, rightPaneSize } from '$lib/utils/pane';
 import XMark from '$lib/components/icons/XMark.svelte';
 
@@ -100,14 +100,16 @@ onDestroy(() => {
         }}
 			>
 				<div class="px-6 py-4 h-full">
-					<div
+ 				<div
 						class="h-full max-h-[100dvh] bg-white text-gray-700 dark:bg-black dark:text-gray-300 flex items-center justify-center">
-						<div class="text-center">
-							<div class="text-base font-semibold">Private AI Model Toolbar</div>
-							<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Placeholder content. Model-specific UI will
-								appear here.
+						{#if $privateAiModelToolbarComponent}
+							<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} />
+						{:else}
+							<div class="text-center">
+								<div class="text-base font-semibold">{$i18n.t('Model Toolbar')}</div>
+								<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No toolbar available for this model.')}</div>
 							</div>
-						</div>
+						{/if}
 					</div>
 				</div>
 			</Drawer>
@@ -169,12 +171,14 @@ onDestroy(() => {
 							</div>
 
 							<div class="w-full h-full flex items-center justify-center">
-								<div class="text-center">
-									<div class="text-base font-semibold">Private AI Model Toolbar</div>
-									<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Placeholder content. Model-specific UI will
-										appear here.
+								{#if $privateAiModelToolbarComponent}
+									<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} />
+								{:else}
+									<div class="text-center">
+										<div class="text-base font-semibold">{$i18n.t('Model Toolbar')}</div>
+										<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No toolbar available for this model.')}</div>
 									</div>
-								</div>
+								{/if}
 							</div>
 						</div>
 					</div>

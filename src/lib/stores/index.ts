@@ -3,8 +3,10 @@ import { type Writable, writable, derived } from 'svelte/store';
 import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
 import type { Socket } from 'socket.io-client';
+import type { ComponentType } from 'svelte';
 
 import emojiShortCodes from '$lib/emoji-shortcodes.json';
+import { PRIVATE_AI_TOOLBAR_COMPONENTS } from '$lib/private-ai/toolbars';
 
 // Backend
 export const WEBUI_NAME = writable(APP_NAME);
@@ -108,6 +110,18 @@ export const activeRightPane = derived(
 	[showControls, showPrivateAiModelToolbar],
 	([controls, privateAi]) => (controls ? 'controls' : privateAi ? 'private' : null) as 'controls' | 'private' | null
 );
+
+// Selected single model id used for Private AI toolbars
+export const currentSelectedModelId: Writable<string | null> = writable<string | null>(null);
+
+// Derived: component to render for the selected model's toolbar (if any)
+export const privateAiModelToolbarComponent = derived(currentSelectedModelId, (id): ComponentType | null => {
+	if (!id) return null;
+	return PRIVATE_AI_TOOLBAR_COMPONENTS[id] ?? null;
+});
+
+// Derived: whether Private AI Model Toolbar can be used with the selected model
+export const canShowPrivateAiModelToolbar = derived(privateAiModelToolbarComponent, (comp) => Boolean(comp));
 
 export const artifactCode = writable(null);
 

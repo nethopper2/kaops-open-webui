@@ -14,7 +14,7 @@
 	import type { i18n as i18nType } from 'i18next';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 
-	import {
+ import {
 		chatId,
 		chats,
 		config,
@@ -39,7 +39,8 @@
 		tools,
 		toolServers,
 		selectedFolder,
-		pinnedChats
+		pinnedChats,
+		currentSelectedModelId
 	} from '$lib/stores';
 	import {
 		convertMessagesToHistory,
@@ -123,8 +124,18 @@
 
 	let selectedModels = [''];
 	let atSelectedModel: Model | undefined;
-	let selectedModelIds = [];
-	$: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
+ let selectedModelIds = [];
+ $: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
+
+ // Keep a global store updated with the current single selected model id (or null if multiple/none)
+ $: {
+ 	const singleId = atSelectedModel
+ 		? atSelectedModel.id
+ 		: (Array.isArray(selectedModels) && selectedModels.length === 1 && selectedModels[0] !== ''
+ 			? selectedModels[0]
+ 			: null);
+ 	currentSelectedModelId.set(singleId);
+ }
 
 	let selectedToolIds = [];
 	let selectedFilterIds = [];

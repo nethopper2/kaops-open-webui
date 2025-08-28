@@ -2,7 +2,7 @@
 	import { getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 
-	import {
+ import {
 		WEBUI_NAME,
 		banners,
 		chatId,
@@ -13,7 +13,9 @@
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
-		user, showPrivateAiModelToolbar
+		user,
+		showPrivateAiModelToolbar,
+		canShowPrivateAiModelToolbar
 	} from '$lib/stores';
 
 	import { slide } from 'svelte/transition';
@@ -35,7 +37,8 @@
 	import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte';
 
 	import EllipsisHorizontal from '../icons/EllipsisHorizontal.svelte';
-	import ChatPlus from '../icons/ChatPlus.svelte';
+ import ChatPlus from '../icons/ChatPlus.svelte';
+ import PrivateAiToolbar from '../icons/PrivateAiToolbar.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -197,17 +200,19 @@
 								</div>
 							</button>
 
-							<button
-								class=" bg-red-300 shadow font-bold flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
-        on:click={async () => {
-											await showPrivateAiModelToolbar.set(!$showPrivateAiModelToolbar);
-										}}
-								aria-label="Controls"
-							>
-								<div class=" m-auto self-center">
-									TEMP
-								</div>
-							</button>
+       {#if $canShowPrivateAiModelToolbar}
+						<button
+							class="flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
+							on:click={async () => {
+								await showPrivateAiModelToolbar.set(!$showPrivateAiModelToolbar);
+							}}
+							aria-label="Model Toolbar"
+						>
+							<div class=" m-auto self-center">
+								<PrivateAiToolbar className="size-5" strokeWidth="1.5" />
+							</div>
+						</button>
+					{/if}
 						</Tooltip>
 					{/if}
 
