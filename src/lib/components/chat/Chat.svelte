@@ -40,7 +40,8 @@
 		toolServers,
 		selectedFolder,
 		pinnedChats,
-		currentSelectedModelId
+		currentSelectedModelId,
+		canShowPrivateAiModelToolbar
 	} from '$lib/stores';
 	import {
 		convertMessagesToHistory,
@@ -126,7 +127,7 @@
 	let atSelectedModel: Model | undefined;
  let selectedModelIds = [];
  $: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
-
+ 
  // Keep a global store updated with the current single selected model id (or null if multiple/none)
  $: {
  	const singleId = atSelectedModel
@@ -135,6 +136,17 @@
  			? selectedModels[0]
  			: null);
  	currentSelectedModelId.set(singleId);
+ }
+ 
+ // When the selected model supports a Private AI toolbar, automatically open it
+ $: if ($canShowPrivateAiModelToolbar) {
+ 	if (!$showPrivateAiModelToolbar) {
+ 		showPrivateAiModelToolbar.set(true);
+ 		// Try to expand the pane on large screens once mounted
+ 		Promise.resolve().then(() => {
+ 			privateAiPaneComponent?.openPane?.();
+ 		});
+ 	}
  }
 
 	let selectedToolIds = [];
