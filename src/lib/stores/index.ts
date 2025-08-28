@@ -1,5 +1,5 @@
 import { APP_NAME, WEBUI_BASE_URL } from '$lib/constants';
-import { type Writable, writable, derived } from 'svelte/store';
+import { type Writable, writable, derived, get } from 'svelte/store';
 import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
 import type { Socket } from 'socket.io-client';
@@ -134,6 +134,16 @@ export const privateAiSelectedModelAvatarUrl = derived(
 		);
 	}
 );
+
+// Auto-close Private AI Toolbar when it can't be shown for the selected model
+canShowPrivateAiModelToolbar.subscribe((canShow) => {
+	if (!canShow && get(showPrivateAiModelToolbar)) {
+		// prevent feedback loops with other subscriptions
+		__enforcingExclusivePanels = true;
+		showPrivateAiModelToolbar.set(false);
+		__enforcingExclusivePanels = false;
+	}
+});
 
 export const artifactCode = writable(null);
 
