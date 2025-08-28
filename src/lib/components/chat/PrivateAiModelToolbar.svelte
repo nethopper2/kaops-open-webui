@@ -1,14 +1,11 @@
 <script lang="ts">
   import { SvelteFlowProvider } from '@xyflow/svelte';
   import { Pane, PaneResizer } from 'paneforge';
-  import { onDestroy, onMount, tick } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Drawer from '../common/Drawer.svelte';
   import EllipsisVertical from '../icons/EllipsisVertical.svelte';
   import { showPrivateAiModelToolbar, activeRightPane } from '$lib/stores';
-
-  type PaneHandle = { resize: (n: number) => void; isExpanded: () => boolean; getSize: () => number };
-  const isPaneHandle = (x: unknown): x is PaneHandle =>
-    !!x && typeof x === 'object' && 'resize' in x && 'isExpanded' in x && 'getSize' in x;
+  import { calcMinSize, createPaneBehavior, isPaneHandle, type PaneHandle, rightPaneSize } from '$lib/utils/pane';
 
   export let pane: unknown;
   let activeInPaneGroup = false;
@@ -18,29 +15,19 @@
   let largeScreen = false;
   let minSize = 0;
   let hasExpanded = false;
-  let opening = false;
+  let paneHandle: PaneHandle | null = null;
+  $: paneHandle = isPaneHandle(pane) ? (pane as PaneHandle) : null;
 
-  // Public helper to open/resize the pane from parent (deferred to avoid Paneforge assertions)
+  const behavior = createPaneBehavior({
+    storageKey: 'privateAiToolbarSize',
+    showStore: showPrivateAiModelToolbar,
+    isActiveInPaneGroup: () => activeInPaneGroup,
+    getMinSize: () => minSize
+  });
+
+  // Public helper to open/resize the pane (delegates to shared behavior)
   export const openPane = async () => {
-    const stored = localStorage.getItem('privateAiToolbarSize');
-    const parsed = stored ? parseInt(stored) : NaN;
-    if (!largeScreen || !activeInPaneGroup || !isPaneHandle(pane)) return;
-    const target = !Number.isNaN(parsed) && parsed > 0 ? parsed : minSize;
-    opening = true;
-    await tick();
-    requestAnimationFrame(() => {
-      if ($showPrivateAiModelToolbar && largeScreen && activeInPaneGroup && isPaneHandle(pane)) {
-        try {
-          pane.resize(target);
-        } catch (e) {
-          console.warn('Deferred resize failed', e);
-        } finally {
-          opening = false;
-        }
-      } else {
-        opening = false;
-      }
-    });
+    await behavior.openPane(paneHandle, largeScreen);
   };
 
   const handleMediaQuery = async (e: MediaQueryList | MediaQueryListEvent) => {
@@ -62,17 +49,15 @@
 
     const container = document.getElementById('chat-container');
     if (container) {
-      minSize = Math.floor((350 / container.clientWidth) * 100);
+      minSize = calcMinSize(container, 350);
 
       const resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          const width = entry.contentRect.width;
-          const percentage = (350 / width) * 100;
-          minSize = Math.floor(percentage);
+          minSize = calcMinSize(entry.target as HTMLElement, 350);
 
           if ($showPrivateAiModelToolbar && activeInPaneGroup) {
-            if (isPaneHandle(pane) && pane.isExpanded() && pane.getSize() < minSize) {
-              pane.resize(minSize);
+            if (paneHandle && paneHandle.isExpanded() && paneHandle.getSize() < minSize) {
+              behavior.scheduleClamp(paneHandle, minSize);
             }
           }
         }
@@ -83,36 +68,17 @@
 
   onDestroy(() => {
     showPrivateAiModelToolbar.set(false);
-    // Note: listener reference must match; in this simple case, leaving removal best-effort.
-    // If this component re-mounts frequently, consider hoisting mqListener to outer scope.
-    // Some browsers allow removal without exact ref; ignore if not removed.
   });
 
   // Keep Pane width in sync with visibility on desktop (defer resizes to avoid assertions)
-  $: if (largeScreen && activeInPaneGroup && isPaneHandle(pane)) {
-    if ($showPrivateAiModelToolbar) {
-      if (!pane.isExpanded() || pane.getSize() === 0) {
-        // Defer to openPane which already handles tick + rAF
-        openPane?.();
-      }
-    } else {
-      if (pane.isExpanded() && pane.getSize() !== 0) {
-        // Defer collapse to 0 after tick + rAF
-        (async () => {
-          await tick();
-          requestAnimationFrame(() => {
-            if (! $showPrivateAiModelToolbar && largeScreen && activeInPaneGroup && isPaneHandle(pane)) {
-              try { pane.resize(0); } catch (e) { console.warn('Deferred collapse failed', e); }
-            }
-          });
-        })();
-      }
+  $: if (largeScreen && activeInPaneGroup && paneHandle && $showPrivateAiModelToolbar) {
+    if (!paneHandle.isExpanded() || paneHandle.getSize() === 0) {
+      openPane?.();
     }
   }
 
   // Ensure pane opens as soon as it becomes active in the PaneGroup (child-driven open)
   $: if (largeScreen && activeInPaneGroup && $showPrivateAiModelToolbar) {
-    // openPane internally chooses stored or minSize
     openPane?.();
   }
 </script>
@@ -148,28 +114,23 @@
     {#if activeInPaneGroup}
       <Pane
         bind:pane
-        defaultSize={0}
+        defaultSize={$rightPaneSize || minSize}
         onResize={(size) => {
           // Mark that the pane has expanded at least once when size > 0
           if (size > 0) {
             hasExpanded = true;
           }
-          if ($showPrivateAiModelToolbar && isPaneHandle(pane) && pane.isExpanded()) {
+          if ($showPrivateAiModelToolbar && paneHandle && paneHandle.isExpanded()) {
             if (size < minSize) {
-              pane.resize(minSize);
+              behavior.scheduleClamp(paneHandle, minSize);
             }
-            if (size < minSize) {
-              localStorage.setItem('privateAiToolbarSize', '0');
-            } else {
-              localStorage.setItem('privateAiToolbarSize', String(size));
-            }
+            behavior.persistSize(size, minSize);
+            rightPaneSize.set(size);
           }
         }}
         onCollapse={() => {
-          // Ignore collapse events that occur while we're actively opening to a visible size
-          if (opening) {
-            return;
-          }
+					// Ignore collapse events while we are in the process of opening to a visible size
+          if (behavior.isOpening()) return;
           // Only hide after the pane has actually expanded at least once; ignore initial mount collapse
           if (hasExpanded) {
             showPrivateAiModelToolbar.set(false);

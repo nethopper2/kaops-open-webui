@@ -5,6 +5,7 @@
 
 	import { onDestroy, onMount, tick } from 'svelte';
  import { mobile, showControls, showCallOverlay, showOverview, showArtifacts, activeRightPane } from '$lib/stores';
+ import { calcMinSize, createPaneBehavior, isPaneHandle, type PaneHandle, rightPaneSize } from '$lib/utils/pane';
 
 	import Modal from '../common/Modal.svelte';
 	import Controls from './Controls/Controls.svelte';
@@ -33,7 +34,7 @@
 	// When false, keep component mounted but do not render its Pane/Resizer inside the PaneGroup (prevents interference)
 	let activeInPaneGroup: boolean = true;
 	$: activeInPaneGroup = $activeRightPane === 'controls';
-	
+
 	let mediaQuery;
 	let largeScreen = false;
 	let dragged = false;
@@ -41,40 +42,18 @@
 	let minSize = 0;
 
 	let hasExpanded = false;
-	let opening = false;
+	let paneHandle: PaneHandle | null = null;
+	$: paneHandle = isPaneHandle(pane) ? (pane as PaneHandle) : null;
 
-	let clampScheduled = false;
-	const scheduleClamp = () => {
-		if (clampScheduled) return;
-		clampScheduled = true;
-		setTimeout(() => {
-			clampScheduled = false;
-			if ($showControls && pane && typeof pane.isExpanded === "function" && typeof pane.getSize === "function") {
-				try {
-					if (pane.isExpanded() && pane.getSize() < minSize) {
-						pane.resize(minSize);
-					}
-				} catch (err) {
-					console.warn('Failed to clamp pane size', err);
-				}
-			}
-		}, 0);
-	};
+	const behavior = createPaneBehavior({
+		storageKey: 'chatControlsSize',
+		showStore: showControls,
+		isActiveInPaneGroup: () => activeInPaneGroup,
+		getMinSize: () => minSize
+	});
 
-	export const openPane = () => {
-		// Only attempt to resize when the desktop PaneGroup is active and this pane is participating
-		if (!largeScreen || !activeInPaneGroup || !pane) return;
-		const stored = parseInt(localStorage?.chatControlsSize);
-		const target = stored && stored > 0 ? stored : Math.max(minSize, 1);
-		try {
-			if (typeof pane.getSize === 'function') {
-				const current = pane.getSize();
-				if (current === target) return;
-			}
-			pane.resize(target);
-		} catch (e) {
-			// ignore resize errors to avoid noisy logs; safe because pane state will be reconciled by Paneforge
-		}
+	export const openPane = async () => {
+		await behavior.openPane(paneHandle, largeScreen);
 	};
 
 	const handleMediaQuery = async (e) => {
@@ -117,21 +96,15 @@
 		const container = document.getElementById('chat-container');
 
  	// initialize the minSize based on the container width
-		minSize = Math.floor((350 / container.clientWidth) * 100);
+		minSize = calcMinSize(container, 350);
 
 		// Create a new ResizeObserver instance
 		const resizeObserver = new ResizeObserver((entries) => {
 			for (let entry of entries) {
-				const width = entry.contentRect.width;
-				// calculate the percentage of 200px
-				const percentage = (350 / width) * 100;
-				// set the minSize to the percentage, must be an integer
-				minSize = Math.floor(percentage);
+				minSize = calcMinSize(entry.target as HTMLElement, 350);
 
-				if ($showControls) {
-					if (pane && pane.isExpanded && pane.getSize && pane.isExpanded() && pane.getSize() < minSize) {
-						scheduleClamp();
-					}
+				if ($showControls && paneHandle && paneHandle.isExpanded() && paneHandle.getSize() < minSize) {
+					behavior.scheduleClamp(paneHandle, minSize);
 				}
 			}
 		});
@@ -166,19 +139,8 @@
 	}
 
 	// Ensure the pane actually opens to a visible width when activated in the PaneGroup (desktop)
-	$: if (largeScreen && activeInPaneGroup && $showControls && pane && !opening) {
-		opening = true;
-		// Defer to next frame to ensure pane binding is ready and avoid re-entrant resize
-		tick().then(() => {
-			requestAnimationFrame(() => {
-				try {
-					openPane?.();
-				} catch (err) {
-					// ignore
-				}
-				opening = false;
-			});
-		});
+	$: if (largeScreen && activeInPaneGroup && $showControls && paneHandle) {
+		openPane?.();
 	}
 </script>
 
@@ -252,29 +214,25 @@
 		{/if}
 
 		{#if activeInPaneGroup}
-			<Pane
-				bind:pane
-				defaultSize={0}
-				onResize={(size) => {
+		 <Pane
+			 bind:pane
+			 defaultSize={$rightPaneSize || minSize}
+			 onResize={(size) => {
 					// Mark that the pane has expanded at least once when size > 0
 					hasExpanded = hasExpanded || size > 0;
 					console.log('size', size, minSize);
 
-					if ($showControls && pane.isExpanded()) {
+     			if ($showControls && paneHandle && paneHandle.isExpanded()) {
 						if (size < minSize) {
-							scheduleClamp();
+							behavior.scheduleClamp(paneHandle, minSize);
 						}
-
-						if (size < minSize) {
-							localStorage.chatControlsSize = 0;
-						} else {
-							localStorage.chatControlsSize = size;
-						}
+						behavior.persistSize(size, minSize);
+						rightPaneSize.set(size);
 					}
 				}}
 				onCollapse={() => {
 					// Ignore collapse events while we are in the process of opening to a visible size
-					if (opening) return;
+					if (behavior.isOpening()) return;
 					// Only hide after the pane has actually expanded at least once; ignore initial mount collapse
 					if (hasExpanded) {
 						showControls.set(false);
