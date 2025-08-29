@@ -176,7 +176,7 @@ onDestroy(() => {
 								</button>
 							</div>
 
-							<div class="w-full h-full flex items-center justify-center">
+							<div class="flex flex-col w-full h-full">
 								{#if $privateAiModelToolbarComponent}
 									<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} />
 								{:else}
