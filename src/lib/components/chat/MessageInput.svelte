@@ -51,7 +51,7 @@
 	import { generateAutoCompletion } from '$lib/apis';
 	import { deleteFileById } from '$lib/apis/files';
 
-	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT, TOKEN_REPLACER_MODEL_ID } from '$lib/constants';
+ import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT } from '$lib/constants';
 
 	import InputMenu from './MessageInput/InputMenu.svelte';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
@@ -79,13 +79,6 @@
 	import NethopperLogo from '$lib/components/private-ai/NethopperLogo.svelte';
 	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte';
 	import { appHooks } from '$lib/utils/hooks';
-
-	import { fetchDocxFiles, fetchCsvFiles } from '$lib/apis/tokenizedFiles';
-
-	import Eye from '../icons/Eye.svelte';
-	import QuestionMarkCircle from '../icons/QuestionMarkCircle.svelte';
-	import FilePreviewDialog from './MessageInput/FilePreviewDialog.svelte';
-	import FilterSelect from './MessageInput/FilterSelect.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -846,50 +839,6 @@
 		shiftKey = false;
 	};
 
-	function setPromptRTFormat(docxPath = '', csvPath = '') {
-		let promptText = '';
-
-		// Only add mineral file if one is selected
-		if (docxPath) {
-			promptText += `Mineral file: ${docxPath}`;
-		}
-
-		// Only add values file if one is selected
-		if (csvPath) {
-			// Add newline if we already have mineral file content
-			if (promptText) {
-				promptText += '\n\n\n';
-			}
-			promptText += `Values file: ${csvPath}`;
-		}
-
-		setText(promptText);
-	}
-
-	function applyTokenReplacerFont() {
-		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
-			setTimeout(() => {
-				const chatInputElement = document.getElementById('chat-input');
-				if (chatInputElement && ($settings?.richTextInput ?? true)) {
-					chatInputElement.style.fontFamily = 'monospace';
-					chatInputElement.style.fontSize = '0.8em';
-				}
-			}, 0);
-		}
-	}
-
-	function resetToDefaultFont() {
-		if (atSelectedModel?.id !== TOKEN_REPLACER_MODEL_ID) {
-			setTimeout(() => {
-				const chatInputElement = document.getElementById('chat-input');
-				if (chatInputElement) {
-					chatInputElement.style.fontFamily = '';
-					chatInputElement.style.fontSize = '';
-				}
-			}, 0);
-		}
-	}
-
 	onMount(async () => {
 		loaded = true;
 
@@ -931,185 +880,9 @@
 			dropzoneElement?.removeEventListener('dragleave', onDragLeave);
 		}
 
-		// Clear the filesFetched timeout to prevent memory leaks
-		if (filesFetchedTimeout) {
-			clearTimeout(filesFetchedTimeout);
-			filesFetchedTimeout = null;
-		}
 	});
-
-	// Token Replacer LLM file selection state
-	// TODO: Model specific tools & UI can't grow in this file, we should cleanup and determine where they live.
-let docxFiles = [];
-let csvFiles = [];
-let selectedDocx = '';
-let selectedCsv = '';
-let selectedDocxValue = ''; // Store the actual selected value separately from UI
-let selectedCsvValue = ''; // Store the actual selected value separately from UI
-let loadingFiles = false;     // initial blocking load (shows message only if no data yet)
-let refreshingFiles = false;  // background refresh (no blocking UI)
-let filesFetched = false;     // prevents repeated initial fetch
-let filesRefreshAllowed = false; // becomes true after timeout; next open triggers refresh
-let filesFetchedTimeout = null; // Track timeout for cleanup
-
-function scheduleRefreshAllowTimer() {
-	// Allow background refresh after a delay
-	if (filesFetchedTimeout) {
-		clearTimeout(filesFetchedTimeout);
-	}
-	filesFetchedTimeout = setTimeout(() => {
-		if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
-			filesRefreshAllowed = true;
-		}
-		filesFetchedTimeout = null;
-	}, 5 * 60 * 1000); // 5 minutes
-}
-
-async function fetchTokenFiles(refresh = false) {
-	// Prevent redundant calls
-	if (!refresh && filesFetched) return;
-	if (refresh ? refreshingFiles : loadingFiles) return;
-
-	// Do not show blocking loader when we already have files
-	filesRefreshAllowed = false;
-	const haveFiles = (docxFiles?.length ?? 0) > 0 || (csvFiles?.length ?? 0) > 0;
-	if (refresh || haveFiles) {
-		refreshingFiles = true;
-	} else {
-		loadingFiles = true;
-	}
-
-	try {
-		const [docxResult, csvResult] = await Promise.all([fetchDocxFiles(), fetchCsvFiles()]);
-		docxFiles = (Array.isArray(docxResult) ? docxResult : (docxResult?.files ?? [])).map((file, idx) => ({
-			...file,
-			idx
-		}));
-		csvFiles = (Array.isArray(csvResult) ? csvResult : (csvResult?.files ?? [])).map((file, idx) => ({
-			...file,
-			idx
-		}));
-		filesFetched = true;
-	} finally {
-		if (refreshingFiles) {
-			refreshingFiles = false;
-		} else {
-			loadingFiles = false;
-		}
-		// Start/restart the timer that allows the next refresh window
-		scheduleRefreshAllowTimer();
-	}
-}
-
-$: if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID && !filesFetched) {
-	// Initial load only; subsequent refresh is deferred until user opens the selector
-	fetchTokenFiles();
-}
-
-// Reset filesFetched when model changes
-$: if (atSelectedModel?.id !== TOKEN_REPLACER_MODEL_ID) {
-	filesFetched = false;
-	filesRefreshAllowed = false;
-	refreshingFiles = false;
-	if (filesFetchedTimeout) {
-		clearTimeout(filesFetchedTimeout);
-		filesFetchedTimeout = null;
-	}
-	selectedDocx = selectedCsv = '';
-	selectedDocxValue = selectedCsvValue = '';
-}
-
-let showFileSelectionError = false;
-
-// Reset error when user changes selection
-$: if (selectedDocx && selectedCsv) {
-	showFileSelectionError = false;
-}
-
-// Change updatePromptWithFilenames to async
-async function updatePromptWithFilenames(type) {
-	// Always get both current selections using the stored values
-	const docxFile = docxFiles.find(f => String(f.idx) === String(selectedDocxValue));
-	const csvFile = csvFiles.find(f => String(f.idx) === String(selectedCsvValue));
-
-	let docxUrl = docxFile?.url || '';
-	let csvUrl = csvFile?.url || '';
-
-	// Remove query parameters if they exist
-	if (docxUrl.includes('?')) {
-		docxUrl = docxUrl.split('?')[0];
-	}
-	if (csvUrl.includes('?')) {
-		csvUrl = csvUrl.split('?')[0];
-	}
-
-	setPromptRTFormat(docxUrl, csvUrl);
-	applyTokenReplacerFont();
-	await tick();
-	const chatInputElement = document.getElementById('chat-input');
-	if (chatInputElement) {
-		chatInputElement.focus();
-		chatInputElement.dispatchEvent(new Event('input'));
-	}
-	await tick();
-
-	// NOTE: This is commented out since there is now a clear button in FilterSelect
-	// Clear the select boxes after updating the prompt
-	// if (type === 'docx') {
-	// 	// selectedDocx = '';
-	// } else if (type === 'csv') {
-	// 	// selectedCsv = '';
-	// }
-}
-
-// Handle prompt initialization when model changes
-let previousModelId = null;
-$: {
-  if (atSelectedModel?.id !== previousModelId) {
-    // Model has changed
-    if (atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID) {
-      // Switching TO Token Replacer model - initialize prompt and apply font
-      setPromptRTFormat('', '');
-      applyTokenReplacerFont();
-    } else if (previousModelId === TOKEN_REPLACER_MODEL_ID) {
-      // Switching AWAY from Token Replacer model - clear prompt and reset font
-      setText('')
-      resetToDefaultFont();
-    }
-    previousModelId = atSelectedModel?.id;
-  }
-}
-
-// Dialog state for file preview
-let showPreviewDialog = false;
-let previewFile = null;
-let previewType = null; // 'docx' | 'csv'
-
-function openPreviewDialog(type) {
-	if (type === 'docx') {
-		previewType = 'docx';
-		previewFile = docxFiles.find(f => String(f.idx) === String(selectedDocxValue));
-	} else if (type === 'csv') {
-		previewType = 'csv';
-		previewFile = csvFiles.find(f => String(f.idx) === String(selectedCsvValue));
-	}
-	showPreviewDialog = true;
-}
-function closePreviewDialog() {
-	showPreviewDialog = false;
-	previewFile = null;
-	previewType = null;
-}
+	
 </script>
-
-{#if showPreviewDialog}
-	<FilePreviewDialog
-		show={showPreviewDialog}
-		file={previewFile}
-		previewType={previewType}
-		on:close={closePreviewDialog}
-	/>
-{/if}
 
 <FilesOverlay show={dragged} />
 <ToolServersModal bind:show={showTools} {selectedToolIds} />
@@ -1131,97 +904,6 @@ function closePreviewDialog() {
 					: 'max-w-6xl'} w-full"
 			>
 				<div class="relative">
-
-					<!-- Token Replacer LLM file selection UI -->
-					{#if atSelectedModel?.id === TOKEN_REPLACER_MODEL_ID}
-						<div class="ml-4 mb-2 p-2 rounded bg-white dark:bg-gray-900">
-							{#if loadingFiles && (docxFiles.length === 0 && csvFiles.length === 0)}
-								<div class="text-gray-500 text-sm">Loading available token files...</div>
-							{:else}
-								<div class="text-xs text-gray-500 mb-1 text-left">
-									Selecting Mineral and Values files auto-populates the prompt box for you.
-								</div>
-								<div class="flex gap-2 items-center">
-									{#if (docxFiles ?? []).length > 0}
-										<FilterSelect
-											bind:value={selectedDocx}
-											items={docxFiles}
-											placeholder="Select Mineral File"
-											onOpen={() => {
-												// If files are stale and not already refreshing, refresh in background without blocking UI
-												if (filesRefreshAllowed && !refreshingFiles) {
-													fetchTokenFiles(true);
-												}
-											}}
-											onSelect={async (value) => {
-												selectedDocx = value;
-												selectedDocxValue = value;
-												await updatePromptWithFilenames('docx');
-											}}
-										/>
-										<!-- Preview button for mineral file -->
-										<Tooltip content="Preview Mineral File" placement="top">
-											<button
-												class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
-												disabled={selectedDocx === ""}
-												aria-label="Preview Mineral File"
-												on:click={() => openPreviewDialog('docx')}
-											>
-												<Eye className="w-5 h-5" />
-											</button>
-										</Tooltip>
-									{:else}
-										<div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-											<span class="text-sm text-gray-600 dark:text-gray-400">No mineral files available</span>
-											<Tooltip content="Upload DOCX files to the workspace to use them here." placement="top">
-												<QuestionMarkCircle className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-											</Tooltip>
-										</div>
-									{/if}
-
-									{#if (csvFiles ?? []).length > 0}
-										<FilterSelect
-											bind:value={selectedCsv}
-											items={csvFiles}
-											placeholder="Select Values File"
-											onOpen={() => {
-												// If files are stale and not already refreshing, refresh in background without blocking UI
-												if (filesRefreshAllowed && !refreshingFiles) {
-													fetchTokenFiles(true);
-												}
-											}}
-											onSelect={async (value) => {
-												selectedCsv = value;
-												selectedCsvValue = value;
-												await updatePromptWithFilenames('csv');
-											}}
-										/>
-										<!-- Preview button for csv file, always visible, disabled if none selected -->
-										<Tooltip content="Preview Values File" placement="top">
-											<button
-												class="p-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
-												disabled={selectedCsv === ""}
-												aria-label="Preview Values File"
-												on:click={() => openPreviewDialog('csv')}
-											>
-												<Eye className="w-5 h-5" />
-											</button>
-										</Tooltip>
-									{:else}
-										<div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-											<span class="text-sm text-gray-600 dark:text-gray-400">No values files available</span>
-											<Tooltip content="Upload CSV files to the workspace to use them here." placement="top">
-												<QuestionMarkCircle className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-											</Tooltip>
-										</div>
-									{/if}
-								</div>
-								{#if showFileSelectionError}
-									<div class="text-gray-500 text-xs mt-1">Please select both a DOCX and a CSV file.</div>
-								{/if}
-							{/if}
-						</div>
-					{/if}
 
 					{#if autoScroll === false && history?.currentId}
 						<div
