@@ -77,11 +77,11 @@ onMount(() => {
 	/>
 {/if}
 
-<div class="px-2 py-2">
+<div class="flex flex-col w-full -h-full px-2 py-2">
 	<div class="text-xs text-gray-500 mb-2 text-left">
 		Let's get started. To replace tokens in your document, select a document from the list below.
 	</div>
-	<div class="flex gap-2 items-center">
+	<div class="flex flex-col w-full h-full gap-2 items-center">
 		<div class="flex items-center gap-2 w-full min-w-0">
 			<!-- https://svelte-select-examples.vercel.app -->
 			<Select

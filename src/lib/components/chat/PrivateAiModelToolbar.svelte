@@ -103,14 +103,15 @@ onDestroy(() => {
         }}
 			>
 				<div class="px-6 py-4 h-full">
- 				<div
+					<div
 						class="h-full max-h-[100dvh] bg-white text-gray-700 dark:bg-black dark:text-gray-300 flex items-center justify-center">
 						{#if $privateAiModelToolbarComponent}
 							<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} />
 						{:else}
 							<div class="text-center">
 								<div class="text-base font-semibold">{$i18n.t('Model Sidekick')}</div>
-								<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No toolbar available for this model.')}</div>
+								<div
+									class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No toolbar available for this model.')}</div>
 							</div>
 						{/if}
 					</div>
@@ -156,32 +157,32 @@ onDestroy(() => {
 				class="z-10"
 			>
 				{#if $showPrivateAiModelToolbar}
-
-
 					<div class="flex max-h-full min-h-full">
 						<div
 							class="w-full px-4 py-4 bg-white dark:shadow-lg dark:bg-gray-850 border border-gray-100 dark:border-gray-850 z-40 pointer-events-auto overflow-y-auto scrollbar-hidden">
-							<div class=" flex items-center justify-between dark:text-gray-100 mb-2">
-								<div class="flex items-center gap-2">
-									<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover" draggable="false" />
-									<div class=" text-lg font-medium self-center font-primary">{$i18n.t('Model Sidekick')}</div>
-								</div>
-								<button
-									class="self-center"
-									on:click={() => {
+							<div class="flex flex-col w-full h-full">
+								<div class="flex items-center justify-between dark:text-gray-100 mb-2">
+									<div class="flex items-center gap-2">
+										<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover"
+												 draggable="false" />
+										<div class=" text-lg font-medium self-center font-primary">{$i18n.t('Model Sidekick')}</div>
+									</div>
+									<button
+										class="self-center"
+										on:click={() => {
 										dispatch('close');
 									}}
-								>
-									<XMark className="size-3.5" />
-								</button>
-							</div>
+									>
+										<XMark className="size-3.5" />
+									</button>
+								</div>
 
-							<div class="flex flex-col w-full h-full">
 								{#if $privateAiModelToolbarComponent}
 									<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} />
 								{:else}
 									<div class="text-center">
-										<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('Not available for this model.')}</div>
+										<div
+											class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('Not available for this model.')}</div>
 									</div>
 								{/if}
 							</div>
