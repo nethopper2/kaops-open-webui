@@ -28,6 +28,7 @@
 	import { getChatList } from '$lib/apis/chats';
 	import { isPrivateAiModel } from '$lib/utils/privateAi';
 	import LockClosed from '$lib/components/icons/LockClosed.svelte';
+	import Spinner from '$lib/components/common/Spinner.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -245,8 +246,8 @@
 					/>
 				</div>
 			{:else}
-				<div class="text-sm text-gray-500 dark:text-gray-400 py-6 select-none">
-					{$i18n.t('Waiting for Model Sidekick Input.')}
+				<div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-6 select-none">
+					<Spinner/> {$i18n.t('Waiting for Model Sidekick Input.')}
 				</div>
 			{/if}
 		</div>
