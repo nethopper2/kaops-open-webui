@@ -109,7 +109,7 @@ onDestroy(() => {
 							<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} />
 						{:else}
 							<div class="text-center">
-								<div class="text-base font-semibold">{$i18n.t('Model Toolbar')}</div>
+								<div class="text-base font-semibold">{$i18n.t('Model Sidekick')}</div>
 								<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No toolbar available for this model.')}</div>
 							</div>
 						{/if}
@@ -164,7 +164,7 @@ onDestroy(() => {
 							<div class=" flex items-center justify-between dark:text-gray-100 mb-2">
 								<div class="flex items-center gap-2">
 									<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover" draggable="false" />
-									<div class=" text-lg font-medium self-center font-primary">{$i18n.t('Model Toolbar')}</div>
+									<div class=" text-lg font-medium self-center font-primary">{$i18n.t('Model Sidekick')}</div>
 								</div>
 								<button
 									class="self-center"
@@ -181,8 +181,7 @@ onDestroy(() => {
 									<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} />
 								{:else}
 									<div class="text-center">
-										<div class="text-base font-semibold">{$i18n.t('Model Toolbar')}</div>
-										<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No toolbar available for this model.')}</div>
+										<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('Not available for this model.')}</div>
 									</div>
 								{/if}
 							</div>
