@@ -7,6 +7,7 @@ import type { ComponentType } from 'svelte';
 
 import emojiShortCodes from '$lib/emoji-shortcodes.json';
 import { PRIVATE_AI_TOOLBAR_COMPONENTS } from '$lib/private-ai/toolbars';
+import { appHooks } from '$lib/utils/hooks';
 
 // Backend
 export const WEBUI_NAME = writable(APP_NAME);
@@ -89,17 +90,24 @@ export const showCallOverlay = writable(false);
 // This centralizes the logic so only one of these can be true at a time
 let __enforcingExclusivePanels = false;
 showControls.subscribe((v) => {
+	console.log('[stores] showControls ->', v, { __enforcingExclusivePanels });
 	if (__enforcingExclusivePanels) return;
 	if (v) {
 		__enforcingExclusivePanels = true;
+		console.log('[stores] showControls true -> forcing showPrivateAiModelToolbar false');
 		showPrivateAiModelToolbar.set(false);
 		__enforcingExclusivePanels = false;
 	}
 });
 showPrivateAiModelToolbar.subscribe((v) => {
+	console.log('[stores] showPrivateAiModelToolbar ->', v, { __enforcingExclusivePanels });
+	if (v === false) {
+		console.trace('[stores] showPrivateAiModelToolbar set to false stack');
+	}
 	if (__enforcingExclusivePanels) return;
 	if (v) {
 		__enforcingExclusivePanels = true;
+		console.log('[stores] showPrivateAiModelToolbar true -> forcing showControls false');
 		showControls.set(false);
 		__enforcingExclusivePanels = false;
 	}
@@ -110,6 +118,10 @@ export const activeRightPane = derived(
 	[showControls, showPrivateAiModelToolbar],
 	([controls, privateAi]) => (controls ? 'controls' : privateAi ? 'private' : null) as 'controls' | 'private' | null
 );
+
+activeRightPane.subscribe((v) => {
+	console.log('[stores] activeRightPane ->', v);
+});
 
 // Selected single model id used for Private AI toolbars
 export const currentSelectedModelId: Writable<string | null> = writable<string | null>(null);
@@ -135,13 +147,24 @@ export const privateAiSelectedModelAvatarUrl = derived(
 	}
 );
 
-// Auto-close Private AI Toolbar when it can't be shown for the selected model
-canShowPrivateAiModelToolbar.subscribe((canShow) => {
-	if (!canShow && get(showPrivateAiModelToolbar)) {
-		// prevent feedback loops with other subscriptions
-		__enforcingExclusivePanels = true;
-		showPrivateAiModelToolbar.set(false);
-		__enforcingExclusivePanels = false;
+
+// Emit model.changed hook whenever the selected model changes
+let __prevHookModelId: string | null = null;
+currentSelectedModelId.subscribe((modelId) => {
+	console.log('currentSelectedModelId subscription called for modelId', modelId);
+	const prevModelId = __prevHookModelId;
+	__prevHookModelId = modelId;
+	try {
+		// Compute canShow synchronously to avoid reactive timing issues
+		const canShow = !!(modelId && PRIVATE_AI_TOOLBAR_COMPONENTS[modelId]);
+		console.log('HOOK CALLED for modelId: ', modelId);
+		appHooks.callHook('model.changed', {
+			prevModelId,
+			modelId,
+			canShowPrivateAiToolbar: canShow
+		});
+	} catch {
+		// ignore hook errors
 	}
 });
 

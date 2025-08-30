@@ -130,46 +130,51 @@
  
  // Keep a global store updated with the current single selected model id (or null if multiple/none)
  $: {
- 	const singleId = atSelectedModel
- 		? atSelectedModel.id
- 		: (Array.isArray(selectedModels) && selectedModels.length === 1 && selectedModels[0] !== ''
+ 	const singleId = (Array.isArray(selectedModels) && selectedModels.length === 1 && selectedModels[0] !== ''
  			? selectedModels[0]
- 			: null);
+ 			: (atSelectedModel ? atSelectedModel.id : null));
  	currentSelectedModelId.set(singleId);
  }
  
-// Auto-open behavior with user-intent guards
-let allowAutoOpen = true;
-let lastAutoOpenModelId: string | null = null;
-let __prevShowPrivateAi = false;
+// Auto open/close of Private AI toolbar is now handled via appHooks 'model.changed' in onMount.
+import { appHooks } from '$lib/utils/hooks';
 
-// Reset auto-open permission when the selected model changes
-$: {
-	const mid = $currentSelectedModelId;
-	if (mid !== lastAutoOpenModelId) {
-		lastAutoOpenModelId = mid;
-		allowAutoOpen = true;
-	}
-}
+let __unhookModelChanged: (() => void) | undefined;
 
-// If user opens Controls, suppress auto-open of Private AI toolbar
-$: if ($showControls) {
-	allowAutoOpen = false;
-}
+onMount(() => {
+	const handler = async ({ prevModelId, modelId, canShowPrivateAiToolbar }: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => {
+		const currentId = get(currentSelectedModelId);
+		console.log('[model.changed handler] payload=', { prevModelId, modelId, canShowPrivateAiToolbar }, 'currentSelectedModelId=', currentId, 'showPrivateAi=', $showPrivateAiModelToolbar);
+		// Ignore stale/out-of-order events: only react if payload modelId matches current selection
+		if (modelId !== currentId) {
+			console.log('[model.changed handler] Ignored payload for non-current model', { payloadModelId: modelId, currentId });
+			return;
+		}
+		if (canShowPrivateAiToolbar) {
+			if (!$showPrivateAiModelToolbar) {
+				console.log('[model.changed handler] Opening Private AI toolbar');
+			}
+			showPrivateAiModelToolbar.set(true);
+			await tick();
+			console.log('[model.changed handler] Calling privateAiPaneComponent.openPane()');
+			privateAiPaneComponent?.openPane?.();
+		} else {
+			if ($showPrivateAiModelToolbar) {
+				console.log('[model.changed handler] Closing Private AI toolbar');
+			}
+			showPrivateAiModelToolbar.set(false);
+		}
+	};
+	__unhookModelChanged = appHooks.hook('model.changed', handler);
+	// Call once on mount to handle initial state
+	(async () => {
+		await handler({ prevModelId: null, modelId: get(currentSelectedModelId), canShowPrivateAiToolbar: get(canShowPrivateAiModelToolbar) });
+	})();
+});
 
-// If Private AI toolbar transitions from open -> closed, treat as user intent and suppress auto-open until model changes
-$: if (__prevShowPrivateAi && !$showPrivateAiModelToolbar) {
-	allowAutoOpen = false;
-}
-$: __prevShowPrivateAi = $showPrivateAiModelToolbar;
-
-// When the selected model supports a Private AI toolbar, auto-open only on eligible transitions
-$: if ($canShowPrivateAiModelToolbar && allowAutoOpen && !$showPrivateAiModelToolbar) {
-	showPrivateAiModelToolbar.set(true);
-	Promise.resolve().then(() => {
-		privateAiPaneComponent?.openPane?.();
-	});
-}
+onDestroy(() => {
+	__unhookModelChanged?.();
+});
 
 	let selectedToolIds = [];
 	let selectedFilterIds = [];
@@ -2474,10 +2479,11 @@ $: if ($canShowPrivateAiModelToolbar && allowAutoOpen && !$showPrivateAiModelToo
 					{eventTarget}
 				/>
 
-				<PrivateAiModelToolbar
+    <PrivateAiModelToolbar
 					bind:this={privateAiPaneComponent}
 					bind:pane={privateAiPane}
 					on:close={() => {
+						console.log('[Chat] on:close from PrivateAiModelToolbar -> set show=false');
 						showPrivateAiModelToolbar.set(false);
 					}}
 				/>
