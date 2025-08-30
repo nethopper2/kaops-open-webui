@@ -140,6 +140,7 @@
 import { appHooks } from '$lib/utils/hooks';
 
 let __unhookModelChanged: (() => void) | undefined;
+let __unhookChatSubmit: (() => void) | undefined;
 
 onMount(() => {
 	const handler = async ({ prevModelId, modelId, canShowPrivateAiToolbar }: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => {
@@ -161,10 +162,16 @@ onMount(() => {
 	(async () => {
 		await handler({ prevModelId: null, modelId: get(currentSelectedModelId), canShowPrivateAiToolbar: get(canShowPrivateAiModelToolbar) });
 	})();
+
+	// Allow external components (e.g., Private AI toolbars) to submit a prompt
+	__unhookChatSubmit = appHooks.hook('chat.submit', ({ prompt }) => {
+		submitPrompt(prompt);
+	});
 });
 
 onDestroy(() => {
 	__unhookModelChanged?.();
+	__unhookChatSubmit?.();
 });
 
 	let selectedToolIds = [];

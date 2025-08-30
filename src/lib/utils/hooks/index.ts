@@ -8,7 +8,9 @@ export const appHooks = createHooks<{
 	'models.select.privateOnly': () => void,
 	'theme.changed': (params: { theme: string; mode: 'light' | 'dark' }) => void,
 	// Fired whenever the selected model changes (including initial selection on page load)
-	'model.changed': (params: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => void
+	'model.changed': (params: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => void,
+	// Request Chat to submit a new prompt
+	'chat.submit': (params: { prompt: string }) => void
 }>();
 
 

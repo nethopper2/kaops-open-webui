@@ -5,6 +5,7 @@ import Select from 'svelte-select';
 import Eye from '$lib/components/icons/Eye.svelte';
 import FilePreviewDialog from '$lib/components/chat/MessageInput/FilePreviewDialog.svelte';
 import { fetchDocxFiles } from '$lib/apis/tokenizedFiles';
+import { appHooks } from '$lib/utils/hooks';
 
 export let modelId: string | null = null;
 $: void modelId; // mark as used
@@ -79,7 +80,7 @@ onMount(() => {
 
 <div class="flex flex-col w-full -h-full px-2 py-2">
 	<div class="text-xs text-gray-500 mb-2 text-left">
-		Let's get started. To replace tokens in your document, select a tokenized document from the list below.
+		<strong>Let's get started!</strong> To replace tokens in your document, select a tokenized document from the list below.
 	</div>
 	<div class="flex flex-col w-full h-full gap-2 items-center">
 		<div class="flex items-center gap-2 w-full min-w-0">
@@ -117,5 +118,27 @@ onMount(() => {
 				</button>
 			</Tooltip>
 		</div>
+		{#if selectedTokenizedDocId !== ""}
+			<div class="flex w-full flex-col items-center justify-center mt-6 gap-2">
+				<div class="text-sm text-gray-600 dark:text-gray-300 text-center px-2">
+					Ready to start replacing tokens in your selected document.
+				</div>
+				<button
+					class="px-6 py-3 rounded-md text-base font-medium bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-blue-500 dark:hover:bg-blue-600"
+					disabled={selectedTokenizedDocId === ""}
+					aria-label="Begin Token Replacement"
+					on:click={() => {
+						const file = tokenizedFiles.find((f) => String(f.id) === String(selectedTokenizedDocId));
+						const name = file?.name ?? 'selected document';
+						let url = file?.url || '';
+						if (url.includes('?')) url = url.split('?')[0];
+						const prompt = `Begin the token replacement assistant session. The user has selected a tokenized document named "${name}". Please briefly explain how we will proceed to replace tokens in this document, what information you will need, and how the user can confirm or adjust replacements. Document URL: ${url}`;
+						appHooks.callHook('chat.submit', { prompt });
+					}}
+				>
+					Begin
+				</button>
+			</div>
+		{/if}
 	</div>
 </div>
