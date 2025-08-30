@@ -144,24 +144,15 @@ let __unhookModelChanged: (() => void) | undefined;
 onMount(() => {
 	const handler = async ({ prevModelId, modelId, canShowPrivateAiToolbar }: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => {
 		const currentId = get(currentSelectedModelId);
-		console.log('[model.changed handler] payload=', { prevModelId, modelId, canShowPrivateAiToolbar }, 'currentSelectedModelId=', currentId, 'showPrivateAi=', $showPrivateAiModelToolbar);
 		// Ignore stale/out-of-order events: only react if payload modelId matches current selection
 		if (modelId !== currentId) {
-			console.log('[model.changed handler] Ignored payload for non-current model', { payloadModelId: modelId, currentId });
 			return;
 		}
 		if (canShowPrivateAiToolbar) {
-			if (!$showPrivateAiModelToolbar) {
-				console.log('[model.changed handler] Opening Private AI toolbar');
-			}
 			showPrivateAiModelToolbar.set(true);
 			await tick();
-			console.log('[model.changed handler] Calling privateAiPaneComponent.openPane()');
 			privateAiPaneComponent?.openPane?.();
 		} else {
-			if ($showPrivateAiModelToolbar) {
-				console.log('[model.changed handler] Closing Private AI toolbar');
-			}
 			showPrivateAiModelToolbar.set(false);
 		}
 	};
@@ -271,7 +262,6 @@ onDestroy(() => {
 			return;
 		}
 		sessionStorage.selectedModels = JSON.stringify(selectedModels);
-		console.log('saveSessionSelectedModels', selectedModels, sessionStorage.selectedModels);
 	};
 
 	let oldSelectedModelIds = [''];
@@ -2482,11 +2472,10 @@ onDestroy(() => {
     <PrivateAiModelToolbar
 					bind:this={privateAiPaneComponent}
 					bind:pane={privateAiPane}
-					on:close={() => {
-						console.log('[Chat] on:close from PrivateAiModelToolbar -> set show=false');
+     on:close={() => {
 						showPrivateAiModelToolbar.set(false);
 					}}
-				/>
+					/>
 			</PaneGroup>
 		</div>
 	{:else if loading}

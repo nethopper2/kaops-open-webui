@@ -222,7 +222,6 @@
 			 onResize={(size) => {
 					// Mark that the pane has expanded at least once when size > 0
 					hasExpanded = hasExpanded || size > 0;
-					console.log('size', size, minSize);
 
      			if ($showControls && paneHandle && paneHandle.isExpanded()) {
 						if (size < minSize) {

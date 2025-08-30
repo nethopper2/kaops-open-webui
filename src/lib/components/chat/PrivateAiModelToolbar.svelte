@@ -16,13 +16,7 @@ const i18n = getContext('i18n');
 
 export let pane: unknown;
 let activeInPaneGroup = false;
-$: {
-	const next = $activeRightPane === 'private';
-	if (next !== activeInPaneGroup) {
-		activeInPaneGroup = next;
-		console.log('[PrivateAiModelToolbar] activeInPaneGroup changed', { activeInPaneGroup, activeRightPane: $activeRightPane, show: $showPrivateAiModelToolbar });
-	}
-}
+$: activeInPaneGroup = $activeRightPane === 'private';
 
 let mediaQuery: MediaQueryList;
 let largeScreen = false;
@@ -40,19 +34,15 @@ const behavior = createPaneBehavior({
 
 // Public helper to open/resize the pane (delegates to shared behavior)
 export const openPane = async () => {
-	console.log('[PrivateAiModelToolbar] openPane called', { largeScreen, activeInPaneGroup, hasPane: !!paneHandle });
 	await behavior.openPane(paneHandle, largeScreen);
-	console.log('[PrivateAiModelToolbar] openPane finished', { isExpanded: paneHandle?.isExpanded?.(), size: paneHandle?.getSize?.() });
 };
 
 const handleMediaQuery = async (e: MediaQueryList | MediaQueryListEvent) => {
 	const matches = 'matches' in e ? e.matches : (e as MediaQueryList).matches;
 	if (matches) {
 		largeScreen = true;
-		console.log('[PrivateAiModelToolbar] mediaQuery -> largeScreen=true');
 	} else {
 		largeScreen = false;
-		console.log('[PrivateAiModelToolbar] mediaQuery -> largeScreen=false');
 		pane = null;
 	}
 };
@@ -86,7 +76,6 @@ onMount(() => {
 });
 
 onDestroy(() => {
-	console.log('[PrivateAiModelToolbar] onDestroy -> forcing show=false');
 	showPrivateAiModelToolbar.set(false);
 });
 
@@ -139,24 +128,20 @@ onDestroy(() => {
 				bind:pane
 				defaultSize={$rightPaneSize || minSize}
     onResize={(size) => {
-          const before = { hasExpanded, minSize, size, expanded: paneHandle?.isExpanded?.(), paneSize: paneHandle?.getSize?.() };
           // Mark that the pane has expanded at least once when size > 0
           if (size > 0) {
             hasExpanded = true;
           }
           if ($showPrivateAiModelToolbar && paneHandle && paneHandle.isExpanded()) {
             if (size < minSize) {
-              console.log('[PrivateAiModelToolbar] onResize -> clamping', { size, minSize });
               behavior.clamp(paneHandle, minSize);
             }
             behavior.persistSize(size, minSize);
             rightPaneSize.set(size);
           }
-          console.log('[PrivateAiModelToolbar] onResize', { before, after: { hasExpanded, size, minSize } });
         }}
 				onCollapse={() => {
 					const opening = behavior.isOpening();
-					console.log('[PrivateAiModelToolbar] onCollapse', { opening, hasExpanded });
 					// Ignore collapse events while we are in the process of opening to a visible size
           if (opening) return;
           // Only hide after the pane has actually expanded at least once; ignore initial mount collapse
