@@ -6,6 +6,7 @@ Create Date: 2025-08-28 12:28:48.146912
 
 """
 import logging
+import time
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
@@ -37,143 +38,53 @@ def upgrade() -> None:
         result = connection.execute(sa.text('SELECT id FROM "user"'))
         user_ids = [row[0] for row in result.fetchall()]
         
+        # Get current timestamp as integer
+        current_timestamp = int(time.time())
+        
         # Insert default data sources for each user using direct SQL
         for user_id in user_ids:
             try:
                 # Insert the default data sources directly with SQL
-                # This is the data from your DEFAULT_DATA_SOURCES configuration
                 default_sources = [
-                    {
-                        "name": "Google Drive",
-                        "context": "Sync Google Docs, Sheets, Slides, Forms & Drive Files",
-                        "permission": "https://www.googleapis.com/auth/drive.readonly",
-                        "sync_status": "unsynced",
-                        "icon": "GoogleDrive",
-                        "action": "google",
-                        "layer": "google_drive",
-                    },
-                    {
-                        "name": "Gmail",
-                        "context": "Sync Gmail emails & attachements",
-                        "permission": "https://www.googleapis.com/auth/gmail.readonly",
-                        "sync_status": "unsynced",
-                        "icon": "Gmail",
-                        "action": "google",
-                        "layer": "gmail",
-                    },
-                    { 
-                        "name": "Outlook",
-                        "context": "Sync Microsoft Outlook emails & attachments",
-                        "permission": "Mail.Read",
-                        "sync_status": "unsynced",
-                        "icon": "Outlook",
-                        "action": "microsoft",
-                        "layer": "outlook",
-                    },
-                    { 
-                        "name": "OneDrive",
-                        "context": "Sync Microsoft OneDrive files and folders",
-                        "permission": "Files.Read.All",
-                        "sync_status": "unsynced",
-                        "icon": "OneDrive",
-                        "action": "microsoft",
-                        "layer": "onedrive",
-                    },
-                    { 
-                        "name": "Sharepoint",
-                        "context": "Sync Microsoft Sharepoint sites and files",
-                        "permission": "Sites.Read.All, Files.Read.All",
-                        "sync_status": "unsynced",
-                        "icon": "Sharepoint",
-                        "action": "microsoft",
-                        "layer": "sharepoint",
-                    },
-                    { 
-                        "name": "OneNote",
-                        "context": "Sync Microsoft OneNote notes",
-                        "permission": "Notes.Read",
-                        "sync_status": "unsynced",
-                        "icon": "OneNote",
-                        "action": "microsoft",
-                        "layer": "onenote",
-                    },
-                    {
-                        "name": "Slack Direct Messages",
-                        "context": "Sync Slack Direct Messages",
-                        "permission": "im:history, im:read",
-                        "sync_status": "unsynced",
-                        "icon": "Slack",
-                        "action": "slack",
-                        "layer": "direct_messages",
-                    },
-                    {
-                        "name": "Slack Channels",
-                        "context": "Sync Slack Channels Conversations",
-                        "permission": "channels:history, channels:read",
-                        "sync_status": "unsynced",
-                        "icon": "Slack",
-                        "action": "slack",
-                        "layer": "channels",
-                    },
-                    {
-                        "name": "Slack Group Chats",
-                        "context": "Sync Slack Group Chats",
-                        "permission": "groups:history, groups:read, mpim:history, mpim:read",
-                        "sync_status": "unsynced",
-                        "icon": "Slack",
-                        "action": "slack",
-                        "layer": "group_chats",
-                    },
-                    {
-                        "name": "Slack Files & Canvases",
-                        "context": "Sync Files & Canvases",
-                        "permission": "files:read",
-                        "sync_status": "unsynced",
-                        "icon": "Slack",
-                        "action": "slack",
-                        "layer": "files",
-                    },
-                    {
-                        "name": "Jira",
-                        "context": "Sync Atlassian Jira projects & issues",
-                        "permission": "read:user:jira,read:issue:jira,read:comment:jira,read:attachment:jira,read:project:jira,read:issue-meta:jira,read:field:jira,read:filter:jira,read:jira-work,read:jira-user,read:me,read:account,report:personal-data",
-                        "sync_status": "unsynced",
-                        "icon": "JIRA",
-                        "action": "atlassian",
-                        "layer": "jira",
-                    },
-                    {
-                        "name": "Confluence",
-                        "context": "Sync Atlassian Confluence Pages",
-                        "permission": "read:content:confluence,read:space:confluence,read:page:confluence,read:blogpost:confluence,read:attachment:confluence,read:comment:confluence,read:user:confluence,read:group:confluence,read:configuration:confluence,search:confluence,read:audit-log:confluence",
-                        "sync_status": "unsynced",
-                        "icon": "Confluence",
-                        "action": "atlassian",
-                        "layer": "confluence",
-                    }
+                    ('Google Drive', 'Sync Google Docs, Sheets, Slides, Forms & Drive Files', 'https://www.googleapis.com/auth/drive.readonly', 'unsynced', 'GoogleDrive', 'google', 'google_drive'),
+                    ('Gmail', 'Sync Gmail emails & attachements', 'https://www.googleapis.com/auth/gmail.readonly', 'unsynced', 'Gmail', 'google', 'gmail'),
+                    ('Outlook', 'Sync Microsoft Outlook emails & attachments', 'Mail.Read', 'unsynced', 'Outlook', 'microsoft', 'outlook'),
+                    ('OneDrive', 'Sync Microsoft OneDrive files and folders', 'Files.Read.All', 'unsynced', 'OneDrive', 'microsoft', 'onedrive'),
+                    ('Sharepoint', 'Sync Microsoft Sharepoint sites and files', 'Sites.Read.All, Files.Read.All', 'unsynced', 'Sharepoint', 'microsoft', 'sharepoint'),
+                    ('OneNote', 'Sync Microsoft OneNote notes', 'Notes.Read', 'unsynced', 'OneNote', 'microsoft', 'onenote'),
+                    ('Slack Direct Messages', 'Sync Slack Direct Messages', 'im:history, im:read', 'unsynced', 'Slack', 'slack', 'direct_messages'),
+                    ('Slack Channels', 'Sync Slack Channels Conversations', 'channels:history, channels:read', 'unsynced', 'Slack', 'slack', 'channels'),
+                    ('Slack Group Chats', 'Sync Slack Group Chats', 'groups:history, groups:read, mpim:history, mpim:read', 'unsynced', 'Slack', 'slack', 'group_chats'),
+                    ('Slack Files & Canvases', 'Sync Files & Canvases', 'files:read', 'unsynced', 'Slack', 'slack', 'files'),
+                    ('Jira', 'Sync Atlassian Jira projects & issues', 'read:user:jira,read:issue:jira,read:comment:jira,read:attachment:jira,read:project:jira,read:issue-meta:jira,read:field:jira,read:filter:jira,read:jira-work,read:jira-user,read:me,read:account,report:personal-data', 'unsynced', 'JIRA', 'atlassian', 'jira'),
+                    ('Confluence', 'Sync Atlassian Confluence Pages', 'read:content:confluence,read:space:confluence,read:page:confluence,read:blogpost:confluence,read:attachment:confluence,read:comment:confluence,read:user:confluence,read:group:confluence,read:configuration:confluence,search:confluence,read:audit-log:confluence', 'unsynced', 'Confluence', 'atlassian', 'confluence'),
                 ]
- 
-                for name, context, permission, sync_status, icon, action, layer in default_sources:
+                
+                for source_name, context, permission, sync_status, icon, action, layer in default_sources:
                     connection.execute(
                         sa.text("""
                             INSERT INTO data_source (id, user_id, name, context, permission, sync_status, icon, action, layer, created_at, updated_at)
-                            VALUES (gen_random_uuid(), :user_id, :name, :context, :permission, :sync_status, :icon, :action, :layer, NOW(), NOW())
+                            VALUES (gen_random_uuid(), :user_id, :source_name, :context, :permission, :sync_status, :icon, :action, :layer, :created_at, :updated_at)
                         """),
                         {
                             'user_id': user_id,
-                            'name': name,
+                            'source_name': source_name,
                             'context': context,
                             'permission': permission,
                             'sync_status': sync_status,
                             'icon': icon,
                             'action': action,
-                            'layer': layer
+                            'layer': layer,
+                            'created_at': current_timestamp,
+                            'updated_at': current_timestamp
                         }
                     )
                 
                 log.info(f"Recreated data sources for user: {user_id}")
             except Exception as user_error:
                 log.warning(f"Failed to recreate data sources for user {user_id}: {user_error}")
+                # Re-raise to abort the transaction
+                raise user_error
         
         log.info("Successfully recreated all data sources with permission and layer columns")
             
