@@ -41,7 +41,7 @@
     {$i18n.t('Token replacement session is active. Choose an action to continue.')}
   </div>
 
-  <SelectedDocumentSummary />
+  <SelectedDocumentSummary on:preview={() => openPreviewDialog()} />
 
   {#if $selectedTokenizedDocId === ''}
     <div class="w-full max-w-sm mb-4 px-4 text-center mx-auto">
@@ -63,12 +63,6 @@
     </button>
     <button class="px-4 py-2 rounded bg-gray-700 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-800">
       {$i18n.t('Generate Token Replacement Document')}
-    </button>
-    <button
-      class="px-4 py-2 rounded bg-white border border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:hover:bg-gray-800 text-gray-800 dark:text-gray-200"
-      on:click={() => openPreviewDialog()}
-    >
-      {$i18n.t('View document preview')}
     </button>
   </div>
   {/if}
