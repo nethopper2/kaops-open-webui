@@ -203,13 +203,13 @@
 					{/if}
 
 					{#if $canShowPrivateAiModelToolbar}
-					<Tooltip content={$i18n.t('Model Toolbar')}>
+					<Tooltip content={$i18n.t('Model Sidekick')}>
 						<button
 							class="flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
 							on:click={async () => {
 								await showPrivateAiModelToolbar.set(!$showPrivateAiModelToolbar);
 							}}
-							aria-label="Model Toolbar"
+							aria-label="Model Sidekick"
 						>
 							<div class=" m-auto self-center">
 								<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover" draggable="false" />

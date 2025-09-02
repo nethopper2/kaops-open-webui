@@ -122,7 +122,7 @@ export const privateAiModelToolbarComponent = derived(currentSelectedModelId, (i
 	return PRIVATE_AI_TOOLBAR_COMPONENTS[id] ?? null;
 });
 
-// Derived: whether Private AI Model Toolbar can be used with the selected model
+// Derived: whether Private AI Model Sidekick can be used with the selected model
 export const canShowPrivateAiModelToolbar = derived(privateAiModelToolbarComponent, (comp) => Boolean(comp));
 
 // Derived: avatar URL for the selected model (matches ModelSelector avatar)
