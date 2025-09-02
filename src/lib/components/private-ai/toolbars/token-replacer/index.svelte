@@ -26,8 +26,8 @@
 
   onDestroy(() => {
     unsubChat?.();
-    // Extra safety: clear stores when the toolbar unmounts
-    resetTokenReplacerStores();
+    // Do not reset stores here; the toolbar may unmount when switching between Pane and Drawer.
+    // State is cleared only when leaving the chat (handled in chatId subscription above).
   });
 </script>
 
