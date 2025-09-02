@@ -6,7 +6,7 @@ import type { Socket } from 'socket.io-client';
 import type { ComponentType } from 'svelte';
 
 import emojiShortCodes from '$lib/emoji-shortcodes.json';
-import { PRIVATE_AI_TOOLBAR_COMPONENTS } from '$lib/private-ai/toolbars';
+import { canSupportToolbar, loadPrivateAiToolbarComponent } from '$lib/private-ai/toolbars';
 import { appHooks } from '$lib/utils/hooks';
 
 // Backend
@@ -119,14 +119,19 @@ export const activeRightPane = derived(
 // Selected single model id used for Private AI toolbars
 export const currentSelectedModelId: Writable<string | null> = writable<string | null>(null);
 
-// Derived: component to render for the selected model's toolbar (if any)
-export const privateAiModelToolbarComponent = derived(currentSelectedModelId, (id): ComponentType | null => {
-	if (!id) return null;
-	return PRIVATE_AI_TOOLBAR_COMPONENTS[id] ?? null;
+// Component to render for the selected model's toolbar (loaded asynchronously)
+export const privateAiModelToolbarComponent: Writable<ComponentType | null> = writable<ComponentType | null>(null);
+currentSelectedModelId.subscribe(async (id) => {
+	try {
+		const comp = await loadPrivateAiToolbarComponent(id);
+		privateAiModelToolbarComponent.set(comp);
+	} catch {
+		privateAiModelToolbarComponent.set(null);
+	}
 });
 
 // Derived: whether Private AI Model Sidekick can be used with the selected model
-export const canShowPrivateAiModelToolbar = derived(privateAiModelToolbarComponent, (comp) => Boolean(comp));
+export const canShowPrivateAiModelToolbar = derived(currentSelectedModelId, (id) => canSupportToolbar(id));
 
 // Derived: avatar URL for the selected model (matches ModelSelector avatar)
 export const privateAiSelectedModelAvatarUrl = derived(
@@ -147,8 +152,8 @@ currentSelectedModelId.subscribe((modelId) => {
 	const prevModelId = __prevHookModelId;
 	__prevHookModelId = modelId;
 	try {
-		// Compute canShow synchronously to avoid reactive timing issues
-		const canShow = !!(modelId && PRIVATE_AI_TOOLBAR_COMPONENTS[modelId]);
+		// Compute canShow synchronously using pure helper to avoid reactive timing issues
+		const canShow = canSupportToolbar(modelId);
 		appHooks.callHook('model.changed', {
 			prevModelId,
 			modelId,

@@ -1,33 +1,15 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import InitialView from '$lib/components/private-ai/toolbars/token-replacer/views/InitialView.svelte';
   import ActionsView from '$lib/components/private-ai/toolbars/token-replacer/views/ActionsView.svelte';
   import EditValuesView from '$lib/components/private-ai/toolbars/token-replacer/views/EditValuesView.svelte';
-  import { isChatStarted, chatId as chatIdStore } from '$lib/stores';
-  import { currentTokenReplacerSubView, resetTokenReplacerStores } from './stores';
+  import { isChatStarted } from '$lib/stores';
+  import { currentTokenReplacerSubView } from './stores';
 
   export let modelId: string | null = null;
   $: void modelId;
 
   // A chat is considered "started" whenever there is an active chat id.
   const started = isChatStarted;
-
-  // Ensure that when switching to any existing chat, we default to the Actions sub-view.
-  // When there is no active chat (new chat), default to the Initial sub-view.
-  const unsubChat = chatIdStore.subscribe((id) => {
-    if (id && id !== '') {
-      currentTokenReplacerSubView.set('actions');
-    } else {
-      // Leaving current chat UI: clear token replacer stores to avoid stale state
-      resetTokenReplacerStores();
-    }
-  });
-
-  onDestroy(() => {
-    unsubChat?.();
-    // Do not reset stores here; the toolbar may unmount when switching between Pane and Drawer.
-    // State is cleared only when leaving the chat (handled in chatId subscription above).
-  });
 </script>
 
 <div class="flex flex-col w-full h-full">
