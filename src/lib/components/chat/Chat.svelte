@@ -226,6 +226,17 @@ onDestroy(() => {
 			loading = false;
 			window.setTimeout(() => scrollToBottom(), 0);
 
+			// Ensure Private AI toolbar opens when an existing chat is loaded
+			try {
+				if (get(canShowPrivateAiModelToolbar)) {
+					showPrivateAiModelToolbar.set(true);
+					await tick();
+					privateAiPaneComponent?.openPane?.();
+				}
+			} catch {
+				// ignore any errors initializing the toolbar on chat load
+			}
+
 			await tick();
 
 			if (storageChatInput) {
