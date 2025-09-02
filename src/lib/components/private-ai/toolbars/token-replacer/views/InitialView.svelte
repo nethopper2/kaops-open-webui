@@ -5,6 +5,7 @@
   import FilePreviewDialog from '$lib/components/chat/MessageInput/FilePreviewDialog.svelte';
   import { onMount, tick } from 'svelte';
   import { appHooks } from '$lib/utils/hooks';
+  import { isChatStarted } from '$lib/stores';
   import { ensureFilesFetched, tokenizedFiles, selectedTokenizedDocId, selectedTokenizedDoc, filesLoading, currentTokenReplacerSubView } from '../stores';
   import type { TokenFile } from '../stores';
 
@@ -96,7 +97,7 @@
         <button
           class="px-6 py-3 rounded-md text-base font-medium bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-blue-500 dark:hover:bg-blue-600"
           disabled={$selectedTokenizedDocId === ""}
-          aria-label="Begin Token Replacement"
+          aria-label={$isChatStarted ? "Continue Token Replacement" : "Begin Token Replacement"}
           on:click={() => {
             const file = $selectedTokenizedDoc;
             const name = file?.name ?? 'selected document';
@@ -104,11 +105,11 @@
             if (url.includes('?')) url = url.split('?')[0];
             const prompt = `Begin the token replacement assistant session. The user has selected a tokenized document named "${name}". Please briefly explain how we will proceed to replace tokens in this document, what information you will need, and how the user can confirm or adjust replacements. Document URL: ${url}`;
             appHooks.callHook('chat.submit', { prompt });
-            // Switch to actions sub-view after beginning
+            // Switch to the actions sub-view after the beginning
             currentTokenReplacerSubView.set('actions');
           }}
         >
-          Begin
+          {$isChatStarted ? 'Continue' : 'Begin'}
         </button>
       </div>
     {/if}

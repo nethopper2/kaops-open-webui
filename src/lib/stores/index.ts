@@ -49,6 +49,9 @@ export const TTSWorker = writable(null);
 export const chatId = writable('');
 export const chatTitle = writable('');
 
+// Derived: whether there is an active chat (used by multiple features)
+export const isChatStarted = derived(chatId, ($chatId) => Boolean($chatId));
+
 export const channels = writable([]);
 export const chats = writable(null);
 export const pinnedChats = writable([]);
