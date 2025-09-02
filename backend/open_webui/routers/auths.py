@@ -20,6 +20,7 @@ from open_webui.models.auths import (
 from open_webui.models.users import Users, UpdateProfileForm
 from open_webui.models.data import DataSources
 
+from open_webui.models.datatokens import OAuthTokens
 from open_webui.utils.data.google import initiate_google_file_sync
 from open_webui.utils.data.microsoft import initiate_microsoft_sync
 from open_webui.tasks import create_task
@@ -1157,23 +1158,71 @@ async def get_api_key(user=Depends(get_current_user)):
         raise HTTPException(404, detail=ERROR_MESSAGES.API_KEY_NOT_FOUND)
 
 # User file sync, placed here to avoid a circular dependecy when using socket
-async def get_user_file_data_from_sso_provider(user_id: str, provider: str, auth_token: str, is_not_first_login: bool):
-        try:
-            match provider:
-                case 'google':
-                    if is_not_first_login:
-                        await determine_layers_to_sync(user_id, provider)
-                    else:
-                        await initiate_google_file_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
-                case 'microsoft':
-                    if is_not_first_login:
-                        await determine_layers_to_sync(user_id, provider)
-                    else:
-                        await initiate_microsoft_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
+async def get_user_file_data_from_sso_provider(user_id: str, provider: str, auth_token: str, user_exists: bool):
+    try:
+        #Limited to the only oauth providers that also offer data ingestion
+        match provider:
+            case 'google':
+                if user_exists:
+                    await determine_layers_to_sync(user_id, provider, auth_token)
+                else:
+                    await initiate_google_file_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
+            case 'microsoft':
+                if user_exists:
+                    await determine_layers_to_sync(user_id, provider, auth_token)
+                else:
+                    await initiate_microsoft_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True, True, True)
 
-        except Exception as e:
-            log.error(f"Error fetching user data: {e}")
-            return None
+    except Exception as e:
+        log.error(f"Error fetching user data: {e}")
+        return None
 
-def determine_layers_to_sync(user_id: str, provider: str):
-    return
+async def determine_layers_to_sync(user_id: str, provider: str, auth_token: str):
+    try:
+        # Get OAuth tokens for this user and provider
+        tokens = OAuthTokens.get_all_tokens_for_user(user_id)
+        provider_tokens = [token for token in tokens if token.provider_name == provider.title()]
+        
+        if not provider_tokens:
+            log.warning(f"No OAuth tokens found for user {user_id} and provider {provider}")
+            return
+        
+        # Process each token (handles multi-tenant scenarios like Slack teams)
+        for token_entry in provider_tokens:
+            
+            # Get layers from token
+            layers_string = token_entry.layer or ""
+            layers = [layer.strip() for layer in layers_string.split(",") if layer.strip()]
+            
+            if not layers:
+                log.warning(f"No layers found in token for user {user_id}, provider {provider}")
+                continue
+            
+            # Sync each layer individually
+            for layer in layers:
+                log.info(f"Syncing {provider} layer '{layer}' for user {user_id}")
+                
+                match provider:
+                    case 'google':
+                        # For Google, call sync function with layer parameter
+                        sync_drive = layer == 'google_drive'
+                        sync_gmail = layer == 'gmail'
+                        await initiate_google_file_sync(
+                            user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, 
+                            sync_drive, sync_gmail
+                        )
+                    
+                    case 'microsoft':
+                        # For Microsoft, call sync function with layer parameter
+                        sync_onedrive = layer == 'onedrive'
+                        sync_sharepoint = layer == 'sharepoint' 
+                        sync_onenote = layer == 'onenote'
+                        sync_outlook = layer == 'outlook'
+                        await initiate_microsoft_sync(
+                            user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME,
+                            sync_onedrive, sync_sharepoint, sync_onenote, sync_outlook
+                        )
+    
+    except Exception as e:
+        log.error(f"Error determining layers to sync for user {user_id}, provider {provider}: {e}")
+        raise
