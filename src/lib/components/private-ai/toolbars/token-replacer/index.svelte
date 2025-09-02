@@ -3,6 +3,7 @@
   import { derived } from 'svelte/store';
   import InitialView from '$lib/components/private-ai/toolbars/token-replacer/views/InitialView.svelte';
   import ActionsView from '$lib/components/private-ai/toolbars/token-replacer/views/ActionsView.svelte';
+  import EditValuesView from '$lib/components/private-ai/toolbars/token-replacer/views/EditValuesView.svelte';
   import { chatId as chatIdStore } from '$lib/stores';
   import { currentTokenReplacerSubView, resetTokenReplacerStores } from './stores';
 
@@ -34,6 +35,8 @@
   {#if $started}
     {#if $currentTokenReplacerSubView === 'actions'}
       <ActionsView />
+    {:else if $currentTokenReplacerSubView === 'editValues'}
+      <EditValuesView />
     {:else}
       <InitialView {modelId} />
     {/if}

@@ -14,7 +14,7 @@ export const selectedTokenizedDoc = derived([tokenizedFiles, selectedTokenizedDo
 });
 
 // Manage which sub-view is shown within the token-replacer toolbar
-export type TokenReplacerSubView = 'initial' | 'actions';
+export type TokenReplacerSubView = 'initial' | 'actions' | 'editValues';
 export const currentTokenReplacerSubView: Writable<TokenReplacerSubView> = writable('actions');
 
 export async function ensureFilesFetched(): Promise<void> {
