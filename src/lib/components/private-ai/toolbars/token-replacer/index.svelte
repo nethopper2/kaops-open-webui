@@ -4,7 +4,7 @@
   import InitialView from '$lib/components/private-ai/toolbars/token-replacer/views/InitialView.svelte';
   import ActionsView from '$lib/components/private-ai/toolbars/token-replacer/views/ActionsView.svelte';
   import { chatId as chatIdStore } from '$lib/stores';
-  import { currentTokenReplacerSubView } from './stores';
+  import { currentTokenReplacerSubView, resetTokenReplacerStores } from './stores';
 
   export let modelId: string | null = null;
   $: void modelId;
@@ -18,12 +18,15 @@
     if (id && id !== '') {
       currentTokenReplacerSubView.set('actions');
     } else {
-      currentTokenReplacerSubView.set('initial');
+      // Leaving current chat UI: clear token replacer stores to avoid stale state
+      resetTokenReplacerStores();
     }
   });
 
   onDestroy(() => {
     unsubChat?.();
+    // Extra safety: clear stores when the toolbar unmounts
+    resetTokenReplacerStores();
   });
 </script>
 

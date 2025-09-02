@@ -32,3 +32,12 @@ export async function ensureFilesFetched(): Promise<void> {
     filesLoading.set(false);
   }
 }
+
+// Reset all token replacer stores when leaving the current chat UI
+export function resetTokenReplacerStores(): void {
+  tokenizedFiles.set([]);
+  filesLoading.set(false);
+  filesFetched.set(false);
+  selectedTokenizedDocId.set('');
+  currentTokenReplacerSubView.set('initial');
+}
