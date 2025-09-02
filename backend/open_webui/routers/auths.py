@@ -557,7 +557,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                     return await loop.run_in_executor(
                         None,  # Use default thread pool
                         lambda: asyncio.run(get_user_file_data_from_sso_provider(
-                            user_id, sso_provider, auth_token
+                            user_id, sso_provider, auth_token, user_exists
                         ))
                     )
 
@@ -1157,14 +1157,23 @@ async def get_api_key(user=Depends(get_current_user)):
         raise HTTPException(404, detail=ERROR_MESSAGES.API_KEY_NOT_FOUND)
 
 # User file sync, placed here to avoid a circular dependecy when using socket
-async def get_user_file_data_from_sso_provider(user_id: str, provider: str, auth_token: str):
+async def get_user_file_data_from_sso_provider(user_id: str, provider: str, auth_token: str, is_not_first_login: bool):
         try:
             match provider:
                 case 'google':
-                    await initiate_google_file_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME)
+                    if is_not_first_login:
+                        await determine_layers_to_sync(user_id, provider)
+                    else:
+                        await initiate_google_file_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
                 case 'microsoft':
-                    await initiate_microsoft_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
+                    if is_not_first_login:
+                        await determine_layers_to_sync(user_id, provider)
+                    else:
+                        await initiate_microsoft_sync(user_id, auth_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, True, True)
 
         except Exception as e:
             log.error(f"Error fetching user data: {e}")
             return None
+
+def determine_layers_to_sync(user_id: str, provider: str):
+    return
