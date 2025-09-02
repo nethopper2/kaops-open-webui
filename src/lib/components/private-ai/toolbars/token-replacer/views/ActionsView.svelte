@@ -1,25 +1,84 @@
 <script lang="ts">
-import { getContext } from 'svelte';
+  import { getContext, onMount } from 'svelte';
+  import FilePreviewDialog from '$lib/components/chat/MessageInput/FilePreviewDialog.svelte';
+  import { ensureFilesFetched, selectedTokenizedDoc, selectedTokenizedDocId, currentTokenReplacerSubView } from '../stores';
+  import type { TokenFile } from '../stores';
 
-const i18n = getContext('i18n');
+  const i18n = getContext('i18n');
 
-// Placeholder for future action choices UI after chat has started
+  let showPreviewDialog = false;
+  let previewFile: TokenFile | null = null;
+
+
+  function openPreviewDialog() {
+    previewFile = $selectedTokenizedDoc;
+    if (previewFile) {
+      showPreviewDialog = true;
+    }
+  }
+  function closePreviewDialog() {
+    showPreviewDialog = false;
+    previewFile = null;
+  }
+
+  onMount(() => {
+    ensureFilesFetched();
+  });
 </script>
 
+{#if showPreviewDialog}
+  <FilePreviewDialog
+    show={showPreviewDialog}
+    file={previewFile}
+    previewType="docx"
+    on:close={closePreviewDialog}
+  />
+{/if}
+
 <div class="flex flex-col w-full h-full items-center justify-center py-8">
-	<div class="text-sm text-gray-600 dark:text-gray-300 mb-3 text-center px-4">
-		{$i18n.t('Token replacement session is active. Choose an action to continue.')}
-	</div>
-	<div class="grid grid-cols-1 gap-3 w-full max-w-sm">
-		<button class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
-			{$i18n.t('Edit Replacement Values')}
-		</button>
-		<button class="px-4 py-2 rounded bg-gray-700 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-800">
-			{$i18n.t('Generate Token Replacement Document')}
-		</button>
-		<button
-			class="px-4 py-2 rounded bg-white border border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:hover:bg-gray-800 text-gray-800 dark:text-gray-200">
-			{$i18n.t('View document preview')}
-		</button>
-	</div>
+  <div class="text-sm text-gray-600 dark:text-gray-300 mb-3 text-center px-4">
+    {$i18n.t('Token replacement session is active. Choose an action to continue.')}
+  </div>
+
+  {#if $selectedTokenizedDocId !== '' && $selectedTokenizedDoc}
+    <div class="w-full max-w-sm mb-4 px-4">
+      <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{$i18n.t('Selected document')}</div>
+      <div class="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2">
+        <div class="text-sm font-medium text-gray-800 dark:text-gray-200 line-clamp-1">{$selectedTokenizedDoc.name ?? 'Untitled'}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 break-all">
+          {$selectedTokenizedDoc.url}
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if $selectedTokenizedDocId === ''}
+    <div class="w-full max-w-sm mb-4 px-4 text-center">
+      <div class="text-sm text-gray-600 dark:text-gray-300 mb-2">{$i18n.t('No document selected')}</div>
+      <div class="text-xs text-gray-500 dark:text-gray-400 mb-3">{$i18n.t('Please select a tokenized document to proceed with token replacement actions.')}</div>
+      <button
+        class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+        on:click={() => currentTokenReplacerSubView.set('initial')}
+      >
+        {$i18n.t('Select a document')}
+      </button>
+    </div>
+  {/if}
+
+  {#if $selectedTokenizedDocId !== ''}
+  <div class="grid grid-cols-1 gap-3 w-full max-w-sm">
+    <button class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
+      {$i18n.t('Edit Replacement Values')}
+    </button>
+    <button class="px-4 py-2 rounded bg-gray-700 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-800">
+      {$i18n.t('Generate Token Replacement Document')}
+    </button>
+    <button
+      class="px-4 py-2 rounded bg-white border border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:hover:bg-gray-800 text-gray-800 dark:text-gray-200"
+      on:click={() => openPreviewDialog()}
+    >
+      {$i18n.t('View document preview')}
+    </button>
+  </div>
+  {/if}
 </div>
