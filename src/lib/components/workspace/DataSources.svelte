@@ -6,6 +6,8 @@
 	import Google from '../icons/Google.svelte';
 	import Microsoft from '../icons/Microsoft.svelte';
 	import Slack from '../icons/Slack.svelte';
+	import GoogleDrive from '../icons/GoogleDrive.svelte';
+	import Gmail from '../icons/Gmail.svelte';
 	import type { DataSource } from '$lib/types';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import {
@@ -15,6 +17,12 @@
 		disconnectDataSync
 	} from '$lib/apis/data';
 	import Atlassian from '../icons/Atlassian.svelte';
+	import Outlook from '../icons/Outlook.svelte';
+	import OneDrive from '../icons/OneDrive.svelte';
+	import Sharepoint from '../icons/Sharepoint.svelte';
+	import OneNote from '../icons/OneNote.svelte';
+	import Jira from '../icons/Jira.svelte';
+	import Confluence from '../icons/Confluence.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -28,7 +36,7 @@
 	$: filteredItems = dataSources.filter(
 		(ds) =>
 			query === '' ||
-			ds.name.toLowerCase().includes(query.toLowerCase()) ||
+			ds.context.toLowerCase().includes(query.toLowerCase()) ||
 			ds.id.toLowerCase().includes(query.toLowerCase())
 	);
 
@@ -53,7 +61,11 @@
 		switch (status) {
 			case 'synced':
 				return 'bg-green-500/20 text-green-700 dark:text-green-200';
+			case 'embedded':
+				return 'bg-green-500/20 text-green-700 dark:text-green-200';
 			case 'syncing':
+				return 'bg-blue-500/20 text-blue-700 dark:text-blue-200';
+			case 'embedding':
 				return 'bg-blue-500/20 text-blue-700 dark:text-blue-200';
 			case 'error':
 				return 'bg-red-500/20 text-red-700 dark:text-red-200';
@@ -66,10 +78,17 @@
 
 	const getIconComponent = (iconName: string) => {
 		const iconMap = {
-			Google: Google,
 			Microsoft: Microsoft,
 			Slack: Slack,
-			Atlassian: Atlassian
+			Atlassian: Atlassian,
+			GoogleDrive: GoogleDrive,
+			Gmail: Gmail,
+			Outlook: Outlook,
+			OneDrive: OneDrive,
+			Sharepoint: Sharepoint,
+			OneNote: OneNote,
+			JIRA: Jira,
+			Confluence: Confluence
 		} as const;
 		return iconMap[iconName as keyof typeof iconMap];
 	};
@@ -79,11 +98,11 @@
 
 		switch ((dataSource.sync_status as string).toLowerCase()) {
 			case 'synced':
-				return updateSync(dataSource.action as string);
+				return updateSync(dataSource.action as string, dataSource.layer as string);
 			case 'error':
-				return updateSync(dataSource.action as string);
+				return updateSync(dataSource.action as string, dataSource.layer as string);
 			case 'unsynced':
-				return initializeSync(dataSource.action as string);
+				return initializeSync(dataSource.action as string, dataSource.layer as string);
 		}
 	};
 
@@ -95,20 +114,16 @@
 	}) => {
 		dataSources = dataSources.map((ds) => {
 			if (ds.name === sourceData.source) {
-				return {
-					...ds,
-					sync_status: sourceData.status,
-					last_sync: sourceData.timestamp
-				};
+				return { ...ds, sync_status: sourceData.status, last_sync: sourceData.timestamp };
 			}
 			return ds;
 		});
 	};
 
-	const initializeSync = async (action: string) => {
+	const initializeSync = async (action: string, layer: string) => {
 		console.log('Initializing sync for:', action);
 
-		let syncDetails = await initializeDataSync(localStorage.token, action);
+		let syncDetails = await initializeDataSync(localStorage.token, action, layer);
 
 		if (syncDetails.url) {
 			window.open(syncDetails.url, '_blank');
@@ -117,10 +132,10 @@
 		dataSources = await getDataSources(localStorage.token);
 	};
 
-	const updateSync = async (action: string) => {
+	const updateSync = async (action: string, layer: string) => {
 		console.log('Manual sync initiated for:', action);
 
-		let syncDetails = await manualDataSync(localStorage.token, action);
+		let syncDetails = await manualDataSync(localStorage.token, action, layer);
 
 		if (syncDetails.detail?.reauth_url) {
 			return window.open(syncDetails.detail.reauth_url, '_blank');
@@ -131,10 +146,11 @@
 
 	const handleDelete = async (dataSource: DataSource) => {
 		const action = dataSource.action;
+		const layer = dataSource.layer;
 
 		console.log('Disconnecting sync for:', action);
 
-		await disconnectDataSync(localStorage.token, action as string);
+		await disconnectDataSync(localStorage.token, action as string, layer as string);
 
 		dataSources = await getDataSources(localStorage.token);
 	};
@@ -145,6 +161,10 @@
 				return 'Synced';
 			case 'syncing':
 				return 'Syncing...';
+			case 'embedding':
+				return 'Syncing...';
+			case 'embedded':
+				return 'Synced';
 			case 'error':
 				return 'Error';
 			case 'unsynced':
@@ -160,9 +180,7 @@
 		const res = await fetch(`${WEBUI_BASE_URL}/api/config`, {
 			method: 'GET',
 			credentials: 'include',
-			headers: {
-				'Content-Type': 'application/json'
-			}
+			headers: { 'Content-Type': 'application/json' }
 		})
 			.then(async (res) => {
 				if (!res.ok) throw await res.json();

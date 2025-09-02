@@ -212,6 +212,8 @@ async def sync_onenote_to_gcs(auth_token, service_account_base64, gcs_bucket_nam
         print(f"\nOneNote Sync Summary:")
         print(f"📓 Pages uploaded: {len(uploaded_files)}")
         print(f"⏭️  Pages skipped: {skipped_files}")
+
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'onenote', 'synced')
         
         return {
             'uploaded': len(uploaded_files),
@@ -406,6 +408,8 @@ async def sync_outlook_to_gcs(auth_token, service_account_base64, gcs_bucket_nam
         print(f"\nOutlook Sync Summary:")
         print(f"📧 Emails uploaded: {len(uploaded_files)}")
         print(f"⏭️  Emails skipped: {skipped_files}")
+
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'synced')
         
         return {
             'uploaded': len(uploaded_files),
@@ -1024,6 +1028,8 @@ async def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NA
         print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
+        
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'synced')
               
         return {
             'uploaded': len(uploaded_files),
@@ -1182,6 +1188,8 @@ async def sync_sharepoint_to_gcs(auth_token, service_account_base64, GCS_BUCKET_
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
         
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'sharepoint', 'synced')
+        
         # Add proper return value
         return {
             'uploaded': len(uploaded_files),
@@ -1254,7 +1262,6 @@ async def initiate_microsoft_sync(user_id, auth_token, service_account_base64, g
     log.info(f"Initiating Microsoft sync for user {USER_ID} to bucket {GCS_BUCKET_NAME}")
     log.info(f"Sync OneDrive: {sync_onedrive}, SharePoint: {sync_sharepoint}, OneNote: {sync_onenote}, Outlook: {sync_outlook}")
 
-    await update_data_source_sync_status(USER_ID, 'microsoft', 'syncing')
     
     # Load existing GCS files for duplicate checking
     load_existing_gcs_files(service_account_base64, gcs_bucket_name)
@@ -1270,25 +1277,26 @@ async def initiate_microsoft_sync(user_id, auth_token, service_account_base64, g
     try:
         # Sync OneDrive if requested
         if sync_onedrive:
+            await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'syncing')
             results['onedrive'] = await sync_onedrive_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
         
         # Sync SharePoint if requested
         if sync_sharepoint:
+            await update_data_source_sync_status(USER_ID, 'microsoft', 'sharepoint', 'syncing')
             results['sharepoint'] = await sync_sharepoint_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
         
         # Sync OneNote if requested
         if sync_onenote:
+            await update_data_source_sync_status(USER_ID, 'microsoft', 'onenote', 'syncing')
             results['onenote'] = await sync_onenote_to_gcs(auth_token, service_account_base64, gcs_bucket_name)
         
         # Sync Outlook if requested
         if sync_outlook:
+            await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'syncing')
             results['outlook'] = await sync_outlook_to_gcs(auth_token, service_account_base64, gcs_bucket_name, outlook_folder, outlook_query, max_emails)
-
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'synced')
         
         return results
         
     except Exception as error:
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'error')
         log.error("Microsoft sync failed:", exc_info=True)
         raise error

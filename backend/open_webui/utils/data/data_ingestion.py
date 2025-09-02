@@ -444,6 +444,7 @@ def create_jwt(service_account_info):
 async def update_data_source_sync_status(
     user_id: str,
     source_action: str, # This maps to the 'action' field in your DataSource model
+    layer: str,
     status: str
 ) -> Optional[DataSourceModel]:
     """
@@ -469,7 +470,7 @@ async def update_data_source_sync_status(
         
         target_data_source_name: Optional[str] = None
         for ds in user_data_sources:
-            if ds.action == source_action:
+            if ds.action == source_action and ds.layer == layer:
                 target_data_source_name = ds.name # Get the actual name from the found data source
                 break
         
@@ -480,6 +481,7 @@ async def update_data_source_sync_status(
         updated_source = DataSources.update_data_source_sync_status_by_name(
             user_id=user_id,
             source_name=target_data_source_name, # Use the actual name found
+            layer_name=layer,
             sync_status=status,
             last_sync=int(time.time()) # Set last_sync to current Unix timestamp
         )

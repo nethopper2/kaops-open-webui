@@ -59,10 +59,12 @@ class DataSource(Base):
     
     name = Column(Text)
     context = Column(Text, nullable=True)
-    sync_status = Column(String, default="unsynced")  # synced, syncing, error, unsynced
+    permission = Column(String, nullable=True)  # Store permissions as a string
+    sync_status = Column(String, default="unsynced")  # synced, syncing, embedded, unsynced
     last_sync = Column(BigInteger, nullable=True)
     icon = Column(String)
     action = Column(String, nullable=True)
+    layer = Column(String, nullable=True)
     
     created_at = Column(BigInteger)
     updated_at = Column(BigInteger)
@@ -75,10 +77,12 @@ class DataSourceModel(BaseModel):
     user_id: str
     name: str
     context: Optional[str] = None
+    permission: Optional[str] = None
     sync_status: str = "unsynced"
     last_sync: Optional[int] = None  # timestamp in epoch
     icon: str
     action: Optional[str] = None
+    layer: Optional[str] = None
     
     created_at: Optional[int]  # timestamp in epoch
     updated_at: Optional[int]  # timestamp in epoch
@@ -93,10 +97,12 @@ class DataSourceForm(BaseModel):
     id: str
     name: str
     context: Optional[str] = None
+    permission: Optional[str] = None
     sync_status: str = "unsynced"
     last_sync: Optional[int] = None
     icon: str
     action: Optional[str] = None
+    layer: Optional[str] = None
 
 
 class DataSourceResponse(BaseModel):
@@ -104,10 +110,12 @@ class DataSourceResponse(BaseModel):
     user_id: str
     name: str
     context: Optional[str] = None
+    permission: Optional[str] = None
     sync_status: str
     last_sync: Optional[int] = None
     icon: str
     action: Optional[str] = None
+    layer: Optional[str] = None
     created_at: int
     updated_at: int
 
@@ -115,38 +123,126 @@ class DataSourceResponse(BaseModel):
 
 
 class DataSourcesTable:
-    # Default data sources template
+    # Default data sources
     DEFAULT_DATA_SOURCES = [
         {
-            "name": "Google File Storage",
-            "context": "Gmail & Google Drive",
+            "name": "Google Drive",
+            "context": "Sync Google Docs, Sheets, Slides, Forms & Drive Files",
+            "permission": "https://www.googleapis.com/auth/drive.readonly",
             "sync_status": "unsynced",
-            "icon": "Google",
+            "icon": "GoogleDrive",
             "action": "google",
+            "layer": "google_drive",
+            "config_status": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI and GOOGLE_AUTHORIZE_URL and GOOGLE_TOKEN_URL and GOOGLE_AUTH_REVOKE_URL)
+        },
+        {
+            "name": "Gmail",
+            "context": "Sync Gmail emails & attachements",
+            "permission": "https://www.googleapis.com/auth/gmail.readonly",
+            "sync_status": "unsynced",
+            "icon": "Gmail",
+            "action": "google",
+            "layer": "gmail",
             "config_status": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI and GOOGLE_AUTHORIZE_URL and GOOGLE_TOKEN_URL and GOOGLE_AUTH_REVOKE_URL)
         },
         { 
-            "name": "Microsoft Office 365 File Storage",
-            "context": "Outlook, OneDrive, SharePoint & OneNote",
+            "name": "Outlook",
+            "context": "Sync Microsoft Outlook emails & attachments",
+            "permission": "Mail.Read",
             "sync_status": "unsynced",
-            "icon": "Microsoft",
+            "icon": "Outlook",
             "action": "microsoft",
+            "layer": "outlook",
+            "config_status": bool( MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET and MICROSOFT_REDIRECT_URI and MICROSOFT_AUTHORIZE_URL and MICROSOFT_TOKEN_URL)
+        },
+        { 
+            "name": "OneDrive",
+            "context": "Sync Microsoft OneDrive files and folders",
+            "permission": "Files.Read.All",
+            "sync_status": "unsynced",
+            "icon": "OneDrive",
+            "action": "microsoft",
+            "layer": "onedrive",
+            "config_status": bool( MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET and MICROSOFT_REDIRECT_URI and MICROSOFT_AUTHORIZE_URL and MICROSOFT_TOKEN_URL)
+        },
+        { 
+            "name": "Sharepoint",
+            "context": "Sync Microsoft Sharepoint sites and files",
+            "permission": "Sites.Read.All, Files.Read.All",
+            "sync_status": "unsynced",
+            "icon": "Sharepoint",
+            "action": "microsoft",
+            "layer": "sharepoint",
+            "config_status": bool( MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET and MICROSOFT_REDIRECT_URI and MICROSOFT_AUTHORIZE_URL and MICROSOFT_TOKEN_URL)
+        },
+        { 
+            "name": "OneNote",
+            "context": "Sync Microsoft OneNote notes",
+            "permission": "Notes.Read",
+            "sync_status": "unsynced",
+            "icon": "OneNote",
+            "action": "microsoft",
+            "layer": "onenote",
             "config_status": bool( MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET and MICROSOFT_REDIRECT_URI and MICROSOFT_AUTHORIZE_URL and MICROSOFT_TOKEN_URL)
         },
         {
-            "name": "Slack",
-            "context": "Direct Messages, Channels, Group Chats, Files & Canvases",
+            "name": "Slack Direct Messages",
+            "context": "Sync Slack Direct Messages",
+            "permission": "im:history, im:read",
             "sync_status": "unsynced",
             "icon": "Slack",
             "action": "slack",
+            "layer": "direct_messages",
             "config_status": bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_REDIRECT_URI and SLACK_AUTHORIZE_URL and SLACK_TOKEN_URL and SLACK_AUTH_REVOKE_URL)
         },
         {
-            "name": "Atlassian",
-            "context": "JIRA projects & issues, Confluence Pages",
+            "name": "Slack Channels",
+            "context": "Sync Slack Channels Conversations",
+            "permission": "channels:history, channels:read",
             "sync_status": "unsynced",
-            "icon": "Atlassian",
+            "icon": "Slack",
+            "action": "slack",
+            "layer": "channels",
+            "config_status": bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_REDIRECT_URI and SLACK_AUTHORIZE_URL and SLACK_TOKEN_URL and SLACK_AUTH_REVOKE_URL)
+        },
+        {
+            "name": "Slack Group Chats",
+            "context": "Sync Slack Group Chats",
+            "permission": "groups:history, groups:read, mpim:history, mpim:read",
+            "sync_status": "unsynced",
+            "icon": "Slack",
+            "action": "slack",
+            "layer": "group_chats",
+            "config_status": bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_REDIRECT_URI and SLACK_AUTHORIZE_URL and SLACK_TOKEN_URL and SLACK_AUTH_REVOKE_URL)
+        },
+        {
+            "name": "Slack Files & Canvases",
+            "context": "Sync Files & Canvases",
+            "permission": "files:read",
+            "sync_status": "unsynced",
+            "icon": "Slack",
+            "action": "slack",
+            "layer": "files",
+            "config_status": bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_REDIRECT_URI and SLACK_AUTHORIZE_URL and SLACK_TOKEN_URL and SLACK_AUTH_REVOKE_URL)
+        },
+        {
+            "name": "Jira",
+            "context": "Sync Atlassian Jira projects & issues",
+            "permission": "read:user:jira,read:issue:jira,read:comment:jira,read:attachment:jira,read:project:jira,read:issue-meta:jira,read:field:jira,read:filter:jira,read:jira-work,read:jira-user,read:me,read:account,report:personal-data",
+            "sync_status": "unsynced",
+            "icon": "JIRA",
             "action": "atlassian",
+            "layer": "jira",
+            "config_status": bool(ATLASSIAN_API_GATEWAY and ATLASSIAN_AUTHORIZE_URL and ATLASSIAN_TOKEN_URL and ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET and ATLASSIAN_REDIRECT_URL)
+        },
+        {
+            "name": "Confluence",
+            "context": "Sync Atlassian Confluence Pages",
+            "permission": "read:content:confluence,read:space:confluence,read:page:confluence,read:blogpost:confluence,read:attachment:confluence,read:comment:confluence,read:user:confluence,read:group:confluence,read:configuration:confluence,search:confluence,read:audit-log:confluence",
+            "sync_status": "unsynced",
+            "icon": "Confluence",
+            "action": "atlassian",
+            "layer": "confluence",
             "config_status": bool(ATLASSIAN_API_GATEWAY and ATLASSIAN_AUTHORIZE_URL and ATLASSIAN_TOKEN_URL and ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET and ATLASSIAN_REDIRECT_URL)
         }
     ]
@@ -173,10 +269,14 @@ class DataSourcesTable:
                 id=unique_id,
                 name=default_source["name"],
                 context=default_source["context"],
+                permission=default_source["permission"],
                 sync_status=default_source["sync_status"],
                 icon=default_source["icon"],
-                action=default_source["action"]
+                action=default_source["action"],
+                layer=default_source['layer']
             )
+
+            log.info(f"Data Sources created for user {user_id}, form: {form_data}")
             
             created_source = self.insert_new_data_source(user_id, form_data)
             if created_source:
@@ -256,6 +356,7 @@ class DataSourcesTable:
         self, 
         user_id: str, 
         source_name: str, 
+        layer_name: str,
         sync_status: str, 
         last_sync: Optional[int] = None
     ) -> Optional[DataSourceModel]:
@@ -277,7 +378,8 @@ class DataSourcesTable:
                 # Find the data source by user_id and name
                 data_source = db.query(DataSource).filter_by(
                     user_id=user_id,
-                    name=source_name
+                    name=source_name,
+                    layer=layer_name
                 ).first()
 
                 if data_source:
