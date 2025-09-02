@@ -36,7 +36,7 @@ async function fetchPreviewHtml() {
     tokenSummary = null;
 	try {
 		if (previewType === 'docx') {
-            const res = await fetchFilePreview('mineral', file.path);
+            const res = await fetchFilePreview('docx', file.path);
             previewHtml = res.preview;
             metadata = res.metadata;
             tokenSummary = res.tokenSummary;
@@ -100,10 +100,8 @@ function portal(node: HTMLElement, target: HTMLElement | null = null) {
 				{#if previewType === 'csv'}
 					<span class="font-semibold">Values: </span>
 					<span class="ml-1 text-gray-800 dark:text-gray-100">{file?.name ?? ''}</span>
-				{:else if previewType === 'docx'}
-					<span class="font-semibold">Mineral File: </span>
-					<span class="ml-1 text-gray-800 dark:text-gray-100">{file?.name ?? ''}</span>
 				{:else}
+					<span class="font-semibold">Document: </span>
 					<span class="ml-1 text-gray-800 dark:text-gray-100">{file?.name ?? ''}</span>
 				{/if}
 			</div>
