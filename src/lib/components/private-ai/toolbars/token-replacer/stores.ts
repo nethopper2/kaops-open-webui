@@ -18,6 +18,7 @@ export const selectedTokenizedDoc = derived([tokenizedFiles, selectedTokenizedDo
 export type TokenReplacerSubView = 'initial' | 'actions' | 'editValues';
 export const currentTokenReplacerSubView: Writable<TokenReplacerSubView> = writable('actions');
 
+
 export async function ensureFilesFetched(): Promise<void> {
   if (get(filesFetched) || get(filesLoading)) return;
   filesLoading.set(true);

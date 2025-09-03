@@ -1,40 +1,28 @@
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
-  import FilePreviewDialog from '$lib/components/chat/MessageInput/FilePreviewDialog.svelte';
   import { ensureFilesFetched, selectedTokenizedDoc, selectedTokenizedDocId, currentTokenReplacerSubView } from '../stores';
   import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
-  import type { TokenFile } from '../stores';
+  import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
+  import { appHooks } from '$lib/utils/hooks';
 
   const i18n = getContext('i18n');
 
-  let showPreviewDialog = false;
-  let previewFile: TokenFile | null = null;
-
-
   function openPreviewDialog() {
-    previewFile = $selectedTokenizedDoc;
-    if (previewFile) {
-      showPreviewDialog = true;
+    const file = $selectedTokenizedDoc;
+    if (file) {
+      appHooks.callHook('chat.overlay', {
+        action: 'open',
+        title: $i18n.t('Preview'),
+        component: TokenizedDocPreview,
+        props: { file, previewType: 'docx' }
+      });
     }
   }
-  function closePreviewDialog() {
-    showPreviewDialog = false;
-    previewFile = null;
-  }
-
   onMount(() => {
     ensureFilesFetched();
   });
 </script>
 
-{#if showPreviewDialog}
-  <FilePreviewDialog
-    show={showPreviewDialog}
-    file={previewFile}
-    previewType="docx"
-    on:close={closePreviewDialog}
-  />
-{/if}
 
 <div class="flex flex-col w-full h-full items-stretch justify-start px-4 py-4">
   <div class="text-sm text-gray-600 dark:text-gray-300 mb-3 text-center px-4">

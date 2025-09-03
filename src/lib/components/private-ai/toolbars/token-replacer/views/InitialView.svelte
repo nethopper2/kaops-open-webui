@@ -2,27 +2,26 @@
   import Select from 'svelte-select';
   import Tooltip from '$lib/components/common/Tooltip.svelte';
   import Eye from '$lib/components/icons/Eye.svelte';
-  import FilePreviewDialog from '$lib/components/chat/MessageInput/FilePreviewDialog.svelte';
   import { onMount, tick } from 'svelte';
   import { appHooks } from '$lib/utils/hooks';
   import { isChatStarted, chatId } from '$lib/stores';
   import { ensureFilesFetched, tokenizedFiles, selectedTokenizedDocId, selectedTokenizedDoc, filesLoading, currentTokenReplacerSubView } from '../stores';
-  import type { TokenFile } from '../stores';
   import { savePrivateAiToolbarState } from '$lib/private-ai/state';
+  import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
 
   export let modelId: string | null = null;
   $: void modelId;
 
-  let showPreviewDialog = false;
-  let previewFile: TokenFile | null | undefined = null;
-
   function openPreviewDialog() {
-    previewFile = $selectedTokenizedDoc;
-    showPreviewDialog = true;
-  }
-  function closePreviewDialog() {
-    showPreviewDialog = false;
-    previewFile = null;
+    const file = $selectedTokenizedDoc;
+    if (file) {
+      appHooks.callHook('chat.overlay', {
+        action: 'open',
+        title: 'Preview',
+        component: TokenizedDocPreview,
+        props: { file, previewType: 'docx' }
+      });
+    }
   }
 
   async function updatePromptWithFilenames() {
@@ -41,14 +40,6 @@
   });
 </script>
 
-{#if showPreviewDialog}
-  <FilePreviewDialog
-    show={showPreviewDialog}
-    file={previewFile}
-    previewType="docx"
-    on:close={closePreviewDialog}
-  />
-{/if}
 
 <div class="flex flex-col w-full px-2 py-2">
   <div class="text-xs text-gray-500 mb-2 text-left">

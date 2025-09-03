@@ -85,6 +85,7 @@
 	import Navbar from '$lib/components/chat/Navbar.svelte';
  import ChatControls from './ChatControls.svelte';
  import PrivateAiModelToolbar from './PrivateAiModelToolbar.svelte';
+ import ChatOverlay from './ChatOverlay.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import Placeholder from './Placeholder.svelte';
 	import NotificationToast from '../NotificationToast.svelte';
@@ -141,6 +142,14 @@ import { appHooks } from '$lib/utils/hooks';
 
 let __unhookModelChanged: (() => void) | undefined;
 let __unhookChatSubmit: (() => void) | undefined;
+let __unhookChatOverlay: (() => void) | undefined;
+let __unsubShowPrivateToolbar: Unsubscriber | undefined;
+
+// Overlay state controlled via appHooks 'chat.overlay'
+let overlayShow = false;
+let overlayTitle = '';
+let overlayComponent: any = null;
+let overlayProps: Record<string, unknown> = {};
 
 onMount(() => {
 	const handler = async ({ prevModelId, modelId, canShowPrivateAiToolbar }: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => {
@@ -167,11 +176,36 @@ onMount(() => {
 	__unhookChatSubmit = appHooks.hook('chat.submit', ({ prompt }) => {
 		submitPrompt(prompt);
 	});
+
+	// Hook for chat-level overlay control
+	__unhookChatOverlay = appHooks.hook('chat.overlay', ({ action, title, component, props }) => {
+		if (action === 'open') {
+			overlayTitle = title ?? '';
+			overlayComponent = component ?? null;
+			overlayProps = props ?? {};
+			overlayShow = true;
+		} else if (action === 'update') {
+			overlayTitle = title ?? overlayTitle;
+			overlayComponent = component ?? overlayComponent;
+			overlayProps = props ? { ...overlayProps, ...props } : overlayProps;
+		} else if (action === 'close') {
+			overlayShow = false;
+		}
+	});
+
+	// Close overlay if the Private AI toolbar closes
+	__unsubShowPrivateToolbar = showPrivateAiModelToolbar.subscribe((v) => {
+		if (!v) {
+			overlayShow = false;
+		}
+	});
 });
 
 onDestroy(() => {
 	__unhookModelChanged?.();
 	__unhookChatSubmit?.();
+	__unhookChatOverlay?.();
+	__unsubShowPrivateToolbar?.();
 });
 
 	let selectedToolIds = [];
@@ -2240,7 +2274,7 @@ onDestroy(() => {
 <div
 	class="h-screen max-h-[100dvh] transition-width duration-200 ease-in-out {$showSidebar
 		? '  md:max-w-[calc(100%-260px)]'
-		: ' '} w-full max-w-full flex flex-col"
+		: ' '} w-full max-w-full flex flex-col relative"
 	id="chat-container"
 >
 	{#if !loading}
@@ -2261,6 +2295,14 @@ onDestroy(() => {
 
 			<PaneGroup direction="horizontal" class="w-full h-full">
 				<Pane defaultSize={50} class="h-full flex relative max-w-full flex-col">
+					<ChatOverlay
+						show={overlayShow}
+						title={overlayTitle}
+						component={overlayComponent}
+						componentProps={overlayProps}
+						on:close={() => { overlayShow = false; }}
+					/>
+
 					<Navbar
 						bind:this={navbarElement}
 						chat={{

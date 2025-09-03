@@ -1,13 +1,27 @@
 <script lang="ts">
 import { getContext, onMount, onDestroy } from 'svelte';
 import { toast } from 'svelte-sonner';
-import { currentTokenReplacerSubView, selectedTokenizedDocId } from '../stores';
+import { currentTokenReplacerSubView, selectedTokenizedDocId, selectedTokenizedDoc } from '../stores';
+import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
+import { appHooks } from '$lib/utils/hooks';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
 import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 import { chatId } from '$lib/stores';
 import { loadTokenReplacerDraft, saveTokenReplacerDraft, clearTokenReplacerDraft, type TokenReplacerDraft } from '../drafts';
 
 const i18n = getContext('i18n');
+
+function openPreviewPanel() {
+  const file = $selectedTokenizedDoc;
+  if (file) {
+    appHooks.callHook('chat.overlay', {
+      action: 'open',
+      title: $i18n.t('Preview'),
+      component: TokenizedDocPreview,
+      props: { file, previewType: 'docx' }
+    });
+  }
+}
 
 // Stubbed data types
 type Token = string;
@@ -46,33 +60,33 @@ async function loadTokensAndValues(): Promise<{ tokens: Token[]; values: Replace
 	// Simulate network latency
 	await new Promise((r) => setTimeout(r, 200));
 	const fakeTokens: Token[] = [
-		'{{FIRST_NAME}}',
-		'{{LAST_NAME}}',
-		'{{EMAIL}}',
-		'{{COMPANY}}',
-		'{{JOB_TITLE}}',
-		'{{ADDRESS_LINE_1}}',
-		'{{ADDRESS_LINE_2}}',
-		'{{CITY}}',
-		'{{STATE}}',
-		'{{POSTAL_CODE}}',
-		'{{COUNTRY}}',
-		'{{LONG_SENTENCE_TOKEN_THAT_COULD_BE_VERY_LONG_SO_WRAP_PROPERLY}}'
+		'[[FIRST_NAME]]',
+		'[[LAST_NAME]]',
+		'[[EMAIL]]',
+		'[[COMPANY]]',
+		'[[JOB_TITLE]]',
+		'[[ADDRESS_LINE_1]]',
+		'[[ADDRESS_LINE_2]]',
+		'[[CITY]]',
+		'[[STATE]]',
+		'[[POSTAL_CODE]]',
+		'[[COUNTRY]]',
+		'[[LONG_SENTENCE_TOKEN_THAT_COULD_BE_VERY_LONG_SO_WRAP_PROPERLY]]'
 	];
 
 	const fakeValues: ReplacementValues = {
-		'{{FIRST_NAME}}': '',
-		'{{LAST_NAME}}': '',
-		'{{EMAIL}}': '',
-		'{{COMPANY}}': 'My Company',
-		'{{JOB_TITLE}}': '',
-		'{{ADDRESS_LINE_1}}': '',
-		'{{ADDRESS_LINE_2}}': '',
-		'{{CITY}}': '',
-		'{{STATE}}': '',
-		'{{POSTAL_CODE}}': '',
-		'{{COUNTRY}}': '',
-		'{{LONG_SENTENCE_TOKEN_THAT_COULD_BE_VERY_LONG_SO_WRAP_PROPERLY}}': ''
+		'[[FIRST_NAME]]': '',
+		'[[LAST_NAME]]': '',
+		'[[EMAIL]]': '',
+		'[[COMPANY]]': 'My Company',
+		'[[JOB_TITLE]]': '',
+		'[[ADDRESS_LINE_1]]': '',
+		'[[ADDRESS_LINE_2]]': '',
+		'[[CITY]]': '',
+		'[[STATE]]': '',
+		'[[POSTAL_CODE]]': '',
+		'[[COUNTRY]]': '',
+		'[[LONG_SENTENCE_TOKEN_THAT_COULD_BE_VERY_LONG_SO_WRAP_PROPERLY]]': ''
 	};
 
 	return { tokens: fakeTokens, values: fakeValues };
@@ -230,7 +244,7 @@ onDestroy(() => {
 	<div
 		class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 sticky top-[48px] bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10">
 		<div class="mb-2">
-			<SelectedDocumentSummary />
+   <SelectedDocumentSummary on:preview={openPreviewPanel} />
 		</div>
 		<label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1" for="token-search">
 			{$i18n.t('Search tokens')}
