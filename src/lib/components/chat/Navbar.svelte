@@ -2,7 +2,7 @@
 	import { getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 
-	import {
+ import {
 		WEBUI_NAME,
 		banners,
 		chatId,
@@ -13,7 +13,10 @@
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
-		user
+		user,
+		showPrivateAiModelToolbar,
+		canShowPrivateAiModelToolbar,
+		privateAiSelectedModelAvatarUrl
 	} from '$lib/stores';
 
 	import { slide } from 'svelte/transition';
@@ -35,7 +38,7 @@
 	import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte';
 
 	import EllipsisHorizontal from '../icons/EllipsisHorizontal.svelte';
-	import ChatPlus from '../icons/ChatPlus.svelte';
+ import ChatPlus from '../icons/ChatPlus.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -187,9 +190,9 @@
 						<Tooltip content={$i18n.t('Controls')}>
 							<button
 								class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
-								on:click={async () => {
-									await showControls.set(!$showControls);
-								}}
+        on:click={async () => {
+											await showControls.set(!$showControls);
+										}}
 								aria-label="Controls"
 							>
 								<div class=" m-auto self-center">
@@ -197,6 +200,22 @@
 								</div>
 							</button>
 						</Tooltip>
+					{/if}
+
+					{#if $canShowPrivateAiModelToolbar}
+					<Tooltip content={$i18n.t('Model Sidekick')}>
+						<button
+							class="flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
+							on:click={async () => {
+								await showPrivateAiModelToolbar.set(!$showPrivateAiModelToolbar);
+							}}
+							aria-label="Model Sidekick"
+						>
+							<div class=" m-auto self-center">
+								<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover" draggable="false" />
+							</div>
+						</button>
+					</Tooltip>
 					{/if}
 
 					{#if $mobile}

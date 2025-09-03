@@ -14,7 +14,7 @@
 	import type { i18n as i18nType } from 'i18next';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 
-	import {
+ import {
 		chatId,
 		chats,
 		config,
@@ -29,6 +29,7 @@
 		socket,
 		showControls,
 		showCallOverlay,
+		showPrivateAiModelToolbar,
 		currentChatPage,
 		temporaryChatEnabled,
 		mobile,
@@ -38,7 +39,9 @@
 		tools,
 		toolServers,
 		selectedFolder,
-		pinnedChats
+		pinnedChats,
+		currentSelectedModelId,
+		canShowPrivateAiModelToolbar
 	} from '$lib/stores';
 	import {
 		convertMessagesToHistory,
@@ -80,7 +83,8 @@
 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
-	import ChatControls from './ChatControls.svelte';
+ import ChatControls from './ChatControls.svelte';
+ import PrivateAiModelToolbar from './PrivateAiModelToolbar.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import Placeholder from './Placeholder.svelte';
 	import NotificationToast from '../NotificationToast.svelte';
@@ -95,8 +99,11 @@
 	let loading = true;
 
 	const eventTarget = new EventTarget();
+
 	let controlPane;
 	let controlPaneComponent;
+	let privateAiPane;
+	let privateAiPaneComponent;
 
 	let messageInput;
 
@@ -118,8 +125,54 @@
 
 	let selectedModels = [''];
 	let atSelectedModel: Model | undefined;
-	let selectedModelIds = [];
-	$: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
+ let selectedModelIds = [];
+ $: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
+ 
+ // Keep a global store updated with the current single selected model id (or null if multiple/none)
+ $: {
+ 	const singleId = (Array.isArray(selectedModels) && selectedModels.length === 1 && selectedModels[0] !== ''
+ 			? selectedModels[0]
+ 			: (atSelectedModel ? atSelectedModel.id : null));
+ 	currentSelectedModelId.set(singleId);
+ }
+ 
+// Auto open/close of Private AI toolbar is now handled via appHooks 'model.changed' in onMount.
+import { appHooks } from '$lib/utils/hooks';
+
+let __unhookModelChanged: (() => void) | undefined;
+let __unhookChatSubmit: (() => void) | undefined;
+
+onMount(() => {
+	const handler = async ({ prevModelId, modelId, canShowPrivateAiToolbar }: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => {
+		const currentId = get(currentSelectedModelId);
+		// Ignore stale/out-of-order events: only react if payload modelId matches current selection
+		if (modelId !== currentId) {
+			return;
+		}
+		if (canShowPrivateAiToolbar) {
+			showPrivateAiModelToolbar.set(true);
+			await tick();
+			privateAiPaneComponent?.openPane?.();
+		} else {
+			showPrivateAiModelToolbar.set(false);
+		}
+	};
+	__unhookModelChanged = appHooks.hook('model.changed', handler);
+	// Call once on mount to handle initial state
+	(async () => {
+		await handler({ prevModelId: null, modelId: get(currentSelectedModelId), canShowPrivateAiToolbar: get(canShowPrivateAiModelToolbar) });
+	})();
+
+	// Allow external components (e.g., Private AI toolbars) to submit a prompt
+	__unhookChatSubmit = appHooks.hook('chat.submit', ({ prompt }) => {
+		submitPrompt(prompt);
+	});
+});
+
+onDestroy(() => {
+	__unhookModelChanged?.();
+	__unhookChatSubmit?.();
+});
 
 	let selectedToolIds = [];
 	let selectedFilterIds = [];
@@ -173,6 +226,17 @@
 			loading = false;
 			window.setTimeout(() => scrollToBottom(), 0);
 
+			// Ensure Private AI toolbar opens when an existing chat is loaded
+			try {
+				if (get(canShowPrivateAiModelToolbar)) {
+					showPrivateAiModelToolbar.set(true);
+					await tick();
+					privateAiPaneComponent?.openPane?.();
+				}
+			} catch {
+				// ignore any errors initializing the toolbar on chat load
+			}
+
 			await tick();
 
 			if (storageChatInput) {
@@ -216,7 +280,6 @@
 			return;
 		}
 		sessionStorage.selectedModels = JSON.stringify(selectedModels);
-		console.log('saveSessionSelectedModels', selectedModels, sessionStorage.selectedModels);
 	};
 
 	let oldSelectedModelIds = [''];
@@ -510,9 +573,7 @@
 		showControls.subscribe(async (value) => {
 			if (controlPane && !$mobile) {
 				try {
-					if (value) {
-						controlPaneComponent.openPane();
-					} else {
+					if (!value) {
 						controlPane.collapse();
 					}
 				} catch (e) {
@@ -2425,6 +2486,14 @@
 					{showMessage}
 					{eventTarget}
 				/>
+
+    <PrivateAiModelToolbar
+					bind:this={privateAiPaneComponent}
+					bind:pane={privateAiPane}
+     on:close={() => {
+						showPrivateAiModelToolbar.set(false);
+					}}
+					/>
 			</PaneGroup>
 		</div>
 	{:else if loading}

@@ -36,7 +36,7 @@ async function fetchPreviewHtml() {
     tokenSummary = null;
 	try {
 		if (previewType === 'docx') {
-            const res = await fetchFilePreview('mineral', file.path);
+            const res = await fetchFilePreview('docx', file.path);
             previewHtml = res.preview;
             metadata = res.metadata;
             tokenSummary = res.tokenSummary;
@@ -92,7 +92,7 @@ function portal(node: HTMLElement, target: HTMLElement | null = null) {
    <!-- Right-anchored dialog -->
 	<div class="fixed right-0 w-full max-w-md z-[1001] flex flex-col bg-white dark:bg-gray-850 shadow-lg rounded-l-xl transition-transform duration-200" style="top:0; bottom:0; margin-top:8px; margin-bottom:8px; height:auto; max-height:calc(100vh - 16px); transform: translateX(0);">
 		<!-- Prominent top-right close button -->
-		<button class="absolute top-2 right-2 p-2  rounded-full bg-white text-gray-700 shadow border border-gray-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700" on:click={closeDialog} aria-label="Close" title="Close">
+		<button class="absolute top-2 right-2 p-2  rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700" on:click={closeDialog} aria-label="Close" title="Close">
 			<XMark className="w-5 h-5" />
 		</button>
 		<div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
@@ -100,10 +100,8 @@ function portal(node: HTMLElement, target: HTMLElement | null = null) {
 				{#if previewType === 'csv'}
 					<span class="font-semibold">Values: </span>
 					<span class="ml-1 text-gray-800 dark:text-gray-100">{file?.name ?? ''}</span>
-				{:else if previewType === 'docx'}
-					<span class="font-semibold">Mineral File: </span>
-					<span class="ml-1 text-gray-800 dark:text-gray-100">{file?.name ?? ''}</span>
 				{:else}
+					<span class="font-semibold">Document: </span>
 					<span class="ml-1 text-gray-800 dark:text-gray-100">{file?.name ?? ''}</span>
 				{/if}
 			</div>

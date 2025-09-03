@@ -14,7 +14,8 @@
 		temporaryChatEnabled,
 		selectedFolder,
 		chats,
-		currentChatPage
+		currentChatPage,
+		type Model
 	} from '$lib/stores';
 	import { sanitizeResponseContent, extractCurlyBraceWords } from '$lib/utils';
 	import { WEBUI_BASE_URL } from '$lib/constants';
@@ -22,11 +23,13 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import MessageInput from './MessageInput.svelte';
+	import { canShowPrivateAiModelToolbar } from '$lib/stores';
 	import FolderPlaceholder from './Placeholder/FolderPlaceholder.svelte';
 	import FolderTitle from './Placeholder/FolderTitle.svelte';
 	import { getChatList } from '$lib/apis/chats';
 	import { isPrivateAiModel } from '$lib/utils/privateAi';
 	import LockClosed from '$lib/components/icons/LockClosed.svelte';
+	import Spinner from '$lib/components/common/Spinner.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -214,34 +217,40 @@
 				</div>
 			{/if}
 
-			<div class="text-base font-normal @md:max-w-3xl w-full py-3 {atSelectedModel ? 'mt-2' : ''}">
-				<MessageInput
-					bind:this={messageInput}
-					{history}
-					{selectedModels}
-					bind:files
-					bind:prompt
-					bind:autoScroll
-					bind:selectedToolIds
-					bind:selectedFilterIds
-					bind:imageGenerationEnabled
-					bind:codeInterpreterEnabled
-					bind:webSearchEnabled
-					bind:atSelectedModel
-					bind:showCommands
-					{toolServers}
-					{stopResponse}
-					{createMessagePair}
-					placeholder={$i18n.t('How can I help you today?')}
-					{onChange}
-					on:upload={(e) => {
-						dispatch('upload', e.detail);
-					}}
-					on:submit={(e) => {
-						dispatch('submit', e.detail);
-					}}
-				/>
-			</div>
+			{#if !$canShowPrivateAiModelToolbar}
+				<div class="text-base font-normal @md:max-w-3xl w-full py-3 {atSelectedModel ? 'mt-2' : ''}">
+					<MessageInput
+						bind:this={messageInput}
+						{history}
+						{selectedModels}
+						bind:files
+						bind:prompt
+						bind:autoScroll
+						bind:selectedToolIds
+						bind:selectedFilterIds
+						bind:imageGenerationEnabled
+						bind:codeInterpreterEnabled
+						bind:webSearchEnabled
+						bind:atSelectedModel
+						bind:showCommands
+						{toolServers}
+						{stopResponse}
+						{createMessagePair}
+						placeholder={$i18n.t('How can I help you today?')}
+						{onChange}
+						on:upload={(e) => {
+							dispatch('upload', e.detail);
+						}}
+						on:submit={(e) => {
+							dispatch('submit', e.detail);
+						}}
+					/>
+				</div>
+			{:else}
+				<div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-6 select-none">
+					<Spinner/> {$i18n.t('Waiting for Model Sidekick Input.')}
+				</div>
+			{/if}
 		</div>
 	</div>
 

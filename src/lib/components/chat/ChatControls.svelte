@@ -4,7 +4,8 @@
 	import { Pane, PaneResizer } from 'paneforge';
 
 	import { onDestroy, onMount, tick } from 'svelte';
-	import { mobile, showControls, showCallOverlay, showOverview, showArtifacts } from '$lib/stores';
+ import { mobile, showControls, showCallOverlay, showOverview, showArtifacts, activeRightPane } from '$lib/stores';
+ import { calcMinSize, createPaneBehavior, isPaneHandle, type PaneHandle, rightPaneSize } from '$lib/utils/pane';
 
 	import Modal from '../common/Modal.svelte';
 	import Controls from './Controls/Controls.svelte';
@@ -30,6 +31,9 @@
 	export let modelId;
 
 	export let pane;
+	// When false, keep component mounted but do not render its Pane/Resizer inside the PaneGroup (prevents interference)
+	let activeInPaneGroup: boolean = true;
+	$: activeInPaneGroup = $activeRightPane === 'controls';
 
 	let mediaQuery;
 	let largeScreen = false;
@@ -37,12 +41,19 @@
 
 	let minSize = 0;
 
-	export const openPane = () => {
-		if (parseInt(localStorage?.chatControlsSize)) {
-			pane.resize(parseInt(localStorage?.chatControlsSize));
-		} else {
-			pane.resize(minSize);
-		}
+	let hasExpanded = false;
+	let paneHandle: PaneHandle | null = null;
+	$: paneHandle = isPaneHandle(pane) ? (pane as PaneHandle) : null;
+
+	const behavior = createPaneBehavior({
+		storageKey: 'chatControlsSize',
+		showStore: showControls,
+		isActiveInPaneGroup: () => activeInPaneGroup,
+		getMinSize: () => minSize
+	});
+
+	export const openPane = async () => {
+		await behavior.openPane(paneHandle, largeScreen);
 	};
 
 	const handleMediaQuery = async (e) => {
@@ -83,23 +94,18 @@
 
 		// Select the container element you want to observe
 		const container = document.getElementById('chat-container');
+		const MIN_SIZE = 350;
 
-		// initialize the minSize based on the container width
-		minSize = Math.floor((350 / container.clientWidth) * 100);
+ 	// initialize the minSize based on the container width
+		minSize = calcMinSize(container, MIN_SIZE);
 
 		// Create a new ResizeObserver instance
 		const resizeObserver = new ResizeObserver((entries) => {
 			for (let entry of entries) {
-				const width = entry.contentRect.width;
-				// calculate the percentage of 200px
-				const percentage = (350 / width) * 100;
-				// set the minSize to the percentage, must be an integer
-				minSize = Math.floor(percentage);
+				minSize = calcMinSize(entry.target as HTMLElement, MIN_SIZE);
 
-				if ($showControls) {
-					if (pane && pane.isExpanded() && pane.getSize() < minSize) {
-						pane.resize(minSize);
-					}
+				if ($showControls && paneHandle && paneHandle.isExpanded() && paneHandle.getSize() < minSize) {
+					behavior.clamp(paneHandle, minSize);
 				}
 			}
 		});
@@ -132,6 +138,12 @@
 	$: if (!chatId) {
 		closeHandler();
 	}
+
+	// TODO: cleanup
+	// Ensure the pane actually opens to a visible width when activated in the PaneGroup (desktop)
+	// $: if (largeScreen && activeInPaneGroup && $showControls && paneHandle) {
+	// 	openPane?.();
+	// }
 </script>
 
 <SvelteFlowProvider>
@@ -192,7 +204,7 @@
 	{:else}
 		<!-- if $showControls -->
 
-		{#if $showControls}
+		{#if activeInPaneGroup && $showControls}
 			<PaneResizer
 				class="relative flex w-2 items-center justify-center bg-background group"
 				id="controls-resizer"
@@ -203,83 +215,87 @@
 			</PaneResizer>
 		{/if}
 
-		<Pane
-			bind:pane
-			defaultSize={0}
-			onResize={(size) => {
-				console.log('size', size, minSize);
+		{#if activeInPaneGroup}
+		 <Pane
+			 bind:pane
+			 defaultSize={$rightPaneSize || minSize}
+			 onResize={(size) => {
+					// Mark that the pane has expanded at least once when size > 0
+					hasExpanded = hasExpanded || size > 0;
 
-				if ($showControls && pane.isExpanded()) {
-					if (size < minSize) {
-						pane.resize(minSize);
+     			if ($showControls && paneHandle && paneHandle.isExpanded()) {
+						if (size < minSize) {
+							behavior.clamp(paneHandle, minSize);
+						}
+						behavior.persistSize(size, minSize);
+						rightPaneSize.set(size);
 					}
+				}}
+				onCollapse={() => {
+					// Ignore collapse events while we are in the process of opening to a visible size
+					if (behavior.isOpening()) return;
+					// Only hide after the pane has actually expanded at least once; ignore initial mount collapse
+					if (hasExpanded) {
+						showControls.set(false);
+					}
+				}}
+				collapsible={true}
+				class=" z-10 "
+			>
+				{#if $showControls}
+					<div class="flex max-h-full min-h-full">
+						<div
+							class="w-full {($showOverview || $showArtifacts) && !$showCallOverlay
+								? ' '
+								: 'px-4 py-4 bg-white dark:shadow-lg dark:bg-gray-850  border border-gray-100 dark:border-gray-850'} z-40 pointer-events-auto overflow-y-auto scrollbar-hidden"
+							id="controls-container"
+						>
+							{#if $showCallOverlay}
+								<div class="w-full h-full flex justify-center">
+									<CallOverlay
+										bind:files
+										{submitPrompt}
+										{stopResponse}
+										{modelId}
+										{chatId}
+										{eventTarget}
+										on:close={() => {
+											showControls.set(false);
+										}}
+									/>
+								</div>
+							{:else if $showArtifacts}
+								<Artifacts {history} overlay={dragged} />
+							{:else if $showOverview}
+								<Overview
+									{history}
+									on:nodeclick={(e) => {
+										if (e.detail.node.data.message.favorite) {
+											history.messages[e.detail.node.data.message.id].favorite = true;
+										} else {
+											history.messages[e.detail.node.data.message.id].favorite = null;
+										}
 
-					if (size < minSize) {
-						localStorage.chatControlsSize = 0;
-					} else {
-						localStorage.chatControlsSize = size;
-					}
-				}
-			}}
-			onCollapse={() => {
-				showControls.set(false);
-			}}
-			collapsible={true}
-			class=" z-10 "
-		>
-			{#if $showControls}
-				<div class="flex max-h-full min-h-full">
-					<div
-						class="w-full {($showOverview || $showArtifacts) && !$showCallOverlay
-							? ' '
-							: 'px-4 py-4 bg-white dark:shadow-lg dark:bg-gray-850  border border-gray-100 dark:border-gray-850'} z-40 pointer-events-auto overflow-y-auto scrollbar-hidden"
-						id="controls-container"
-					>
-						{#if $showCallOverlay}
-							<div class="w-full h-full flex justify-center">
-								<CallOverlay
-									bind:files
-									{submitPrompt}
-									{stopResponse}
-									{modelId}
-									{chatId}
-									{eventTarget}
+										showMessage(e.detail.node.data.message);
+									}}
 									on:close={() => {
 										showControls.set(false);
 									}}
 								/>
-							</div>
-						{:else if $showArtifacts}
-							<Artifacts {history} overlay={dragged} />
-						{:else if $showOverview}
-							<Overview
-								{history}
-								on:nodeclick={(e) => {
-									if (e.detail.node.data.message.favorite) {
-										history.messages[e.detail.node.data.message.id].favorite = true;
-									} else {
-										history.messages[e.detail.node.data.message.id].favorite = null;
-									}
-
-									showMessage(e.detail.node.data.message);
-								}}
-								on:close={() => {
-									showControls.set(false);
-								}}
-							/>
-						{:else}
-							<Controls
-								on:close={() => {
-									showControls.set(false);
-								}}
-								{models}
-								bind:chatFiles
-								bind:params
-							/>
-						{/if}
+							{:else}
+								<Controls
+									on:close={() => {
+										showControls.set(false);
+									}}
+									{models}
+									bind:chatFiles
+									bind:params
+								/>
+							{/if}
+						</div>
 					</div>
-				</div>
-			{/if}
-		</Pane>
+				{/if}
+			</Pane>
+		{/if}
 	{/if}
 </SvelteFlowProvider>
