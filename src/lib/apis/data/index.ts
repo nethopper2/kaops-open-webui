@@ -60,10 +60,7 @@ export const getDataSources = async (token: string): Promise<DataSourceResponse[
 
 	const res = await fetch(`${DATA_API_BASE_URL}/source/`, {
 		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		}
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
@@ -90,10 +87,7 @@ export const createDataSource = async (
 
 	const res = await fetch(`${DATA_API_BASE_URL}/source/`, {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		},
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(payload)
 	})
 		.then(async (res) => {
@@ -120,10 +114,7 @@ export const initializeDefaultDataSources = async (
 
 	const res = await fetch(`${DATA_API_BASE_URL}/sources/initialize`, {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		}
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
@@ -150,10 +141,7 @@ export const getDataSourceById = async (
 
 	const res = await fetch(`${DATA_API_BASE_URL}/source/${id}`, {
 		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		}
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
@@ -181,10 +169,7 @@ export const updateDataSource = async (
 
 	const res = await fetch(`${DATA_API_BASE_URL}/source/${id}/update`, {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		},
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(payload)
 	})
 		.then(async (res) => {
@@ -213,10 +198,7 @@ export const updateSyncStatus = async (
 
 	const res = await fetch(`${DATA_API_BASE_URL}/source/${id}/sync`, {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		},
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(payload)
 	})
 		.then(async (res) => {
@@ -244,10 +226,7 @@ export const deleteDataSource = async (
 
 	const res = await fetch(`${DATA_API_BASE_URL}/source/${id}`, {
 		method: 'DELETE',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		}
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
@@ -268,16 +247,14 @@ export const deleteDataSource = async (
 
 export const initializeDataSync = async (
 	token: string,
-	action: string
+	action: string,
+	layer: string
 ): Promise<SlackAuthResponse> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/${action}/initialize`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/${action}/initialize?layer=${layer}`, {
 		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		}
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
@@ -301,10 +278,7 @@ export const getDataSourceStatus = async (token: string): Promise<SlackStatusRes
 
 	const res = await fetch(`${DATA_API_BASE_URL}/slack/status`, {
 		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		}
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
@@ -323,15 +297,16 @@ export const getDataSourceStatus = async (token: string): Promise<SlackStatusRes
 	return res;
 };
 
-export const manualDataSync = async (token: string, action: string): Promise<any> => {
+export const manualDataSync = async (
+	token: string,
+	action: string,
+	layer: string
+): Promise<any> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/${action}/sync`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/${action}/sync?layer=${layer}`, {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		}
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
@@ -352,16 +327,14 @@ export const manualDataSync = async (token: string, action: string): Promise<any
 
 export const disconnectDataSync = async (
 	token: string,
-	action: string
+	action: string,
+	layer: string
 ): Promise<{ message: string; user_id: string; status: string }> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/${action}/disconnect`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/${action}/disconnect?layer=${layer}`, {
 		method: 'DELETE',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		}
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();

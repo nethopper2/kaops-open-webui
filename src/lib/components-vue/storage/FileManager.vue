@@ -101,9 +101,21 @@ onMounted(async () => {
 	loading.value = true;
 
 	const backendConfig = await getBackendConfig();
+	
+	// Check if we should use the new nh-pai-data-service
+	const useNewService = localStorage.getItem('use_nh_data_service') === 'true';
+	
+	let endpointUrl;
+	if (useNewService) {
+		// Use nh-pai-data-service
+		endpointUrl = `${backendConfig.nh_data_service.url}/api/v1/files/devextreme`;
+	} else {
+		// Use original private-ai-rest service
+		endpointUrl = `${backendConfig.private_ai.rest_api_base_url}/api/storage/file-manager`;
+	}
 
 	fileSystemProvider = new RemoteFileSystemProvider({
-		endpointUrl: `${backendConfig.private_ai.rest_api_base_url}/api/storage/file-manager`,
+		endpointUrl: endpointUrl,
 		requestHeaders: {
 			Authorization: 'Bearer ' + localStorage.getItem('token')
 		}

@@ -42,6 +42,8 @@ class OAuthToken(Base):
     # you could use that and store `List[str]` as JSON.
     scopes = Column(Text, nullable=True) 
 
+    layer = Column(String, nullable=True)
+
     created_at = Column(BigInteger)
     updated_at = Column(BigInteger)
 
@@ -67,6 +69,7 @@ class OAuthTokenModel(BaseModel):
     
     access_token_expires_at: Optional[int] = None # timestamp in epoch
     scopes: Optional[str] = None # Stored as a string
+    layer: Optional[str] = None
 
     created_at: int # timestamp in epoch
     updated_at: int # timestamp in epoch
@@ -112,6 +115,7 @@ class OAuthTokensTable:
         encrypted_refresh_token: Optional[bytes] = None,
         access_token_expires_at: Optional[int] = None,
         scopes: Optional[str] = None, # Comma-separated string of scopes
+        layer: Optional[str] = None, # Comma-separated string of data layers
         provider_user_id: Optional[str] = None,
         provider_team_id: Optional[str] = None,
         data_source_id: Optional[str] = None,
@@ -137,6 +141,7 @@ class OAuthTokensTable:
                 existing_token.encrypted_refresh_token = encrypted_refresh_token
                 existing_token.access_token_expires_at = access_token_expires_at
                 existing_token.scopes = scopes
+                existing_token.layer = layer
                 existing_token.updated_at = current_time
                 db.commit()
                 db.refresh(existing_token)
@@ -154,6 +159,7 @@ class OAuthTokensTable:
                     encrypted_refresh_token=encrypted_refresh_token,
                     access_token_expires_at=access_token_expires_at,
                     scopes=scopes,
+                    layer=layer,
                     created_at=current_time,
                     updated_at=current_time,
                 )
@@ -225,6 +231,7 @@ class OAuthTokensTable:
         encrypted_refresh_token: Optional[bytes] = None,
         access_token_expires_at: Optional[int] = None,
         scopes: Optional[str] = None,
+        layer: Optional[str] = None,
     ) -> Optional[OAuthTokenModel]:
         with get_db() as db:
             try:
@@ -234,6 +241,7 @@ class OAuthTokensTable:
                     token.encrypted_refresh_token = encrypted_refresh_token
                     token.access_token_expires_at = access_token_expires_at
                     token.scopes = scopes
+                    token.layer = layer
                     token.updated_at = int(time.time())
                     db.commit()
                     db.refresh(token)

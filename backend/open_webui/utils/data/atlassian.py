@@ -34,6 +34,22 @@ JIRA_CLOUD_API_PATH = "/rest/api/3"
 # Confluence Cloud API
 CONFLUENCE_CLOUD_API_PATH = "/wiki/rest/api"
 
+# Layer configuration mapping
+LAYER_CONFIG = {
+    'jira': {
+        'folder': 'Jira',
+        'process_jira': True,
+        'process_confluence': False,
+        'required_scopes': ['read:project:jira', 'read:issue:jira']
+    },
+    'confluence': {
+        'folder': 'Confluence', 
+        'process_jira': False,
+        'process_confluence': True,
+        'required_scopes': ['read:confluence-content', 'read:content:confluence']
+    }
+}
+
 def make_atlassian_request(url: str, method: str = 'GET', headers: Optional[Dict[str, str]] = None,
                            params: Optional[Dict[str, Any]] = None, data: Optional[Any] = None,
                            stream: bool = False, auth_token: Optional[str] = None, auth: Optional[str] = None):
@@ -70,8 +86,6 @@ def make_atlassian_request(url: str, method: str = 'GET', headers: Optional[Dict
         log.error(f"Failed to make Atlassian API request to {url}: {e}", exc_info=True)
         raise Exception(f"Failed to make Atlassian API request after retries for URL: {url}")
 
-
-
 def get_accessible_atlassian_sites(auth_token):
     """
     Gets the list of Jira/Confluence sites (cloudId and url) that the user has access to.
@@ -84,7 +98,7 @@ def get_accessible_atlassian_sites(auth_token):
         log.error(f"Failed to get accessible Atlassian resources: {e}")
         return []
 
-def list_jira_projects_and_issues(site_url, all_items=None):
+def list_jira_projects_and_issues(site_url, all_items=None, layer=None):
     """
     Lists Jira projects and then all issues within those projects.
     Atlassian doesn't have a direct "folder" concept like Google Drive,
@@ -116,6 +130,12 @@ def list_jira_projects_and_issues(site_url, all_items=None):
         
         log.info(f"Found {len(projects)} Jira projects for site: {site_url}")
 
+        # Determine folder name based on layer or default
+        if layer and layer in LAYER_CONFIG:
+            folder_name = LAYER_CONFIG[layer]['folder']
+        else:
+            folder_name = 'Jira'
+
         # Step 2: For each project, search for issues (using JQL)
         for project in projects:
             project_key = project.get('key')
@@ -140,11 +160,11 @@ def list_jira_projects_and_issues(site_url, all_items=None):
                 issues = search_response.get('issues', [])
 
                 for issue in issues:
-                    # Construct full path for GCS
+                    # Construct full path for GCS with layer-specific folder
                     issue_key = issue.get('key')
                     issue_summary = issue.get('fields', {}).get('summary', 'no_summary').replace('/', '_') # Sanitize for path
                     
-                    full_path = f"userResources/{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Jira/{project_key}/{issue_key}-{issue_summary}.json"
+                    full_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{project_key}/{issue_key}-{issue_summary}.json"
                     
                     issue_info = {
                         'id': issue.get('id'),
@@ -154,7 +174,8 @@ def list_jira_projects_and_issues(site_url, all_items=None):
                         'content': json.dumps(issue, indent=2), # Store full issue JSON
                         'modifiedTime': issue.get('fields', {}).get('updated'),
                         'createdTime': issue.get('fields', {}).get('created'),
-                        'type': 'issue'
+                        'type': 'issue',
+                        'layer': layer
                     }
                     all_items.append(issue_info)
 
@@ -167,7 +188,7 @@ def list_jira_projects_and_issues(site_url, all_items=None):
                         attachment_mime_type = attachment.get('mimeType')
                         attachment_size = attachment.get('size')
                         
-                        attachment_path = f"userResources/{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Jira/{project_key}/{issue_key}/attachments/{attachment_filename}"
+                        attachment_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{project_key}/{issue_key}/attachments/{attachment_filename}"
                         
                         attachment_info = {
                             'id': attachment_id,
@@ -177,7 +198,8 @@ def list_jira_projects_and_issues(site_url, all_items=None):
                             'size': attachment_size,
                             'modifiedTime': attachment.get('created'), # Use attachment creation as modified time
                             'createdTime': attachment.get('created'),
-                            'type': 'attachment'
+                            'type': 'attachment',
+                            'layer': layer
                         }
                         all_items.append(attachment_info)
 
@@ -191,7 +213,7 @@ def list_jira_projects_and_issues(site_url, all_items=None):
     return all_items
 
 
-def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=None):
+def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=None, layer=None):
     """
     Lists Confluence spaces and then all pages within those spaces.
     Handles parent-child page relationships (simple recursion here).
@@ -219,6 +241,12 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=N
             start_at += max_results
         
         log.info(f"Found {len(spaces)} Confluence spaces for site: {site_url}")
+
+        # Determine folder name based on layer or default
+        if layer and layer in LAYER_CONFIG:
+            folder_name = LAYER_CONFIG[layer]['folder']
+        else:
+            folder_name = 'Confluence'
 
         # Step 2: For each space, list its content (pages)
         for space in spaces:
@@ -249,7 +277,7 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=N
                     page_id = page.get('id')
                     page_title = page.get('title', 'no_title').replace('/', '_') # Sanitize for path
 
-                    full_path = f"userResources/{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Confluence/{space_key}/{page_title}-{page_id}.html"
+                    full_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{space_key}/{page_title}-{page_id}.html"
                     
                     page_info = {
                         'id': page_id,
@@ -258,7 +286,8 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=N
                         'content': page.get('body', {}).get('storage', {}).get('value'), # Storage format content
                         'modifiedTime': page.get('version', {}).get('when'),
                         'createdTime': page.get('history', {}).get('createdDate'), # Confluence history for creation
-                        'type': 'page'
+                        'type': 'page',
+                        'layer': layer
                     }
                     all_items.append(page_info)
 
@@ -274,7 +303,7 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=N
                         if attachment_download_url and attachment_download_url.startswith('/'):
                             attachment_download_url = f"{site_url}{attachment_download_url}" # Make absolute URL
 
-                        attachment_path = f"userResources/{USER_ID}/Atlassian/{site_url.replace('https://', '').replace('/', '_')}/Confluence/{space_key}/{page_title}-{page_id}/attachments/{attachment_filename}"
+                        attachment_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{space_key}/{page_title}-{page_id}/attachments/{attachment_filename}"
 
                         attachment_info = {
                             'id': attachment_id,
@@ -284,7 +313,8 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=N
                             'size': attachment_size,
                             'modifiedTime': attachment.get('version', {}).get('when'),
                             'createdTime': attachment.get('version', {}).get('when'), # Use version date for simplicity
-                            'type': 'attachment'
+                            'type': 'attachment',
+                            'layer': layer
                         }
                         all_items.append(attachment_info)
 
@@ -297,7 +327,6 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, auth_token, all_items=N
         log.error(f'Listing Confluence spaces/pages failed for site {site_url}: {str(error)}', exc_info=True)
 
     return all_items
-
 
 def download_atlassian_content(item_info, auth_token):
     """
@@ -391,13 +420,13 @@ def download_and_upload_atlassian_item(item, auth_token, service_account_base64,
         log.error(f"Error processing Atlassian item {item.get('fullPath')}: {str(e)}", exc_info=True)
         return None # Ensure None is returned on error
 
-
-async def sync_atlassian_to_gcs(auth_token, service_account_base64):
-    """Main function to sync Atlassian (Jira & Confluence) to Google Cloud Storage"""
+async def sync_atlassian_to_gcs(auth_token, service_account_base64, layer=None):
+    """Main function to sync Atlassian (Jira & Confluence) to Google Cloud Storage with layer filtering"""
     global total_api_calls
     global GCS_BUCKET_NAME
     
-    log.info('🔄 Starting recursive sync process for Atlassian...')
+    layer_display = f" ({layer})" if layer else ""
+    log.info(f'🔄 Starting recursive sync process for Atlassian{layer_display}...')
     
     uploaded_items = []
     deleted_items = []
@@ -410,6 +439,16 @@ async def sync_atlassian_to_gcs(auth_token, service_account_base64):
             raise ValueError("Could not retrieve user's accessible Atlassian sites.")
         
         all_atlassian_items = []
+
+        # Determine what to process based on layer
+        should_process_jira = True
+        should_process_confluence = True
+        
+        if layer and layer in LAYER_CONFIG:
+            layer_config = LAYER_CONFIG[layer]
+            should_process_jira = layer_config['process_jira']
+            should_process_confluence = layer_config['process_confluence']
+            log.info(f"Layer-specific sync: Jira={should_process_jira}, Confluence={should_process_confluence}")
 
         # Process each accessible Atlassian site
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -425,12 +464,14 @@ async def sync_atlassian_to_gcs(auth_token, service_account_base64):
                     log.warning(f"Skipping Atlassian resource with missing URL or Cloud ID: {site}")
                     continue
 
-                if 'read:project:jira' in product_uris:
-                    futures_to_site[executor.submit(list_jira_projects_and_issues, site_url, [])] = \
+                # Check if this site has Jira access and we should process it
+                if should_process_jira and 'read:project:jira' in product_uris:
+                    futures_to_site[executor.submit(list_jira_projects_and_issues, site_url, [], layer)] = \
                         {"type": "Jira", "site_url": site_url}
                 
-                if 'read:confluence-content' in product_uris:
-                    futures_to_site[executor.submit(list_confluence_spaces_and_pages, site_url, cloud_id, auth_token, [])] = \
+                # Check if this site has Confluence access and we should process it  
+                if should_process_confluence and 'read:confluence-content' in product_uris:
+                    futures_to_site[executor.submit(list_confluence_spaces_and_pages, site_url, cloud_id, auth_token, [], layer)] = \
                         {"type": "Confluence", "site_url": site_url}
 
             for future in concurrent.futures.as_completed(futures_to_site):
@@ -449,8 +490,15 @@ async def sync_atlassian_to_gcs(auth_token, service_account_base64):
         gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
         atlassian_item_paths = {item['fullPath'] for item in all_atlassian_items}
 
-        # Delete orphaned GCS files that belong to this user's Atlassian data
-        user_prefix = f"userResources/{USER_ID}/Atlassian/"
+        # Delete orphaned GCS files - layer-specific cleanup
+        if layer and layer in LAYER_CONFIG:
+            # Only clean up files in this specific layer's folder
+            layer_folder = LAYER_CONFIG[layer]['folder']
+            user_prefix = f"userResources/{USER_ID}/Atlassian/{layer_folder}/"
+        else:
+            # Clean up all Atlassian files
+            user_prefix = f"userResources/{USER_ID}/Atlassian/"
+        
         for gcs_name, gcs_file in gcs_file_map.items():
             if gcs_name.startswith(user_prefix) and gcs_name not in atlassian_item_paths:
                 delete_gcs_file(gcs_name, service_account_base64, GCS_BUCKET_NAME)
@@ -538,6 +586,7 @@ async def sync_atlassian_to_gcs(auth_token, service_account_base64):
         log.info(f"📊 Billable API Calls: {total_api_calls}")
         log.info(f"📦 Items Processed: {len(all_atlassian_items)}")
         log.info(f"🗑️  Orphans Removed: {len(deleted_items)}")
+        log.info(f"📂 Layer: {layer if layer else 'All layers'}")
         
         log.info(f"\nTotal: +{len([f for f in uploaded_items if f['type'] == 'new'])} added, " +
               f"^{len([f for f in uploaded_items if f['type'] == 'updated'])} updated, " +
@@ -550,10 +599,21 @@ async def sync_atlassian_to_gcs(auth_token, service_account_base64):
         log.error(f"[{datetime.now().isoformat()}] Atlassian Sync failed critically: {str(error)}", exc_info=True)
         raise error
 
-async def initiate_atlassian_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str):
+async def initiate_atlassian_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str, layer: str = None):
+    """
+    Main execution function for Atlassian to GCS sync with layer support
+    
+    Args:
+        user_id (str): User ID from your app
+        token (str): Atlassian OAuth token
+        creds (str): Base64 encoded GCS service account credentials
+        gcs_bucket_name (str): Name of the GCS bucket
+        layer (str, optional): Specific Atlassian layer to sync (jira, confluence)
+    """
     log.info(f'Initiating Atlassian (Jira & Confluence) sync to Google Cloud Storage')
     log.info(f'User Open WebUI ID: {user_id}')
     log.info(f'GCS Bucket Name: {gcs_bucket_name}')
+    log.info(f'Layer: {layer if layer else "All layers"}')
 
     global USER_ID
     global USER_AUTH
@@ -570,12 +630,22 @@ async def initiate_atlassian_sync(user_id: str, token: str, creds: str, gcs_buck
     total_api_calls = 0
     script_start_time = time.time()
 
-    await update_data_source_sync_status(USER_ID, 'atlassian', 'syncing')
+    # Validate layer parameter
+    if layer and layer not in LAYER_CONFIG:
+        raise ValueError(f"Invalid layer '{layer}'. Valid layers are: {', '.join(LAYER_CONFIG.keys())}")
+
+    await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'syncing')
 
     try:
-        await sync_atlassian_to_gcs(token, creds)
+        await sync_atlassian_to_gcs(token, creds, layer)
+        return {
+            "status": "started", 
+            "message": f"Atlassian sync process has been initiated successfully for {layer if layer else 'all layers'}",
+            "user_id": user_id,
+            "layer": layer
+        }
     except Exception as e:
         log.error(f"Atlassian sync initiation failed: {e}", exc_info=True)
         # The sync_atlassian_to_gcs already updates status to 'error', but good to catch here too.
-        await update_data_source_sync_status(USER_ID, 'atlassian', 'error')
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
         raise # Re-raise to propagate the error if needed by the caller

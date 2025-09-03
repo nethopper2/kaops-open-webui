@@ -34,6 +34,30 @@ MAX_RETRIES = 5
 BASE_DELAY = 1  # Base delay in seconds
 MAX_DELAY = 300  # Maximum delay in seconds
 
+# Layer configuration mapping
+LAYER_CONFIG = {
+    'direct_messages': {
+        'folder': 'Direct Messages',
+        'conversation_types': ['im'],
+        'include_files': False
+    },
+    'channels': {
+        'folder': 'Channels', 
+        'conversation_types': ['public_channel', 'private_channel'],
+        'include_files': False
+    },
+    'group_chats': {
+        'folder': 'Group Messages',
+        'conversation_types': ['mpim'],
+        'include_files': False
+    },
+    'files': {
+        'folder': 'Files',
+        'conversation_types': [],
+        'include_files': True
+    }
+}
+
 def safe_parse_date(timestamp):
     """Safely parse various timestamp formats from Slack"""
     if not timestamp:
@@ -314,11 +338,32 @@ def join_channel_if_user_is_member(conversation_id, auth_token, target_user_id, 
         print(f"Error joining channel {conversation_id}: {str(error)}")
         return False
 
-def get_conversations_list(auth_token, types="public_channel,private_channel,mpim,im"):
-    """Get list of conversations the user has access to and is a member of"""
+def get_conversations_list(auth_token, layer=None):
+    """Get list of conversations the user has access to and is a member of, filtered by layer"""
     try:
         all_conversations = []
         cursor = None
+        
+        # Determine conversation types based on layer
+        if layer and layer in LAYER_CONFIG:
+            layer_types = LAYER_CONFIG[layer]['conversation_types']
+            if not layer_types:  # If no conversation types for this layer (like files)
+                return []
+            
+            # Map layer types to Slack API types
+            type_mapping = {
+                'im': 'im',
+                'public_channel': 'public_channel',
+                'private_channel': 'private_channel', 
+                'mpim': 'mpim'
+            }
+            types = ','.join([type_mapping[t] for t in layer_types if t in type_mapping])
+        else:
+            # Default: get all conversation types
+            types = "public_channel,private_channel,mpim,im"
+        
+        if not types:  # No valid types for this layer
+            return []
         
         while True:
             params = {
@@ -692,7 +737,7 @@ def download_slack_file(file_info, auth_token):
         # log.error(f"Error downloading file {file_info.get('name', 'unknown')}:", exc_info=True)
         return None # Return None as stated in the original function's error path
 
-def process_conversation(conversation, auth_token, slack_user_id, user_info_map, service_account_base64, gcs_bucket_name):
+def process_conversation(conversation, auth_token, slack_user_id, user_info_map, service_account_base64, gcs_bucket_name, layer=None):
     """Process a single conversation with incremental updates"""
     try:
         conversation_id = conversation['id']
@@ -701,15 +746,27 @@ def process_conversation(conversation, auth_token, slack_user_id, user_info_map,
         
         print(f"Processing {conversation_type}: {conversation_name}")
         
+        # Get folder name from layer configuration
+        if layer and layer in LAYER_CONFIG:
+            folder_name = LAYER_CONFIG[layer]['folder']
+        else:
+            # Fallback logic for determining folder
+            if conversation.get('is_im'):
+                folder_name = 'Direct Messages'
+            elif conversation.get('is_mpim'):
+                folder_name = 'Group Messages' 
+            else:
+                folder_name = 'Channels'
+        
         # Create file path based on conversation type and name
         if conversation.get('is_im'):
             other_user = conversation.get('user', 'unknown_user')
             other_user_name = user_info_map.get(other_user, other_user)
-            file_path = f"userResources/{USER_ID}/Slack/Direct Messages/{other_user_name}.json"
+            file_path = f"userResources/{USER_ID}/Slack/{folder_name}/{other_user_name}.json"
         elif conversation.get('is_mpim'):
-            file_path = f"userResources/{USER_ID}/Slack/Group Messages/{conversation_name}.json"
+            file_path = f"userResources/{USER_ID}/Slack/{folder_name}/{conversation_name}.json"
         else:
-            file_path = f"userResources/{USER_ID}/Slack/Channels/{conversation_name}.json"
+            file_path = f"userResources/{USER_ID}/Slack/{folder_name}/{conversation_name}.json"
         
         # Check if conversation already exists in GCS
         existing_conversation_data = download_existing_conversation_from_gcs(
@@ -759,7 +816,8 @@ def process_conversation(conversation, auth_token, slack_user_id, user_info_map,
             'exported_at': datetime.now(timezone.utc).isoformat(),
             'total_messages': len(all_messages),
             'last_sync_timestamp': last_message_ts,
-            'incremental_sync': existing_conversation_data is not None
+            'incremental_sync': existing_conversation_data is not None,
+            'layer': layer
         }
         
         # Get the most recent message timestamp for comparison
@@ -785,7 +843,7 @@ def process_conversation(conversation, auth_token, slack_user_id, user_info_map,
         print(f"Error processing conversation {conversation.get('name', conversation.get('id'))}: {str(error)}")
         return None
 
-def process_file(file_info, auth_token, service_account_base64, gcs_bucket_name):
+def process_file(file_info, auth_token, service_account_base64, gcs_bucket_name, layer=None):
     """Process a single file, skipping if already exists in GCS"""
     try:
         file_id = file_info['id']
@@ -810,9 +868,15 @@ def process_file(file_info, auth_token, service_account_base64, gcs_bucket_name)
         if not file_content:
             return None
         
+        # Get folder name from layer configuration or default
+        if layer and layer in LAYER_CONFIG:
+            folder_name = LAYER_CONFIG[layer]['folder']
+        else:
+            folder_name = 'Files'  # Default folder
+        
         # Create file path with file ID to ensure uniqueness
         safe_filename = f"{file_name}_{file_id}"
-        file_path = f"userResources/{USER_ID}/Slack/Files/{safe_filename}"
+        file_path = f"userResources/{USER_ID}/Slack/{folder_name}/{safe_filename}"
         
         # Use safe_parse_date for file timestamp
         file_timestamp = file_info.get('timestamp')
@@ -869,12 +933,13 @@ def upload_file_to_gcs(file_data, service_account_base64, gcs_bucket_name):
         print(f"Error uploading file {file_data['path']}: {str(error)}")
         return None
 
-async def sync_slack_to_gcs(auth_token, service_account_base64):
-    """Main function to sync Slack data to Google Cloud Storage with incremental updates"""
+async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
+    """Main function to sync Slack data to Google Cloud Storage with incremental updates and layer filtering"""
     global total_api_calls
     global GCS_BUCKET_NAME
     
-    print('🔄 Starting Slack sync process...')
+    layer_display = f" ({layer})" if layer else ""
+    print(f'🔄 Starting Slack sync process{layer_display}...')
     
     uploaded_files = []
     deleted_files = []
@@ -889,130 +954,160 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
         slack_user_id = user_info['user_id']
         print(f"Syncing data for user: {user_info['user']} ({slack_user_id})")
         
-        # Get conversations where user is a member
-        print("Fetching conversations where user is a member...")
-        conversations = get_conversations_list(auth_token)
-        
-        # Also explicitly fetch DMs
-        print("Fetching direct messages...")
-        direct_messages = get_user_direct_messages(auth_token, slack_user_id)
-        
-        # Combine and deduplicate conversations
-        all_conversations = conversations + direct_messages
-        seen_ids = set()
+        # Initialize collections
         unique_conversations = []
-        
-        for conv in all_conversations:
-            if conv['id'] not in seen_ids:
-                unique_conversations.append(conv)
-                seen_ids.add(conv['id'])
-        
-        print(f"Found {len(unique_conversations)} total conversations ({len(direct_messages)} DMs)")
-        
-        # Get user info for DM naming
-        print("Fetching user information for DM naming...")
-        dm_user_ids = [conv.get('user') for conv in unique_conversations if conv.get('is_im') and conv.get('user')]
-        user_info_map = get_user_info_batch(auth_token, dm_user_ids) if dm_user_ids else {}
-        
-        # Get user files
-        print("Fetching files...")
-        files = get_user_files(auth_token, slack_user_id)
-        print(f"Found {len(files)} files")
-        
-        # Process conversations with incremental updates
-        print("\nProcessing conversations...")
+        files = []
         conversation_paths = set()
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            # Submit conversation processing tasks
-            conv_futures = {
-                executor.submit(
-                    process_conversation, 
-                    conv, 
-                    auth_token, 
-                    slack_user_id, 
-                    user_info_map,
-                    service_account_base64,
-                    GCS_BUCKET_NAME
-                ): conv
-                for conv in unique_conversations
-            }
-            
-            # Process completed conversation tasks
-            for future in concurrent.futures.as_completed(conv_futures):
-                try:
-                    conv_data = future.result()
-                    if conv_data:
-                        conversation_paths.add(conv_data['path'])
-                        
-                        # Always upload conversations (they handle their own incremental logic)
-                        start_time = time.time()
-                        result = upload_conversation_to_gcs(conv_data, service_account_base64, GCS_BUCKET_NAME)
-                        
-                        if result:
-                            uploaded_files.append({
-                                'path': conv_data['path'],
-                                'type': 'updated' if conv_data['is_update'] else 'new',
-                                'size': conv_data['size'],
-                                'durationMs': int((time.time() - start_time) * 1000),
-                                'reason': f"{'Incremental update' if conv_data['is_update'] else 'New conversation'} - {conv_data['new_messages_count']} new messages"
-                            })
-                            print(f"[{datetime.now().isoformat()}] {'Updated' if conv_data['is_update'] else 'Uploaded'} {conv_data['path']}")
-                            
-                except Exception as e:
-                    conv = conv_futures[future]
-                    print(f"Error processing conversation {conv.get('name', conv.get('id'))}: {str(e)}")
-        
-        # Process files with existence checking
-        print("\nProcessing files...")
         file_paths = set()
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            # Submit file processing tasks
-            file_futures = {
-                executor.submit(
-                    process_file, 
-                    file_info, 
-                    auth_token,
-                    service_account_base64,
-                    GCS_BUCKET_NAME
-                ): file_info
-                for file_info in files
-            }
+        # Process based on layer
+        if layer and layer in LAYER_CONFIG:
+            layer_config = LAYER_CONFIG[layer]
             
-            # Process completed file tasks
-            for future in concurrent.futures.as_completed(file_futures):
-                try:
-                    file_data = future.result()
-                    if file_data:
-                        if file_data.get('skipped'):
-                            skipped_files += 1
-                            file_paths.add(file_data['path'])
-                        else:
-                            file_paths.add(file_data['path'])
+            # Process conversations for this layer
+            if layer_config['conversation_types']:
+                print(f"Fetching {layer} conversations...")
+                conversations = get_conversations_list(auth_token, layer)
+                unique_conversations = conversations
+                print(f"Found {len(unique_conversations)} {layer} conversations")
+            
+            # Process files for this layer
+            if layer_config['include_files']:
+                print(f"Fetching {layer}...")
+                files = get_user_files(auth_token, slack_user_id)
+                print(f"Found {len(files)} files")
+        
+        else:
+            # No specific layer - process all (fallback behavior)
+            print("No specific layer specified, processing all Slack data...")
+            conversations = get_conversations_list(auth_token)
+            direct_messages = get_user_direct_messages(auth_token, slack_user_id)
+            
+            # Combine and deduplicate conversations
+            all_conversations = conversations + direct_messages
+            seen_ids = set()
+            
+            for conv in all_conversations:
+                if conv['id'] not in seen_ids:
+                    unique_conversations.append(conv)
+                    seen_ids.add(conv['id'])
+            
+            print(f"Found {len(unique_conversations)} total conversations")
+            
+            # Get files
+            files = get_user_files(auth_token, slack_user_id)
+            print(f"Found {len(files)} files")
+        
+        # Get user info for DM naming if we have conversations
+        user_info_map = {}
+        if unique_conversations:
+            print("Fetching user information for naming...")
+            dm_user_ids = [conv.get('user') for conv in unique_conversations if conv.get('is_im') and conv.get('user')]
+            user_info_map = get_user_info_batch(auth_token, dm_user_ids) if dm_user_ids else {}
+        
+        # Process conversations with incremental updates
+        if unique_conversations:
+            print(f"\nProcessing {len(unique_conversations)} conversations...")
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                # Submit conversation processing tasks
+                conv_futures = {
+                    executor.submit(
+                        process_conversation, 
+                        conv, 
+                        auth_token, 
+                        slack_user_id, 
+                        user_info_map,
+                        service_account_base64,
+                        GCS_BUCKET_NAME,
+                        layer
+                    ): conv
+                    for conv in unique_conversations
+                }
+                
+                # Process completed conversation tasks
+                for future in concurrent.futures.as_completed(conv_futures):
+                    try:
+                        conv_data = future.result()
+                        if conv_data:
+                            conversation_paths.add(conv_data['path'])
                             
+                            # Always upload conversations (they handle their own incremental logic)
                             start_time = time.time()
-                            result = upload_file_to_gcs(file_data, service_account_base64, GCS_BUCKET_NAME)
+                            result = upload_conversation_to_gcs(conv_data, service_account_base64, GCS_BUCKET_NAME)
                             
                             if result:
                                 uploaded_files.append({
-                                    'path': file_data['path'],
-                                    'type': 'new',
-                                    'size': file_data['size'],
+                                    'path': conv_data['path'],
+                                    'type': 'updated' if conv_data['is_update'] else 'new',
+                                    'size': conv_data['size'],
                                     'durationMs': int((time.time() - start_time) * 1000),
-                                    'reason': 'New file'
+                                    'reason': f"{'Incremental update' if conv_data['is_update'] else 'New conversation'} - {conv_data['new_messages_count']} new messages"
                                 })
-                                print(f"[{datetime.now().isoformat()}] Uploaded {file_data['path']}")
-                            
-                except Exception as e:
-                    file_info = file_futures[future]
-                    print(f"Error processing file {file_info.get('name', 'unknown')}: {str(e)}")
+                                print(f"[{datetime.now().isoformat()}] {'Updated' if conv_data['is_update'] else 'Uploaded'} {conv_data['path']}")
+                                
+                    except Exception as e:
+                        conv = conv_futures[future]
+                        print(f"Error processing conversation {conv.get('name', conv.get('id'))}: {str(e)}")
         
-        # Clean up orphaned files (same as before)
+        # Process files with existence checking
+        if files:
+            print(f"\nProcessing {len(files)} files...")
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                # Submit file processing tasks
+                file_futures = {
+                    executor.submit(
+                        process_file, 
+                        file_info, 
+                        auth_token,
+                        service_account_base64,
+                        GCS_BUCKET_NAME,
+                        layer
+                    ): file_info
+                    for file_info in files
+                }
+                
+                # Process completed file tasks
+                for future in concurrent.futures.as_completed(file_futures):
+                    try:
+                        file_data = future.result()
+                        if file_data:
+                            if file_data.get('skipped'):
+                                skipped_files += 1
+                                file_paths.add(file_data['path'])
+                            else:
+                                file_paths.add(file_data['path'])
+                                
+                                start_time = time.time()
+                                result = upload_file_to_gcs(file_data, service_account_base64, GCS_BUCKET_NAME)
+                                
+                                if result:
+                                    uploaded_files.append({
+                                        'path': file_data['path'],
+                                        'type': 'new',
+                                        'size': file_data['size'],
+                                        'durationMs': int((time.time() - start_time) * 1000),
+                                        'reason': 'New file'
+                                    })
+                                    print(f"[{datetime.now().isoformat()}] Uploaded {file_data['path']}")
+                                
+                    except Exception as e:
+                        file_info = file_futures[future]
+                        print(f"Error processing file {file_info.get('name', 'unknown')}: {str(e)}")
+        
+        # Clean up orphaned files - only for the specific layer if provided
         gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME)
         gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
         
-        user_prefix = f"userResources/{USER_ID}/Slack/"
+        if layer and layer in LAYER_CONFIG:
+            # Only clean up files in this specific layer's folder
+            layer_folder = LAYER_CONFIG[layer]['folder']
+            user_prefix = f"userResources/{USER_ID}/Slack/{layer_folder}/"
+        else:
+            # Clean up all Slack files
+            user_prefix = f"userResources/{USER_ID}/Slack/"
+        
         all_current_paths = conversation_paths | file_paths
         
         for gcs_name, gcs_file in gcs_file_map.items():
@@ -1039,7 +1134,7 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
         
         total_runtime = int((time.time() - script_start_time) * 1000)
 
-        await update_data_source_sync_status(USER_ID, 'slack', 'synced')
+        await update_data_source_sync_status(USER_ID, 'slack', layer, 'synced')
 
         print("\nAccounting Metrics:")
         print(f"⏱️  Total Runtime: {(total_runtime/1000):.2f} seconds")
@@ -1048,32 +1143,35 @@ async def sync_slack_to_gcs(auth_token, service_account_base64):
         print(f"📁 Files Processed: {len(files)}")
         print(f"🗑️  Orphans Removed: {len(deleted_files)}")
         print(f"⏭️  Files Skipped (already exist): {skipped_files}")
+        print(f"📂 Layer: {layer if layer else 'All layers'}")
         
         print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
     
     except Exception as error:
-        await update_data_source_sync_status(USER_ID, 'slack', 'error')
+        await update_data_source_sync_status(USER_ID, 'slack', layer, 'error')
         print(f'Slack Sync failed: {str(error)}')
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
         print(traceback.format_exc())
         raise
 
 # Main Execution Function
-async def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str):
+async def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str, layer: str = None):
     """
-    Main execution function for Slack to GCS sync
+    Main execution function for Slack to GCS sync with layer support
     
     Args:
         user_id (str): User ID from your app
         token (str): Slack OAuth token
         creds (str): Base64 encoded GCS service account credentials
         gcs_bucket_name (str): Name of the GCS bucket
+        layer (str, optional): Specific Slack layer to sync (direct_messages, channels, group_chats, files)
     """
     log.info(f'Sync Slack to Google Cloud Storage')
     log.info(f'User Open WebUI ID: {user_id}')
     log.info(f'GCS Bucket Name: {gcs_bucket_name}')
+    log.info(f'Layer: {layer if layer else "All layers"}')
 
     global USER_ID 
     global GCS_BUCKET_NAME
@@ -1085,17 +1183,24 @@ async def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_n
     total_api_calls = 0
     script_start_time = time.time()
 
+    # Validate layer parameter
+    if layer and layer not in LAYER_CONFIG:
+        raise ValueError(f"Invalid layer '{layer}'. Valid layers are: {', '.join(LAYER_CONFIG.keys())}")
+
     # Validate token quickly before starting async process
     user_info = get_slack_user_info(token)
     if not user_info:
         raise ValueError("Invalid Slack token or could not retrieve user information")
 
-    await sync_slack_to_gcs(token, creds)
+    await update_data_source_sync_status(USER_ID, 'slack', layer, 'syncing')
+
+    await sync_slack_to_gcs(token, creds, layer)
     
     # Return immediate response
     return {
         "status": "started",
-        "message": "Slack sync process has been initiated successfully",
+        "message": f"Slack sync process has been initiated successfully for {layer if layer else 'all layers'}",
         "user_id": user_id,
-        "slack_user": user_info.get('user', 'unknown')
+        "slack_user": user_info.get('user', 'unknown'),
+        "layer": layer
     }

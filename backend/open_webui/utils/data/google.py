@@ -311,6 +311,8 @@ async def sync_gmail_to_gcs(auth_token, service_account_base64, gcs_bucket_name,
         print(f"📧 Emails processed: {len(messages)}")
         print(f"📤 Emails uploaded: {len(uploaded_files)}")
         print(f"⏭️  Emails skipped: {skipped_files}")
+
+        await update_data_source_sync_status(USER_ID, 'google', 'gmail', 'synced')
         
         return {
             'uploaded': len(uploaded_files),
@@ -866,6 +868,8 @@ async def sync_drive_to_gcs(auth_token, service_account_base64):
         print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
+
+        await update_data_source_sync_status(USER_ID, 'google', 'google_drive', 'synced')
         
     except Exception as error:
         # Log the full error for debugging
@@ -945,25 +949,22 @@ async def initiate_google_file_sync(user_id: str, token: str, creds: str, gcs_bu
         'gmail': None
     }
 
-    await update_data_source_sync_status(USER_ID, 'google', 'syncing')
-
     try:
         # Sync Google Drive if requested
         if sync_drive:
+            await update_data_source_sync_status(USER_ID, 'google', 'google_drive', 'syncing')
             await sync_drive_to_gcs(token, creds)
             results['drive'] = 'completed'
         
         # Sync Gmail if requested
         if sync_gmail:
-            
+            await update_data_source_sync_status(USER_ID, 'google', 'gmail', 'syncing')
             gmail_result = await sync_gmail_to_gcs(token, creds, gcs_bucket_name, gmail_query, max_emails)
             results['gmail'] = gmail_result
 
-        await update_data_source_sync_status(USER_ID, 'google', 'synced')
         
         return results
         
     except Exception as error:
-        await update_data_source_sync_status(USER_ID, 'google', 'error')
         log.error("Google sync failed:", exc_info=True)
         raise error

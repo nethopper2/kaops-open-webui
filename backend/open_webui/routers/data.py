@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, BackgroundTasks
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
 import requests
 import os
 import logging
 import jwt
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Tuple
 
 from open_webui.env import SRC_LOG_LEVELS
 from open_webui.constants import ERROR_MESSAGES
@@ -68,15 +69,546 @@ from open_webui.env import (
     ATLASSIAN_CLIENT_SECRET,
     ATLASSIAN_REDIRECT_URL,
 
-    GCS_BUCKET_NAME,
+    DATASOURCES_URL,
     GCS_SERVICE_ACCOUNT_BASE64,
-    DATASOURCES_URL
+    GCS_BUCKET_NAME
+
 )
 
+# Global OAuth state store
 oauth_state_store = {}
 
+# Provider configurations
+PROVIDER_CONFIGS = {
+    'google': {
+        'client_id': GOOGLE_CLIENT_ID,
+        'client_secret': GOOGLE_CLIENT_SECRET,
+        'redirect_uri': GOOGLE_REDIRECT_URI,
+        'authorize_url': GOOGLE_AUTHORIZE_URL,
+        'token_url': GOOGLE_TOKEN_URL,
+        'revoke_url': GOOGLE_AUTH_REVOKE_URL,
+        'scope_separator': ' ',
+        'default_scopes': [
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/gmail.readonly"
+        ],
+        'layer_scopes': {
+            'google_drive': 'https://www.googleapis.com/auth/drive.readonly',
+            'gmail': 'https://www.googleapis.com/auth/gmail.readonly'
+        },
+        'layer_folders': {
+            'google_drive': 'Google Drive',
+            'gmail': 'Gmail'
+        }
+    },
+    'microsoft': {
+        'client_id': MICROSOFT_CLIENT_ID,
+        'client_secret': MICROSOFT_CLIENT_SECRET,
+        'redirect_uri': MICROSOFT_REDIRECT_URI,
+        'authorize_url': MICROSOFT_AUTHORIZE_URL,
+        'token_url': MICROSOFT_TOKEN_URL,
+        'revoke_url': None,  # Microsoft doesn't have a direct revoke endpoint
+        'scope_separator': ' ',
+        'default_scopes': [
+            "User.Read",
+            "Files.Read.All",
+            "Sites.Read.All",
+            "Notes.Read",
+            "Mail.Read",
+            "MailboxSettings.Read",
+            "offline_access"
+        ],
+        'layer_scopes': {
+            'onedrive': 'Files.Read.All',
+            'sharepoint': 'Sites.Read.All',
+            'onenote': 'Notes.Read',
+            'outlook': 'Mail.Read'
+        },
+        'layer_folders': {
+            'onedrive': 'OneDrive',
+            'sharepoint': 'SharePoint',
+            'onenote': 'OneNote',
+            'outlook': 'Outlook'
+        }
+    },
+    'slack': {
+        'client_id': SLACK_CLIENT_ID,
+        'client_secret': SLACK_CLIENT_SECRET,
+        'redirect_uri': SLACK_REDIRECT_URI,
+        'authorize_url': SLACK_AUTHORIZE_URL,
+        'token_url': SLACK_TOKEN_URL,
+        'revoke_url': SLACK_AUTH_REVOKE_URL,
+        'scope_separator': ',',
+        'default_scopes': [
+            "channels:history",
+            "groups:history",
+            "im:history",
+            "mpim:history",
+            "files:read",
+            "users:read",
+            "channels:read",
+            "groups:read",
+            "im:read",
+            "mpim:read"
+        ],
+        'layer_scopes': {
+            'direct_messages': [
+                "im:history",
+                "im:read",
+                "users:read"
+            ],
+            'channels': [
+                "channels:history",
+                "channels:read",
+                "users:read"
+            ],
+            'group_chats': [
+                "groups:history",
+                "groups:read",
+                "mpim:history",
+                "mpim:read",
+                "users:read"
+            ],
+            'files': [
+                "files:read",
+                "users:read"
+            ]
+        },
+        'layer_folders': {
+            'direct_messages': 'Direct Messages',
+            'channels': 'Channels',
+            'group_chats': 'Group Messages',
+            'files': 'Files'
+        }
+    },
+    'atlassian': {
+        'client_id': ATLASSIAN_CLIENT_ID,
+        'client_secret': ATLASSIAN_CLIENT_SECRET,
+        'redirect_uri': ATLASSIAN_REDIRECT_URL,
+        'authorize_url': ATLASSIAN_AUTHORIZE_URL,
+        'token_url': ATLASSIAN_TOKEN_URL,
+        'revoke_url': None,  # Atlassian doesn't have a direct revoke endpoint
+        'scope_separator': ' ',
+        'default_scopes': [
+            "read:user:jira",
+            "read:issue:jira",
+            "read:comment:jira",
+            "read:attachment:jira",
+            "read:project:jira",
+            "read:issue-meta:jira",
+            "read:field:jira",
+            "read:filter:jira",
+            "read:jira-work",
+            "read:jira-user",
+            "read:me",
+            "read:account",
+            "report:personal-data",
+            "read:content:confluence",
+            "read:space:confluence",
+            "read:page:confluence",
+            "read:blogpost:confluence",
+            "read:attachment:confluence",
+            "read:comment:confluence",
+            "read:user:confluence",
+            "read:group:confluence",
+            "read:configuration:confluence",
+            "search:confluence",
+            "read:audit-log:confluence"
+        ],
+        'layer_scopes': {
+            'jira': [
+                "read:user:jira",
+                "read:issue:jira",
+                "read:comment:jira",
+                "read:attachment:jira",
+                "read:project:jira",
+                "read:issue-meta:jira",
+                "read:field:jira",
+                "read:filter:jira",
+                "read:jira-work",
+                "read:jira-user",
+                "read:me",
+                "read:account",
+                "report:personal-data"
+            ],
+            'confluence': [
+                "read:content:confluence",
+                "read:space:confluence",
+                "read:page:confluence",
+                "read:blogpost:confluence",
+                "read:attachment:confluence",
+                "read:comment:confluence",
+                "read:user:confluence",
+                "read:group:confluence",
+                "read:configuration:confluence",
+                "search:confluence",
+                "read:audit-log:confluence",
+                "read:me",
+                "read:account"
+            ]
+        },
+        'layer_folders': {
+            'jira': 'Jira',
+            'confluence': 'Confluence'
+        }
+    }
+}
+
 ############################
-# Get Data Sources
+# Reusable Helper Functions
+############################
+
+def create_oauth_state(user_id: str, layer: str) -> str:
+    """Create and store OAuth state for security."""
+    state = str(uuid.uuid4())
+    oauth_state_store[state] = {
+        "user_id": user_id,
+        "layer": layer
+    }
+    log.info(f"Created OAuth state for user {user_id}, layer {layer}")
+    return state
+
+def validate_oauth_state(state: str) -> Dict[str, Any]:
+    """Validate and consume OAuth state."""
+    if not state or state not in oauth_state_store:
+        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
+    
+    state_data = oauth_state_store.pop(state)
+    log.info(f"Validated OAuth state for user {state_data['user_id']}")
+    return state_data
+
+def encrypt_tokens(access_token: str, refresh_token: str = None) -> Tuple[str, Optional[str]]:
+    """Encrypt OAuth tokens for storage."""
+    encrypted_access_token = encrypt_data(access_token)
+    encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else None
+    return encrypted_access_token, encrypted_refresh_token
+
+def decrypt_tokens(token_entry: OAuthTokenModel) -> Tuple[str, Optional[str]]:
+    """Decrypt OAuth tokens from storage."""
+    try:
+        decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
+        decrypted_refresh_token = decrypt_data(token_entry.encrypted_refresh_token) if token_entry.encrypted_refresh_token else None
+        return decrypted_access_token, decrypted_refresh_token
+    except Exception as e:
+        log.error(f"Failed to decrypt tokens for token ID {token_entry.id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to decrypt tokens. Please try re-authorizing.")
+
+def get_provider_scopes(provider: str, layer: str = None) -> List[str]:
+    """Get appropriate scopes for a provider and layer."""
+    config = PROVIDER_CONFIGS.get(provider)
+    if not config:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
+    
+    if layer and layer in config['layer_scopes']:
+        layer_scope = config['layer_scopes'][layer]
+        return layer_scope if isinstance(layer_scope, list) else [layer_scope]
+    
+    return config['default_scopes']
+
+def merge_scopes_and_layers(existing_token: OAuthTokenModel, new_scopes: str, new_layer: str, provider: str) -> Tuple[str, str]:
+    """Merge existing and new scopes and layers."""
+    config = PROVIDER_CONFIGS[provider]
+    separator = config['scope_separator']
+    
+    # Merge scopes
+    merged_scopes = new_scopes
+    if existing_token and existing_token.scopes:
+        if separator == ' ':
+            existing_scopes_set = set(existing_token.scopes.split())
+            new_scopes_set = set(new_scopes.split())
+        else:  # comma-separated (Slack)
+            existing_scopes_set = set(scope.strip() for scope in existing_token.scopes.split(','))
+            new_scopes_set = set(scope.strip() for scope in new_scopes.split(','))
+        
+        merged_scopes_set = existing_scopes_set.union(new_scopes_set)
+        merged_scopes = separator.join(sorted(merged_scopes_set))
+        log.info(f"Merged scopes for {provider}: existing={existing_token.scopes}, new={new_scopes}, merged={merged_scopes}")
+    
+    # Merge layers
+    merged_layer = new_layer
+    if existing_token and existing_token.layer and new_layer:
+        existing_layer_set = set(existing_token.layer.split(","))
+        new_layer_set = set(new_layer.split(","))
+        merged_layer_set = existing_layer_set.union(new_layer_set)
+        merged_layer = ",".join(sorted(merged_layer_set))
+        log.info(f"Merged layers for {provider}: existing={existing_token.layer}, new={new_layer}, merged={merged_layer}")
+    elif existing_token and existing_token.layer and not new_layer:
+        merged_layer = existing_token.layer
+    
+    return merged_scopes, merged_layer
+
+def check_sync_in_progress(user_id: str, provider: str, layer: str) -> bool:
+    """Check if sync is already in progress for a specific provider/layer."""
+    user_data_sources = DataSources.get_data_sources_by_user_id(user_id)
+    for ds in user_data_sources:
+        if ds.action == provider and ds.layer == layer:
+            return ds.sync_status == 'syncing'
+    return False
+
+def build_auth_url(provider: str, scopes: List[str], state: str, **extra_params) -> str:
+    """Build OAuth authorization URL for any provider."""
+    config = PROVIDER_CONFIGS[provider]
+    scope_str = config['scope_separator'].join(scopes)
+    
+    base_params = {
+        'client_id': config['client_id'],
+        'redirect_uri': config['redirect_uri'],
+        'response_type': 'code',
+        'scope': scope_str,
+        'state': state
+    }
+    
+    # Add provider-specific parameters
+    if provider == 'google':
+        base_params.update({
+            'access_type': 'offline',
+            'prompt': 'consent'
+        })
+    elif provider == 'microsoft':
+        base_params['response_mode'] = 'query'
+    elif provider == 'slack':
+        base_params['user_scope'] = scope_str  # Slack-specific
+    elif provider == 'atlassian':
+        base_params.update({
+            'prompt': 'consent',
+            'audience': ATLASSIAN_API_GATEWAY
+        })
+    
+    base_params.update(extra_params)
+    
+    # Build URL
+    param_str = '&'.join(f"{k}={v}" for k, v in base_params.items())
+    return f"{config['authorize_url']}?{param_str}"
+
+def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str) -> Dict[str, Any]:
+    """Exchange authorization code for tokens."""
+    config = PROVIDER_CONFIGS[provider]
+    
+    data = {
+        'client_id': config['client_id'],
+        'client_secret': config['client_secret'],
+        'code': code,
+        'redirect_uri': redirect_uri,
+        'grant_type': 'authorization_code'
+    }
+    
+    headers = {}
+    if provider == 'slack':
+        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    
+    response = requests.post(config['token_url'], data=data, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+def refresh_access_token(provider: str, refresh_token: str) -> Dict[str, Any]:
+    """Refresh access token using refresh token."""
+    config = PROVIDER_CONFIGS[provider]
+    
+    data = {
+        'client_id': config['client_id'],
+        'client_secret': config['client_secret'],
+        'grant_type': 'refresh_token',
+        'refresh_token': refresh_token
+    }
+    
+    headers = {}
+    if provider == 'slack':
+        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    
+    response = requests.post(config['token_url'], data=data, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+def extract_user_id_from_token(provider: str, token_data: Dict[str, Any]) -> Optional[str]:
+    """Extract provider-specific user ID from token response."""
+    if provider == 'google' and 'id_token' in token_data:
+        try:
+            decoded_token = jwt.decode(token_data['id_token'], options={"verify_signature": False})
+            return decoded_token.get("sub")
+        except Exception as e:
+            log.error(f"Failed to decode Google id_token: {e}")
+    elif provider == 'microsoft' and 'id_token' in token_data:
+        try:
+            decoded_token = jwt.decode(token_data['id_token'], options={"verify_signature": False})
+            return decoded_token.get("oid") or decoded_token.get("sub")
+        except Exception as e:
+            log.error(f"Failed to decode Microsoft id_token: {e}")
+    elif provider == 'slack':
+        return token_data.get("authed_user", {}).get("id")
+    elif provider == 'atlassian' and 'access_token' in token_data:
+        try:
+            decoded_token = jwt.decode(token_data['access_token'], options={"verify_signature": False})
+            return decoded_token.get("sub")
+        except Exception as e:
+            log.error(f"Failed to decode Atlassian access_token: {e}")
+    
+    return None
+
+def get_primary_token_for_storage(provider: str, token_data: Dict[str, Any]) -> str:
+    """Get the primary token to store for each provider."""
+    if provider == 'slack':
+        user_token = token_data.get("authed_user", {}).get("access_token")
+        bot_token = token_data.get("access_token")
+        return user_token if user_token else bot_token
+    else:
+        return token_data.get("access_token")
+
+async def create_background_sync_task(request: Request, provider: str, user_id: str, access_token: str, layer: str = None):
+    """Create background sync task for any provider."""
+    redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+    
+    if provider == 'google':
+        sync_drive = layer == 'google_drive'
+        sync_gmail = layer == 'gmail'
+        
+        async def run_google_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(initiate_google_file_sync(
+                    user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, sync_drive, sync_gmail
+                ))
+            )
+        
+        await create_task(redis_connection, run_google_sync(), id=f"google_sync_{user_id}")
+    
+    elif provider == 'microsoft':
+        sync_onedrive = layer == 'onedrive'
+        sync_sharepoint = layer == 'sharepoint'
+        sync_onenote = layer == 'onenote'
+        sync_outlook = layer == 'outlook'
+        
+        async def run_microsoft_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(initiate_microsoft_sync(
+                    user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, 
+                    sync_onedrive, sync_sharepoint, sync_onenote, sync_outlook
+                ))
+            )
+        
+        await create_task(redis_connection, run_microsoft_sync(), id=f"microsoft_sync_{user_id}")
+    
+    elif provider == 'slack':
+        async def run_slack_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(initiate_slack_sync(
+                    user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, layer
+                ))
+            )
+        
+        await create_task(redis_connection, run_slack_sync(), id=f"slack_sync_{user_id}")
+    
+    elif provider == 'atlassian':
+        async def run_atlassian_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(initiate_atlassian_sync(
+                    user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, layer
+                ))
+            )
+        
+        await create_task(redis_connection, run_atlassian_sync(), id=f"atlassian_sync_{user_id}")
+
+async def create_background_delete_task(request: Request, provider: str, user_id: str, layer: str = None):
+    """Create background GCS cleanup task for any provider."""
+    redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+    
+    config = PROVIDER_CONFIGS[provider]
+    if layer and layer in config['layer_folders']:
+        folder_name = config['layer_folders'][layer]
+        folder_path = f"userResources/{user_id}/{provider.title()}/{folder_name}"
+    else:
+        # Default folder structure
+        folder_map = {
+            'google': 'Google',
+            'microsoft': 'Microsoft', 
+            'slack': 'Slack',
+            'atlassian': 'Atlassian'
+        }
+        folder_path = f"userResources/{user_id}/{folder_map.get(provider, provider.title())}/"
+    
+    async def delete_sync():
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: asyncio.run(delete_gcs_folder(folder_path, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME))
+        )
+    
+    await create_task(redis_connection, delete_sync(), id=f"delete_{provider}_sync_{user_id}")
+
+def handle_token_refresh(provider: str, token_entry: OAuthTokenModel, user_id: str) -> Tuple[str, bool]:
+    """Handle token refresh logic for any provider. Returns (access_token, needs_reauth)."""
+    current_time = int(time.time())
+    refresh_needed = False
+    
+    if token_entry.access_token_expires_at:
+        if (token_entry.access_token_expires_at - current_time) < (5 * 60):
+            refresh_needed = True
+            log.info(f"Access token for user {user_id} nearing expiration. Initiating refresh.")
+    
+    decrypted_access_token, decrypted_refresh_token = decrypt_tokens(token_entry)
+    
+    if refresh_needed and decrypted_refresh_token:
+        try:
+            log.info(f"Attempting to refresh {provider} token for user {user_id}")
+            refresh_data = refresh_access_token(provider, decrypted_refresh_token)
+            
+            if provider == 'slack' and not refresh_data.get("ok"):
+                raise HTTPException(status_code=400, detail=f"Failed to refresh {provider} token: {refresh_data.get('error')}")
+            elif provider != 'slack' and "error" in refresh_data:
+                raise HTTPException(status_code=400, detail=f"Failed to refresh {provider} token: {refresh_data.get('error_description', refresh_data.get('error'))}")
+            
+            new_access_token = refresh_data.get("access_token")
+            new_refresh_token = refresh_data.get("refresh_token", decrypted_refresh_token)
+            new_expires_in = refresh_data.get("expires_in")
+            
+            if not new_access_token:
+                raise HTTPException(status_code=500, detail="No new access token received after refresh.")
+            
+            # Update database with new tokens
+            encrypted_new_access_token, encrypted_new_refresh_token = encrypt_tokens(new_access_token, new_refresh_token)
+            new_access_token_expires_at = int(time.time()) + new_expires_in if new_expires_in else None
+            
+            updated_token_entry = OAuthTokens.update_token_by_id(
+                token_id=token_entry.id,
+                encrypted_access_token=encrypted_new_access_token,
+                encrypted_refresh_token=encrypted_new_refresh_token,
+                access_token_expires_at=new_access_token_expires_at,
+                scopes=refresh_data.get("scope", token_entry.scopes)
+            )
+            
+            if not updated_token_entry:
+                raise HTTPException(status_code=500, detail=f"Failed to update refreshed {provider} tokens in database.")
+            
+            log.info(f"Successfully refreshed and updated {provider} tokens for user {user_id}")
+            return new_access_token, False
+            
+        except Exception as e:
+            log.error(f"{provider} token refresh failed for user {user_id}: {str(e)}")
+            if "invalid_grant" in str(e).lower() or "invalid_token" in str(e).lower():
+                return decrypted_access_token, True  # Needs re-auth
+            raise
+    
+    elif refresh_needed and not decrypted_refresh_token:
+        log.warning(f"Access token for user {user_id} nearing expiration but no valid refresh token available.")
+        return decrypted_access_token, True  # Needs re-auth
+    
+    return decrypted_access_token, False
+
+def generate_reauth_url(provider: str, user_id: str, layer: str = None) -> str:
+    """Generate re-authorization URL when refresh fails."""
+    scopes = get_provider_scopes(provider, layer)
+    state = create_oauth_state(user_id, layer)
+    return build_auth_url(provider, scopes, state)
+
+############################
+# Data Source CRUD Operations (Original)
 ############################
 
 @router.get("/source/", response_model=list[DataSourceResponse])
@@ -90,10 +622,12 @@ async def get_data_sources(user=Depends(get_verified_user)):
                 user_id=ds.user_id,
                 name=ds.name,
                 context=ds.context,
+                permission=ds.permission,
                 sync_status=ds.sync_status,
                 last_sync=ds.last_sync,
                 icon=ds.icon,
                 action=ds.action,
+                layer=ds.layer,
                 created_at=ds.created_at,
                 updated_at=ds.updated_at,
             )
@@ -106,10 +640,6 @@ async def get_data_sources(user=Depends(get_verified_user)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_MESSAGES.DEFAULT("Error getting data sources"),
         )
-
-############################
-# Create Data Source
-############################
 
 @router.post("/source/")
 def create_data_source(form_data: DataSourceForm, user=Depends(get_verified_user)):
@@ -139,15 +669,10 @@ def create_data_source(form_data: DataSourceForm, user=Depends(get_verified_user
             detail=ERROR_MESSAGES.DEFAULT("Error creating data source"),
         )
 
-############################
-# Initialize Default Data Sources
-############################
-
 @router.post("/sources/initialize")
 def initialize_default_data_sources(user=Depends(get_verified_user)):
     """Initialize default data sources for a user (typically called on signup)"""
     try:
-        # Check if user already has data sources
         existing_sources = DataSources.get_data_sources_by_user_id(user.id)
         if existing_sources:
             raise HTTPException(
@@ -181,10 +706,6 @@ def initialize_default_data_sources(user=Depends(get_verified_user)):
             detail=ERROR_MESSAGES.DEFAULT("Error initializing data sources"),
         )
 
-############################
-# Get Data Source By Id
-############################
-
 @router.get("/source/{id}", response_model=Optional[DataSourceResponse])
 async def get_data_source_by_id(id: str, user=Depends(get_verified_user)):
     """Get a specific data source by ID"""
@@ -207,10 +728,6 @@ async def get_data_source_by_id(id: str, user=Depends(get_verified_user)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=ERROR_MESSAGES.NOT_FOUND,
         )
-
-############################
-# Update Data Source By Id
-############################
 
 @router.post("/source/{id}/update")
 async def update_data_source_by_id(
@@ -248,10 +765,6 @@ async def update_data_source_by_id(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=ERROR_MESSAGES.NOT_FOUND,
         )
-
-############################
-# Update Sync Status
-############################
 
 class SyncStatusForm(BaseModel):
     sync_status: str
@@ -296,16 +809,11 @@ async def update_sync_status(
             detail=ERROR_MESSAGES.NOT_FOUND,
         )
 
-############################
-# Delete Data Source By Id
-############################
-
 @router.delete("/source/{id}")
 async def delete_data_source_by_id(
     request: Request, id: str, user=Depends(get_verified_user)
 ):
     """Delete a data source by ID"""
-    # Check permissions (similar to folder deletion)
     delete_permission = has_permission(
         user.id, "datasource.delete", request.app.state.config.USER_PERMISSIONS
     )
@@ -338,2390 +846,595 @@ async def delete_data_source_by_id(
         )
 
 ############################
-# Google Endpoints 
+# Universal OAuth Endpoints
 ############################
 
-@router.get("/google/initialize")
-def get_google_auth_url(user=Depends(get_verified_user)):
-    """Generate Google OAuth URL for the current authenticated user."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
-    # Google scopes - choose the necessary ones for the data you want to access.
-    # For read-only access to common user data:
-    google_scopes = [
-        "https://www.googleapis.com/auth/userinfo.profile", # Basic profile info
-        "https://www.googleapis.com/auth/drive.readonly",   # Read-only Google Drive files
-        "https://www.googleapis.com/auth/gmail.readonly" # Read-only Gmail messages
-    ]
-
-    scope_str = " ".join(google_scopes) # Google scopes are space-separated
-
-    # Use user ID as state parameter for security
-    state = user.id
-    oauth_state_store[state] = user.id  # Store for validation in callback
-
-    auth_url = (
-        f"{GOOGLE_AUTHORIZE_URL}"
-        f"?client_id={GOOGLE_CLIENT_ID}"
-        f"&redirect_uri={GOOGLE_REDIRECT_URI}"
-        f"&response_type=code"  # Always 'code' for web server apps
-        f"&scope={scope_str}"
-        f"&access_type=offline" # Crucial to get a refresh_token
-        f"&prompt=consent"      # Ensures refresh token is always granted, even if previously authorized
-        f"&state={state}"
-    )
-
-    return {
-        "url": auth_url,
-        "user_id": user.id,
-        "scopes": google_scopes
-    }
-
-@router.get("/google/callback")
-async def google_callback(request: Request):
-    """Handle Google OAuth callback and initiate sync process."""
-    code = request.query_params.get("code")
-    state = request.query_params.get("state")
-    error = request.query_params.get("error")
-
-    if error:
-        log.error(f"Google OAuth error: {error}")
-        return Response(status_code=400, content=f"Google OAuth error: {error}")
-
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing Google OAuth code.")
-
-    if not state or state not in oauth_state_store:
-        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
-
-    user_id = oauth_state_store.pop(state)  # Remove state after use
-
-    try:
-        # Exchange code for access token
-        response = requests.post(
-            GOOGLE_TOKEN_URL,
-            data={
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "code": code,
-                "redirect_uri": GOOGLE_REDIRECT_URI,
-                "grant_type": "authorization_code",
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        if "error" in data:
-            raise HTTPException(status_code=400, detail=f"Google OAuth failed: {data.get('error_description', data.get('error'))}")
-
-        log.info(f"Google OAuth successful for user {user_id}")
-
-        # Extract tokens and relevant Google metadata
-        access_token = data.get("access_token")
-        refresh_token = data.get("refresh_token") # Only present if access_type=offline and prompt=consent were used, and it's the first time
-        expires_in = data.get("expires_in") # Time until access_token expires (in seconds)
-        id_token = data.get("id_token") # Contains user info if 'openid' scope requested
+def create_universal_initialize_endpoint(provider: str):
+    """Factory function to create initialize endpoints for any provider."""
+    @router.get(f"/{provider}/initialize")
+    def get_auth_url(
+        user=Depends(get_verified_user),
+        layer: str = Query(None, description=f"Specific {provider.title()} Data Layer to sync")
+    ):
+        f"""Generate {provider.title()} OAuth URL for the current authenticated user."""
+        if not user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
         
-        # You might need to decode the id_token to get the Google User ID (sub field)
-        # For simplicity, we'll assume a direct 'user_id' can be derived or use a placeholder
-        # In a real app, you'd use a JWT library (e.g., python-jose) to decode id_token
-        google_user_id = None
-        if id_token:
-            # This is a basic mock. In production, properly decode and verify the JWT.
-            try:
-                decoded_id_token = jwt.decode(id_token, options={"verify_signature": False}) # DO NOT USE IN PROD WITHOUT VERIFICATION
-                google_user_id = decoded_id_token.get("sub") # 'sub' is the Google user ID
-            except ImportError:
-                log.warning("PyJWT not installed. Cannot decode id_token to get Google User ID.")
-            except Exception as e:
-                log.error(f"Failed to decode id_token: {e}")
-
+        if check_sync_in_progress(user.id, provider, layer):
+            return {"message": f"{provider.title()} sync already in progress"}
         
-        if not access_token:
-            raise HTTPException(
-                status_code=500,
-                detail="No access token received from Google OAuth. Ensure necessary scopes are requested."
-            )
+        scopes = get_provider_scopes(provider, layer)
+        state = create_oauth_state(user.id, layer)
+        auth_url = build_auth_url(provider, scopes, state)
+        
+        return {
+            "url": auth_url,
+            "user_id": user.id,
+            "scopes": scopes
+        }
+    
+    return get_auth_url
 
-        # Encrypt tokens before storing
-        encrypted_access_token = encrypt_data(access_token)
-        encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else None
+def create_universal_callback_endpoint(provider: str):
+    """Factory function to create callback endpoints for any provider."""
+    @router.get(f"/{provider}/callback")
+    async def callback(request: Request):
+        f"""Handle {provider.title()} OAuth callback and initiate sync process."""
+        code = request.query_params.get("code")
+        state = request.query_params.get("state")
+        error = request.query_params.get("error")
+        error_description = request.query_params.get("error_description")
 
-        # Calculate expiration time for access token
-        access_token_expires_at = None
-        if expires_in:
-            access_token_expires_at = int(time.time()) + expires_in
+        if error:
+            log.error(f"{provider.title()} OAuth error: {error} - {error_description}")
+            return Response(status_code=400, content=f"{provider.title()} OAuth error: {error_description or error}")
 
-        # Store tokens in the database
+        if not code:
+            raise HTTPException(status_code=400, detail=f"Missing {provider.title()} OAuth code.")
+
+        state_data = validate_oauth_state(state)
+        user_id = state_data["user_id"]
+        layer = state_data.get("layer")
+
         try:
-            # We use the insert_new_token method which handles update-or-insert logic
-            OAuthTokens.insert_new_token(
+            config = PROVIDER_CONFIGS[provider]
+            token_data = exchange_code_for_tokens(provider, code, config['redirect_uri'])
+            
+            if provider == 'slack' and not token_data.get("ok"):
+                raise HTTPException(status_code=400, detail=f"{provider.title()} OAuth failed: {token_data.get('error')}")
+            elif provider != 'slack' and "error" in token_data:
+                raise HTTPException(status_code=400, detail=f"{provider.title()} OAuth failed: {token_data.get('error_description', token_data.get('error'))}")
+
+            log.info(f"{provider.title()} OAuth successful for user {user_id} for layer {layer}")
+
+            # Extract tokens and metadata
+            access_token = get_primary_token_for_storage(provider, token_data)
+            refresh_token = token_data.get("refresh_token")
+            expires_in = token_data.get("expires_in")
+            provider_user_id = extract_user_id_from_token(provider, token_data)
+            new_scopes = token_data.get("scope", "")
+            
+            # Extract team/tenant ID for multi-tenant providers
+            team_id = None
+            if provider == 'slack':
+                team_id = token_data.get("team", {}).get("id")
+
+            if not access_token:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"No access token received from {provider.title()} OAuth."
+                )
+
+            # Check for existing token and merge scopes/layers
+            existing_token = OAuthTokens.get_token_by_user_provider_details(
                 user_id=user_id,
-                provider_name="Google",
-                provider_user_id=google_user_id,
-                encrypted_access_token=encrypted_access_token,
-                encrypted_refresh_token=encrypted_refresh_token,
-                access_token_expires_at=access_token_expires_at,
-                scopes=data.get("scope"), # Space-separated string of granted scopes
+                provider_name=provider.title()
             )
-            log.info(f"Stored/Updated Google OAuth tokens for user {user_id}")
 
-        except Exception as db_error:
-            log.error(f"Failed to store Google OAuth tokens in DB for user {user_id}: {db_error}")
-            raise HTTPException(status_code=500, detail="Failed to store Google tokens securely.")
+            merged_scopes, merged_layer = merge_scopes_and_layers(existing_token, new_scopes, layer, provider)
 
-        # Validate required environment variables for sync
+            # Encrypt and store tokens
+            encrypted_access_token, encrypted_refresh_token = encrypt_tokens(access_token, refresh_token)
+            access_token_expires_at = int(time.time()) + expires_in if expires_in else None
+
+            try:
+                OAuthTokens.insert_new_token(
+                    user_id=user_id,
+                    provider_name=provider.title(),
+                    provider_user_id=provider_user_id,
+                    provider_team_id=team_id,
+                    encrypted_access_token=encrypted_access_token,
+                    encrypted_refresh_token=encrypted_refresh_token,
+                    access_token_expires_at=access_token_expires_at,
+                    scopes=merged_scopes,
+                    layer=merged_layer
+                )
+                log.info(f"Stored/Updated {provider.title()} OAuth tokens for user {user_id}")
+
+            except Exception as db_error:
+                log.error(f"Failed to store {provider.title()} OAuth tokens in DB for user {user_id}: {db_error}")
+                raise HTTPException(status_code=500, detail=f"Failed to store {provider.title()} tokens securely.")
+
+            # Validate GCS configuration
+            if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+                raise HTTPException(
+                    status_code=500,
+                    detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
+                )
+
+            # Initiate sync
+            try:
+                log.info(f"Starting {provider.title()} sync for user {user_id}")
+                await create_background_sync_task(request, provider, user_id, access_token, layer)
+                
+                return RedirectResponse(url=DATASOURCES_URL, status_code=302)
+
+            except Exception as sync_error:
+                log.error(f"{provider.title()} sync failed for user {user_id}: {str(sync_error)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"{provider.title()} sync failed: {str(sync_error)}"
+                )
+
+        except requests.exceptions.RequestException as e:
+            log.error(f"{provider.title()} API Request Error: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                log.error(f"Response: {e.response.text}")
+            raise HTTPException(status_code=500, detail=f"Failed to authenticate with {provider.title()}")
+    
+    return callback
+
+def create_universal_status_endpoint(provider: str):
+    """Factory function to create status endpoints for any provider."""
+    @router.get(f"/{provider}/status")
+    def get_status(user=Depends(get_verified_user)):
+        f"""Get current user's {provider.title()} integration status."""
+        if not user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+
+        config = PROVIDER_CONFIGS[provider]
+        config_status = {
+            "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
+            "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
+            f"{provider}_client_configured": bool(config['client_id'] and config['client_secret'] and config['redirect_uri']),
+        }
+
+        token_exists = OAuthTokens.get_token_by_user_provider_details(user_id=user.id, provider_name=provider.title())
+        
+        sync_status = "not_connected"
+        user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+        for ds in user_data_sources:
+            if ds.action == provider:
+                sync_status = ds.sync_status
+                break
+
+        return {
+            "user_id": user.id,
+            "configuration": config_status,
+            f"{provider}_token_present": bool(token_exists),
+            "current_sync_status": sync_status,
+            "ready_for_sync": all(config_status.values()) and bool(token_exists) and sync_status != "syncing"
+        }
+    
+    return get_status
+
+def create_universal_sync_endpoint(provider: str):
+    """Factory function to create manual sync endpoints for any provider."""
+    @router.post(f"/{provider}/sync")
+    async def manual_sync(
+        request: Request,
+        layer: str = Query(None, description=f"Specific {provider.title()} Data Layer to sync"),
+        user=Depends(get_verified_user),
+    ):
+        f"""Manually trigger {provider.title()} sync for the authenticated user."""
+        if not user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        if check_sync_in_progress(user.id, provider, layer):
+            return {"message": f"{provider.title()} sync already in progress"}
+
+        # Get token entry
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user.id,
+            provider_name=provider.title()
+        )
+
+        if not token_entry:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No {provider.title()} integration found for this user. Please authorize your {provider.title()} app first."
+            )
+
+        # Handle token refresh if needed
+        try:
+            access_token, needs_reauth = handle_token_refresh(provider, token_entry, user.id)
+            
+            if needs_reauth:
+                reauth_url = generate_reauth_url(provider, user.id, layer)
+                raise HTTPException(
+                    status_code=201,
+                    detail={
+                        "error": "token_expired_no_refresh",
+                        "message": f"{provider.title()} token is expired and requires re-authorization.",
+                        "reauth_url": reauth_url,
+                        "action_required": f"redirect_to_{provider}_auth",
+                        "user_id": str(user.id),
+                        "provider": provider
+                    }
+                )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            log.error(f"Token refresh failed for {provider} user {user.id}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to refresh {provider.title()} token.")
+
+        # Validate GCS configuration
         if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
             raise HTTPException(
                 status_code=500,
                 detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
             )
 
-        # Initiate the sync process with the *decrypted* access token
         try:
-            log.info(f"Starting Google sync for user {user_id} with token (retrieved from OAuth response)")
-
-            # Add the task to the background tasks to sync user Google data
-            async def run_google_sync():
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,  # Use default thread pool
-                    lambda: asyncio.run(initiate_google_file_sync(
-                        user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
-                    ))
-                )
-
-            # Extract Redis connection from request
-            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-            
-            await create_task(redis_connection, run_google_sync(), id=f"google_sync_{user_id}")
-
-            await update_data_source_sync_status(user_id, 'google', 'syncing')
-
-            return RedirectResponse(
-                url=DATASOURCES_URL,
-                status_code=302
-            )
-            
+            log.info(f"Starting manual {provider.title()} sync for user {user.id}")
+            await create_background_sync_task(request, provider, user.id, access_token, layer)
+            return RedirectResponse(url=DATASOURCES_URL, status_code=302)
 
         except Exception as sync_error:
-            log.error(f"Google sync failed for user {user_id}: {str(sync_error)}")
+            log.error(f"{provider.title()} sync failed for user {user.id}: {str(sync_error)}")
+            if "invalid_grant" in str(sync_error).lower() or "invalid_token" in str(sync_error).lower():
+                log.warning(f"{provider.title()} sync for user {user.id} failed due to invalid token.")
+                raise HTTPException(
+                    status_code=401,
+                    detail=f"{provider.title()} token invalid or expired. Please re-authorize your {provider.title()} integration."
+                )
             raise HTTPException(
                 status_code=500,
-                detail=f"Google sync failed: {str(sync_error)}"
+                detail=f"{provider.title()} sync failed: {str(sync_error)}"
             )
-
-    except requests.exceptions.RequestException as e:
-        log.error(f"Google API Request Error: {str(e)}")
-        if hasattr(e, 'response') and e.response is not None:
-            log.error(f"Response: {e.response.text}")
-        raise HTTPException(status_code=500, detail="Failed to authenticate with Google")
-
-@router.get("/google/status")
-def get_google_status(user=Depends(get_verified_user)):
-    """Get current user's Google integration status."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
-    # Check if required environment variables are configured
-    config_status = {
-        "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
-        "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
-        "google_client_configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI),
-    }
-
-    # Check if a Google token exists for the user
-    google_token_exists = OAuthTokens.get_token_by_user_provider_details(user_id=user.id, provider_name="Google")
     
-    # Check current sync status from data sources
-    sync_status = "not_connected"
-    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
-    for ds in user_data_sources:
-        if ds.action == "google":
-            sync_status = ds.sync_status
-            break
+    return manual_sync
 
-    return {
-        "user_id": user.id,
-        "configuration": config_status,
-        "google_token_present": bool(google_token_exists),
-        "current_sync_status": sync_status,
-        "ready_for_sync": all(config_status.values()) and bool(google_token_exists) and sync_status != "syncing"
-    }
+def create_universal_disconnect_endpoint(provider: str):
+    """Factory function to create disconnect endpoints for any provider."""
+    @router.delete(f"/{provider}/disconnect")
+    async def disconnect(
+        request: Request,
+        layer: str = Query(None, description=f"Specific {provider.title()} Data Layer to disconnect"),
+        user=Depends(get_verified_user),
+        team_id: Optional[str] = Query(None, alias=f"{provider}_team_id", description="Team/Tenant ID for multi-tenant providers")
+    ):
+        f"""Disconnect a user's {provider.title()} integration."""
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
-@router.post("/google/sync")
-async def manual_google_sync(
-    request: Request,
-    user=Depends(get_verified_user),
-):
-    """Manually trigger Google sync for the authenticated user, fetching tokens from DB."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    
-    # Check if Slack sync is already in progress
-    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
-    google_data_source = None
-    
-    for ds in user_data_sources:
-        if ds.action == 'google':
-            google_data_source = ds
-            break
-    
-    if google_data_source and google_data_source.sync_status == 'syncing':
-        return
+        user_id = user.id
+        log.info(f"Initiating {provider.title()} integration disconnection for user: {user_id}")
 
-    current_time = int(time.time())
+        overall_success = True
+        messages = []
 
-    # 1. Fetch encrypted tokens for the user and Google provider
-    token_entry = OAuthTokens.get_token_by_user_provider_details(
-        user_id=user.id,
-        provider_name="Google"
-        # If a user can connect multiple Google accounts, you'd need a way
-        # to identify which specific account token to use, e.g., via a query parameter.
-    )
+        # Handle layer-specific disconnection (like Google)
+        if layer:
+            return await disconnect_provider_layer(provider, user_id, layer, team_id, request, messages)
 
-    if not token_entry:
-        raise HTTPException(
-            status_code=404,
-            detail="No Google integration found for this user. Please authorize your Google app first."
-        )
-
-    # 2. Decrypt tokens
-    try:
-        decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
-        decrypted_refresh_token = decrypt_data(token_entry.encrypted_refresh_token) if token_entry.encrypted_refresh_token else None
-
-        sync_token = decrypted_access_token # This is the token we'll use for Google API calls
-
-    except Exception as e:
-        log.error(f"Failed to decrypt tokens for user {user.id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to decrypt Google tokens. Please try re-authorizing.")
-
-    # 3. Check token expiration and refresh if necessary
-    refresh_needed = False
-    if token_entry.access_token_expires_at:
-        # Check if less than 5 minutes until expiration
-        if (token_entry.access_token_expires_at - current_time) < (5 * 60):
-            refresh_needed = True
-            log.info(f"Access token for user {user.id} nearing expiration. Initiating refresh.")
-    elif decrypted_refresh_token:
-        # If no explicit expiration, but refresh token exists, assume proactive refresh is best practice
-        # or handle reactively if API call fails. Here, we proactively try to refresh.
-        log.info(f"Access token for user {user.id} has no explicit expiry but a refresh token exists. Will attempt refresh.")
-        refresh_needed = True
-
-
-    if refresh_needed and decrypted_refresh_token:
-        try:
-            log.info(f"Attempting to refresh Google token for user {user.id}")
-            refresh_response = requests.post(
-                GOOGLE_TOKEN_URL,
-                data={
-                    "client_id": GOOGLE_CLIENT_ID,
-                    "client_secret": GOOGLE_CLIENT_SECRET,
-                    "grant_type": "refresh_token",
-                    "refresh_token": decrypted_refresh_token,
-                },
+        # Full provider disconnection
+        # Get tokens to process
+        tokens_to_process: List[OAuthTokenModel] = []
+        if team_id:
+            token_entry = OAuthTokens.get_token_by_user_provider_details(
+                user_id=user_id,
+                provider_name=provider.title(),
+                provider_team_id=team_id
             )
-            refresh_response.raise_for_status()
-            refresh_data = refresh_response.json()
-
-            if "error" in refresh_data:
-                log.error(f"Google token refresh failed for user {user.id}: {refresh_data.get('error_description', refresh_data.get('error'))}")
-                raise HTTPException(status_code=400, detail=f"Failed to refresh Google token: {refresh_data.get('error_description', refresh_data.get('error'))}")
-
-            # Get new tokens and update expiration
-            new_access_token = refresh_data.get("access_token")
-            # Google often returns a new refresh_token, but sometimes it doesn't.
-            # If it doesn't, continue using the old one.
-            new_refresh_token = refresh_data.get("refresh_token", decrypted_refresh_token)
-            new_expires_in = refresh_data.get("expires_in")
-
-            if not new_access_token:
-                raise HTTPException(status_code=500, detail="No new access token received after refresh.")
-
-            # Encrypt new tokens
-            encrypted_new_access_token = encrypt_data(new_access_token)
-            encrypted_new_refresh_token = encrypt_data(new_refresh_token) if new_refresh_token else None
-            new_access_token_expires_at = int(time.time()) + new_expires_in if new_expires_in else None
-
-            # Update database with new tokens
-            updated_token_entry = OAuthTokens.update_token_by_id(
-                token_id=token_entry.id,
-                encrypted_access_token=encrypted_new_access_token,
-                encrypted_refresh_token=encrypted_new_refresh_token,
-                access_token_expires_at=new_access_token_expires_at,
-                scopes=refresh_data.get("scope", token_entry.scopes) # Update scopes if refresh response includes them
-            )
-
-            if not updated_token_entry:
-                raise HTTPException(status_code=500, detail="Failed to update refreshed Google tokens in database.")
-
-            log.info(f"Successfully refreshed and updated Google tokens for user {user.id}")
-            sync_token = new_access_token # Use the newly acquired access token for sync
-
-        except requests.exceptions.RequestException as e:
-            log.error(f"Google API Request Error during token refresh for user {user.id}: {str(e)}")
-            if hasattr(e, 'response') and e.response is not None:
-                log.error(f"Refresh response: {e.response.text}")
-            raise HTTPException(status_code=500, detail="Failed to refresh Google token with provider.")
-        except Exception as e:
-            log.error(f"An error occurred during Google token refresh for user {user.id}: {str(e)}")
-            raise HTTPException(status_code=500, detail="An internal server error occurred during token refresh.")
-    elif refresh_needed and not decrypted_refresh_token:
-        log.warning(f"Access token for user {user.id} nearing expiration but no valid refresh token available. Initiating re-authorization flow.")
-        
-        try:
-            # Google scopes - choose the necessary ones for the data you want to access.
-            # For read-only access to common user data:
-            google_scopes = [
-                "https://www.googleapis.com/auth/userinfo.profile", # Basic profile info
-                "https://www.googleapis.com/auth/drive.readonly",   # Read-only Google Drive files
-                "https://www.googleapis.com/auth/gmail.readonly" # Read-only Gmail messages
+            if token_entry:
+                tokens_to_process.append(token_entry)
+        else:
+            all_user_tokens = OAuthTokens.get_all_tokens_for_user(user_id=user_id)
+            tokens_to_process = [
+                token for token in all_user_tokens if token.provider_name == provider.title()
             ]
 
-            scope_str = " ".join(google_scopes) # Google scopes are space-separated
-            # Generate re-authorization URL for Google OAuth
-            google_auth_url = (
-                f"https://accounts.google.com/o/oauth2/auth?"
-                f"client_id={GOOGLE_CLIENT_ID}&"
-                f"redirect_uri={os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8000/auth/google/callback')}&"
-                f"scope={scope_str}&"
-                f"response_type=code&"
-                f"access_type=offline&"
-                f"prompt=consent&"
-                f"state={user.id}"  # Include user ID to link back after auth
-            )
-            
-            log.info(f"Generated re-authorization URL for user {user.id}")
-            
-            # Store re-authorization state (optional - for tracking purposes)
-            # You might want to store this in Redis or database temporarily
-            # await store_reauth_state(user.id, "google_token_refresh")
-            
-            # Return structured response with re-authorization URL
-            raise HTTPException(
-                status_code=201,
-                detail={
-                    "error": "token_expired_no_refresh",
-                    "message": "Google token is expired and no valid refresh token is available. Re-authorization required.",
-                    "reauth_url": google_auth_url,
-                    "action_required": "redirect_to_google_auth",
-                    "user_id": str(user.id),
-                    "provider": "google",
-                    "reason": "no_refresh_token" if not token_entry.encrypted_refresh_token else "invalid_refresh_token"
-                }
-            )
-            
-        except HTTPException:
-            # Re-raise HTTPException to maintain the response structure
-            raise
-        except Exception as e:
-            log.error(f"Failed to generate re-authorization URL for user {user.id}: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "reauth_generation_failed",
-                    "message": "Google token is expired and re-authorization flow could not be initiated. Please manually re-authorize your Google integration.",
-                    "user_id": str(user.id)
-                }
-            )
-
-    # 4. Validate required environment variables for sync
-    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        raise HTTPException(
-            status_code=500,
-            detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-        )
-
-    try:
-        log.info(f"Starting scheduled/manual Google sync for user {user.id}")
-
-        # Add the task to the background tasks to sync user Google data
-        async def run_google_sync():
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                None,  # Use default thread pool
-                lambda: asyncio.run(initiate_google_file_sync(
-                    user.id,
-            sync_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
-                ))
-            )
-        
-        # Extract Redis connection from request
-        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-        
-        await create_task(redis_connection, run_google_sync(), id=f"google_sync_{user.id}")
-
-        await update_data_source_sync_status(user.id, 'google', 'syncing')
-
-        return RedirectResponse(
-            url=DATASOURCES_URL,
-            status_code=302
-        )
-
-    except Exception as sync_error:
-        log.error(f"Google sync failed for user {user.id}: {str(sync_error)}")
-        if "invalid_grant" in str(sync_error).lower() or "invalid_token" in str(sync_error).lower():
-            log.warning(f"Google sync for user {user.id} failed due to invalid token. User may need to re-authorize.")
-            # Consider deleting the invalid token from the DB here
-            # OAuthTokens.delete_token_by_id(token_entry.id)
-            raise HTTPException(
-                status_code=401,
-                detail="Google token invalid or expired. Please re-authorize your Google integration."
-            )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Google sync failed: {str(sync_error)}"
-        )
-
-@router.delete("/google/disconnect")
-async def disconnect_google(request: Request, user=Depends(get_verified_user),
-    google_team_id: Optional[str] = None
-):
-    """
-    Disconnects a user's Google integration, revoking tokens, deleting credentials,
-    cleaning up GCS files and updating the data source sync status.
-
-    Args:
-        user: The authenticated user object.
-        google_team_id (Optional[str]): If provided, only attempts to disconnect the Google
-                                       integration for this specific team ID (e.g., a specific
-                                       Google Workspace ID if applicable).
-
-    Returns:
-        JSONResponse: A message indicating success or failure.
-    """
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    user_id = user.id
-    log.info(f"Initiating Google integration disconnection for user: {user_id}"
-             f"{f' (Team ID: {google_team_id})' if google_team_id else ''}"
-             f", GCS cleanup")
-
-    overall_success = True
-    messages = []
-
-    # --- Step 1: Fetch and Revoke Google Token(s) ---
-    google_tokens_to_revoke: List[OAuthTokenModel] = []
-    if google_team_id:
-        token_entry = OAuthTokens.get_token_by_user_provider_details(
-            user_id=user_id,
-            provider_name="Google",
-            provider_team_id=google_team_id
-        )
-        if token_entry:
-            google_tokens_to_revoke.append(token_entry)
-    else:
-        all_user_tokens = OAuthTokens.get_all_tokens_for_user(user_id=user_id)
-        google_tokens_to_revoke = [
-            token for token in all_user_tokens if token.provider_name == "Google"
-        ]
-
-    if not google_tokens_to_revoke:
-        msg = f"No Google tokens found for user {user_id}{f' (Team ID: {google_team_id})' if google_team_id else ''}. Skipping token revocation."
-        log.warning(msg)
-        messages.append(msg)
-    else:
-        for token_entry in google_tokens_to_revoke:
-            try:
-                decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
-                
-                log.info(f"Attempting to revoke Google token for user {user_id}, "
-                         f"ID: {token_entry.id}, Team ID: {token_entry.provider_team_id}")
-                
-                # Google token revocation typically requires sending the token itself as a parameter
-                revoke_response = requests.post(
-                    GOOGLE_AUTH_REVOKE_URL,
-                    params={'token': decrypted_access_token}
-                )
-                revoke_response.raise_for_status()
-                # Google's revoke endpoint usually returns an empty 200 OK on success
-                
-                if revoke_response.status_code == 200:
-                    msg = f"Successfully revoked Google token ID: {token_entry.id} for user {user_id}"
-                    log.info(msg)
+        # Revoke tokens if provider supports it
+        config = PROVIDER_CONFIGS[provider]
+        if config['revoke_url']:
+            for token_entry in tokens_to_process:
+                try:
+                    decrypted_access_token, _ = decrypt_tokens(token_entry)
+                    
+                    if provider == 'slack':
+                        revoke_response = requests.post(
+                            config['revoke_url'],
+                            headers={'Authorization': f'Bearer {decrypted_access_token}'}
+                        )
+                    else:  # Google
+                        revoke_response = requests.post(
+                            config['revoke_url'],
+                            params={'token': decrypted_access_token}
+                        )
+                    
+                    if revoke_response.status_code == 200:
+                        msg = f"Successfully revoked {provider.title()} token ID: {token_entry.id}"
+                        log.info(msg)
+                        messages.append(msg)
+                    
+                except Exception as e:
+                    msg = f"Error revoking {provider.title()} token {token_entry.id}: {e}"
+                    log.error(msg)
                     messages.append(msg)
-                else:
-                    msg = (f"Failed to revoke Google token ID: {token_entry.id} for user {user_id}. "
-                           f"HTTP Status: {revoke_response.status_code}, Response: {revoke_response.text}")
-                    log.warning(msg)
-                    messages.append(msg)
-            except Exception as e:
-                msg = (f"Error during Google token revocation for user {user_id}, "
-                       f"token ID: {token_entry.id}: {e}")
-                log.error(msg)
-                messages.append(msg)
-                overall_success = False
+                    overall_success = False
 
-    # --- Step 2: Remove stored Google credentials (OAuthToken entry) from DB ---
-    try:
-        if google_team_id:
-            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
-                user_id=user_id,
-                provider_name="Google",
-                provider_team_id=google_team_id
-            )
-        else:
-            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
-                user_id=user_id,
-                provider_name="Google"
-            )
-
-        if db_delete_success:
-            msg = f"Successfully deleted Google OAuth token(s) from DB for user {user_id}{f' (Team ID: {google_team_id})' if google_team_id else ''}."
-            log.info(msg)
-            messages.append(msg)
-        else:
-            msg = f"Failed to delete Google OAuth token(s) from DB for user {user_id}{f' (Team ID: {google_team_id})' if google_team_id else ''}. It might have already been deleted or not found."
-            log.error(msg)
-            messages.append(msg)
-    except Exception as e:
-        msg = f"Error deleting Google OAuth token(s) from DB for user {user_id}: {e}"
-        log.exception(msg)
-        messages.append(msg)
-        overall_success = False
-
-    # --- Step 3: Update Google Data Source Sync Status ---
-    # Find the data source by its 'action' ("google") to get its 'name'
-    google_data_source_found: Optional[DataSourceModel] = None
-    user_data_sources: List[DataSourceModel] = DataSources.get_data_sources_by_user_id(user_id)
-    for ds in user_data_sources:
-        if ds.action == "google":
-            google_data_source_found = ds
-            break
-
-    if google_data_source_found:
+        # Delete tokens from database
         try:
-            updated_ds = DataSources.update_data_source_sync_status_by_name(
-                user_id=user_id,
-                source_name=google_data_source_found.name,
-                sync_status="unsynced", # Set to a specific "disconnected" status
-                last_sync=int(time.time()) # Update last sync time to now
-            )
-            if updated_ds:
-                msg = f"Successfully updated Google data source status to 'unsynced' for user {user_id} (Data Source Name: {updated_ds.name})."
+            if team_id:
+                db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
+                    user_id=user_id,
+                    provider_name=provider.title(),
+                    provider_team_id=team_id
+                )
+            else:
+                db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
+                    user_id=user_id,
+                    provider_name=provider.title()
+                )
+
+            if db_delete_success:
+                msg = f"Successfully deleted {provider.title()} OAuth token(s) from DB"
                 log.info(msg)
                 messages.append(msg)
             else:
-                msg = f"Failed to update Google data source status to 'unsynced' for user {user_id} (Data Source Name: {google_data_source_found.name})."
+                msg = f"Failed to delete {provider.title()} OAuth token(s) from DB"
                 log.error(msg)
                 messages.append(msg)
                 overall_success = False
         except Exception as e:
-            msg = f"Error updating Google data source status for user {user_id}: {e}"
-            log.exception(msg)
-            messages.append(msg)
-            overall_success = False
-    else:
-        msg = f"Google data source not found for user {user_id}. Cannot update sync status."
-        log.warning(msg)
-        messages.append(msg)
-
-    # --- Step 4: Delete user data from GCS Bucket ---
-    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        msg = ("GCS configuration missing (GCS_BUCKET_NAME or GCS_SERVICE_ACCOUNT_BASE64). "
-                "Cannot perform GCS data cleanup as requested.")
-        log.error(msg)
-        messages.append(msg)
-        overall_success = False
-    else:
-        google_folder_path = f"userResources/{user_id}/Google/" 
-        try:
-            # Add the task to the background tasks to sync user Google data
-            async def delete_sync():
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,  # Use default thread pool
-                    lambda: asyncio.run(delete_gcs_folder(google_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
-                )
-            
-            # Extract Redis connection from request
-            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-            
-            await create_task(redis_connection, delete_sync(), id=f"delete_google_sync_{user.id}")
-
-            msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Google folder."
-            log.info(msg)
-            messages.append(msg)
-            
-        except Exception as e:
-            msg = f"Error during GCS data cleanup for user {user_id}'s Google folder: {e}"
+            msg = f"Error deleting {provider.title()} OAuth token(s): {e}"
             log.exception(msg)
             messages.append(msg)
             overall_success = False
 
+        # Update data source sync status
+        data_source_found: Optional[DataSourceModel] = None
+        user_data_sources: List[DataSourceModel] = DataSources.get_data_sources_by_user_id(user_id)
+        for ds in user_data_sources:
+            if ds.action == provider:
+                data_source_found = ds
+                break
 
-    if overall_success:
-        log.info(f"Google integration disconnection process completed successfully for user: {user_id}")
-        return {"message": "Google integration disconnected successfully.", "details": messages}
-    else:
-        log.warning(f"Google integration disconnection process completed with some failures for user: {user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"message": "Failed to fully disconnect Google integration. See details.", "details": messages}
-        )
-
-
-############################
-# Microsoft Endpoints 
-############################
-
-@router.get("/microsoft/initialize")
-def get_microsoft_auth_url(user=Depends(get_verified_user)):
-    """Generate Microsoft OAuth URL for the current authenticated user."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
-    # Microsoft Graph scopes.
-    microsoft_scopes = [
-        "User.Read",              # Read user's profile
-        "Files.Read.All",         # Read user's files in OneDrive and SharePoint
-        "Sites.Read.All",         # Read user's sites in SharePoint
-        "Notes.Read",             # Read user's OneNote notebooks
-        "Mail.Read",              # Read user's mail in Outlook
-        "MailboxSettings.Read",   # Read user's mailbox settings
-        "offline_access"          # Crucial to get a refresh_token
-    ]
-
-    scope_str = " ".join(microsoft_scopes) # Microsoft scopes are space-separated
-
-    # Use user ID as state parameter for security
-    state = user.id
-    oauth_state_store[state] = user.id  # Store for validation in callback
-
-    auth_url = (
-        f"{MICROSOFT_AUTHORIZE_URL}"
-        f"?client_id={MICROSOFT_CLIENT_ID}"
-        f"&redirect_uri={MICROSOFT_REDIRECT_URI}"
-        f"&response_type=code"  # Always 'code' for web server apps
-        f"&scope={scope_str}"
-        f"&response_mode=query" # Or 'form_post' depending on your preference
-        f"&state={state}"
-    )
-
-    return {
-        "url": auth_url,
-        "user_id": user.id,
-        "scopes": microsoft_scopes
-    }
-
-@router.get("/microsoft/callback")
-async def microsoft_callback(request: Request):
-    """Handle Microsoft OAuth callback and initiate sync process."""
-    code = request.query_params.get("code")
-    state = request.query_params.get("state")
-    error = request.query_params.get("error")
-    error_description = request.query_params.get("error_description")
-
-    if error:
-        log.error(f"Microsoft OAuth error: {error} - {error_description}")
-        return Response(status_code=400, content=f"Microsoft OAuth error: {error_description or error}")
-
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing Microsoft OAuth code.")
-
-    if not state or state not in oauth_state_store:
-        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
-
-    user_id = oauth_state_store.pop(state)  # Remove state after use
-
-    try:
-        # Exchange code for access token
-        response = requests.post(
-            MICROSOFT_TOKEN_URL,
-            data={
-                "client_id": MICROSOFT_CLIENT_ID,
-                "client_secret": MICROSOFT_CLIENT_SECRET,
-                "code": code,
-                "redirect_uri": MICROSOFT_REDIRECT_URI,
-                "grant_type": "authorization_code",
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        if "error" in data:
-            raise HTTPException(status_code=400, detail=f"Microsoft OAuth failed: {data.get('error_description', data.get('error'))}")
-
-        log.info(f"Microsoft OAuth successful for user {user_id}")
-
-        # Extract tokens and relevant Microsoft metadata
-        access_token = data.get("access_token")
-        refresh_token = data.get("refresh_token") # Only present if offline_access scope was requested
-        expires_in = data.get("expires_in") # Time until access_token expires (in seconds)
-        id_token = data.get("id_token") # Contains user info if 'openid' scope requested (implied by User.Read)
-
-        microsoft_user_id = None
-        if id_token:
+        if data_source_found:
             try:
-                # Decode the ID token to get the user's object ID or other unique identifier
-                # In production, ALWAYS verify the signature and audience of the JWT.
-                decoded_id_token = jwt.decode(id_token, options={"verify_signature": False})
-                microsoft_user_id = decoded_id_token.get("oid") or decoded_id_token.get("sub") # 'oid' is object ID (immutable), 'sub' is subject (can be user-specific, unique). 'oid' is preferred.
-            except ImportError:
-                log.warning("PyJWT not installed. Cannot decode id_token to get Microsoft User ID.")
-            except Exception as e:
-                log.error(f"Failed to decode id_token for Microsoft: {e}")
-
-        if not access_token:
-            raise HTTPException(
-                status_code=500,
-                detail="No access token received from Microsoft OAuth. Ensure necessary scopes are requested."
-            )
-
-        # Encrypt tokens before storing
-        encrypted_access_token = encrypt_data(access_token)
-        encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else None
-
-        # Calculate expiration time for access token
-        access_token_expires_at = None
-        if expires_in:
-            access_token_expires_at = int(time.time()) + expires_in
-
-        # Store tokens in the database
-        try:
-            OAuthTokens.insert_new_token(
-                user_id=user_id,
-                provider_name="Microsoft",
-                provider_user_id=microsoft_user_id,
-                encrypted_access_token=encrypted_access_token,
-                encrypted_refresh_token=encrypted_refresh_token,
-                access_token_expires_at=access_token_expires_at,
-                scopes=data.get("scope"), # Space-separated string of granted scopes
-            )
-            log.info(f"Stored/Updated Microsoft OAuth tokens for user {user_id}")
-
-        except Exception as db_error:
-            log.error(f"Failed to store Microsoft OAuth tokens in DB for user {user_id}: {db_error}")
-            raise HTTPException(status_code=500, detail="Failed to store Microsoft tokens securely.")
-
-        # Validate required environment variables for sync (assuming GCS for storage)
-        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-            raise HTTPException(
-                status_code=500,
-                detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-            )
-
-        # Initiate the sync process with the *decrypted* access token
-        try:
-            log.info(f"Starting Microsoft sync for user {user_id} with token (retrieved from OAuth response)")
-
-            # Add the task to the background tasks to sync user Microsoft data
-            async def run_microsoft_sync():
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,  # Use default thread pool
-                    lambda: asyncio.run(initiate_microsoft_sync(
-                        user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
-                    ))
+                updated_ds = DataSources.update_data_source_sync_status_by_name(
+                    user_id=user_id,
+                    source_name=data_source_found.name,
+                    sync_status="unsynced",
+                    last_sync=int(time.time())
                 )
-            
-            # Extract Redis connection from request
-            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-            
-            await create_task(redis_connection, run_microsoft_sync(), id=f"microsoft_sync_{user_id}")
-
-            await update_data_source_sync_status(user_id, 'microsoft', 'syncing')
-
-            return RedirectResponse(
-                url=DATASOURCES_URL,
-                status_code=302
-            )
-
-        except Exception as sync_error:
-            log.error(f"Microsoft sync failed for user {user_id}: {str(sync_error)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Microsoft sync failed: {str(sync_error)}"
-            )
-
-    except requests.exceptions.RequestException as e:
-        log.error(f"Microsoft API Request Error: {str(e)}")
-        if hasattr(e, 'response') and e.response is not None:
-            log.error(f"Response: {e.response.text}")
-        raise HTTPException(status_code=500, detail="Failed to authenticate with Microsoft")
-
-@router.get("/microsoft/status")
-def get_microsoft_status(user=Depends(get_verified_user)):
-    """Get current user's Microsoft integration status."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
-    # Check if required environment variables are configured
-    config_status = {
-        "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
-        "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
-        "microsoft_client_configured": bool(MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET and MICROSOFT_REDIRECT_URI),
-    }
-
-    # Check if a Microsoft token exists for the user
-    microsoft_token_exists = OAuthTokens.get_token_by_user_provider_details(user_id=user.id, provider_name="Microsoft")
-
-    # Check current sync status from data sources
-    sync_status = "not_connected"
-    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
-    for ds in user_data_sources:
-        if ds.action == "microsoft":
-            sync_status = ds.sync_status
-            break
-
-    return {
-        "user_id": user.id,
-        "configuration": config_status,
-        "microsoft_token_present": bool(microsoft_token_exists),
-        "current_sync_status": sync_status,
-        "ready_for_sync": all(config_status.values()) and bool(microsoft_token_exists) and sync_status != "syncing"
-    }
-
-@router.post("/microsoft/sync")
-async def manual_microsoft_sync(
-    request: Request,
-    user=Depends(get_verified_user),
-):
-    """Manually trigger Microsoft sync for the authenticated user, fetching tokens from DB."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    
-    # Check if Slack sync is already in progress
-    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
-    microsoft_data_source = None
-    
-    for ds in user_data_sources:
-        if ds.action == 'microsoft':
-            microsoft_data_source = ds
-            break
-    
-    if microsoft_data_source and microsoft_data_source.sync_status == 'syncing':
-        return
-
-    current_time = int(time.time())
-
-    # 1. Fetch encrypted tokens for the user and Microsoft provider
-    token_entry = OAuthTokens.get_token_by_user_provider_details(
-        user_id=user.id,
-        provider_name="Microsoft"
-    )
-
-    if not token_entry:
-        raise HTTPException(
-            status_code=404,
-            detail="No Microsoft integration found for this user. Please authorize your Microsoft app first."
-        )
-
-    # 2. Decrypt tokens
-    try:
-        decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
-        decrypted_refresh_token = decrypt_data(token_entry.encrypted_refresh_token) if token_entry.encrypted_refresh_token else None
-
-        sync_token = decrypted_access_token # This is the token we'll use for Microsoft Graph API calls
-
-    except Exception as e:
-        log.error(f"Failed to decrypt tokens for user {user.id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to decrypt Microsoft tokens. Please try re-authorizing.")
-
-    # 3. Check token expiration and refresh if necessary
-    refresh_needed = False
-    if token_entry.access_token_expires_at:
-        # Check if less than 5 minutes until expiration
-        if (token_entry.access_token_expires_at - current_time) < (5 * 60):
-            refresh_needed = True
-            log.info(f"Access token for user {user.id} nearing expiration. Initiating refresh.")
-    elif decrypted_refresh_token:
-        # If no explicit expiration, but refresh token exists, assume proactive refresh is best practice
-        log.info(f"Access token for user {user.id} has no explicit expiry but a refresh token exists. Will attempt refresh.")
-        refresh_needed = True
-
-
-    if refresh_needed and decrypted_refresh_token:
-        try:
-            log.info(f"Attempting to refresh Microsoft token for user {user.id}")
-            refresh_response = requests.post(
-                MICROSOFT_TOKEN_URL,
-                data={
-                    "client_id": MICROSOFT_CLIENT_ID,
-                    "client_secret": MICROSOFT_CLIENT_SECRET,
-                    "grant_type": "refresh_token",
-                    "refresh_token": decrypted_refresh_token,
-                },
-            )
-            refresh_response.raise_for_status()
-            refresh_data = refresh_response.json()
-
-            if "error" in refresh_data:
-                log.error(f"Microsoft token refresh failed for user {user.id}: {refresh_data.get('error_description', refresh_data.get('error'))}")
-                raise HTTPException(status_code=400, detail=f"Failed to refresh Microsoft token: {refresh_data.get('error_description', refresh_data.get('error'))}")
-
-            # Get new tokens and update expiration
-            new_access_token = refresh_data.get("access_token")
-            new_refresh_token = refresh_data.get("refresh_token", decrypted_refresh_token) # Microsoft often issues new refresh tokens
-            new_expires_in = refresh_data.get("expires_in")
-
-            if not new_access_token:
-                raise HTTPException(status_code=500, detail="No new access token received after refresh.")
-
-            # Encrypt new tokens
-            encrypted_new_access_token = encrypt_data(new_access_token)
-            encrypted_new_refresh_token = encrypt_data(new_refresh_token) if new_refresh_token else None
-            new_access_token_expires_at = int(time.time()) + new_expires_in if new_expires_in else None
-
-            # Update database with new tokens
-            updated_token_entry = OAuthTokens.update_token_by_id(
-                token_id=token_entry.id,
-                encrypted_access_token=encrypted_new_access_token,
-                encrypted_refresh_token=encrypted_new_refresh_token,
-                access_token_expires_at=new_access_token_expires_at,
-                scopes=refresh_data.get("scope", token_entry.scopes)
-            )
-
-            if not updated_token_entry:
-                raise HTTPException(status_code=500, detail="Failed to update refreshed Microsoft tokens in database.")
-
-            log.info(f"Successfully refreshed and updated Microsoft tokens for user {user.id}")
-            sync_token = new_access_token # Use the newly acquired access token for sync
-
-        except requests.exceptions.RequestException as e:
-            log.error(f"Microsoft API Request Error during token refresh for user {user.id}: {str(e)}")
-            if hasattr(e, 'response') and e.response is not None:
-                log.error(f"Refresh response: {e.response.text}")
-            raise HTTPException(status_code=500, detail="Failed to refresh Microsoft token with provider.")
-        except Exception as e:
-            log.error(f"An error occurred during Microsoft token refresh for user {user.id}: {str(e)}")
-            raise HTTPException(status_code=500, detail="An internal server error occurred during token refresh.")
-    elif refresh_needed and not decrypted_refresh_token:
-        log.warning(f"Access token for user {user.id} nearing expiration but no valid refresh token available. Initiating re-authorization flow.")
-        try:
-            # Microsoft Graph scopes.
-            microsoft_scopes = [
-                "User.Read",              # Read user's profile
-                "Files.Read.All",         # Read user's files in OneDrive and SharePoint
-                "Sites.Read.All",         # Read user's sites in SharePoint
-                "Notes.Read",             # Read user's OneNote notebooks
-                "Mail.Read",              # Read user's mail in Outlook
-                "MailboxSettings.Read",   # Read user's mailbox settings
-                "offline_access"          # Crucial to get a refresh_token
-            ]
-
-            scope_str = " ".join(microsoft_scopes) # Microsoft scopes are space-separated
-            # Generate re-authorization URL for Microsoft OAuth
-            microsoft_auth_url = (
-                f"{MICROSOFT_AUTHORIZE_URL}"
-                f"?client_id={MICROSOFT_CLIENT_ID}&"
-                f"redirect_uri={MICROSOFT_REDIRECT_URI}&"
-                f"scope={scope_str}&" # Re-request necessary scopes including offline_access
-                f"response_type=code&"
-                f"prompt=consent&" # Ensures refresh token is granted
-                f"state={user.id}"
-            )
-            log.info(f"Generated re-authorization URL for user {user.id}")
-
-            raise HTTPException(
-                status_code=201,
-                detail={
-                    "error": "token_expired_no_refresh",
-                    "message": "Microsoft token is expired and no valid refresh token is available. Re-authorization required.",
-                    "reauth_url": microsoft_auth_url,
-                    "action_required": "redirect_to_microsoft_auth",
-                    "user_id": str(user.id),
-                    "provider": "microsoft",
-                    "reason": "no_refresh_token" if not token_entry.encrypted_refresh_token else "invalid_refresh_token"
-                }
-            )
-        except HTTPException:
-            raise
-        except Exception as e:
-            log.error(f"Failed to generate re-authorization URL for user {user.id}: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "reauth_generation_failed",
-                    "message": "Microsoft token is expired and re-authorization flow could not be initiated. Please manually re-authorize your Microsoft integration.",
-                    "user_id": str(user.id)
-                }
-            )
-
-    # 4. Validate required environment variables for sync (assuming GCS for storage)
-    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        raise HTTPException(
-            status_code=500,
-            detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-        )
-
-    try:
-        log.info(f"Starting scheduled/manual Microsoft sync for user {user.id}")
-
-        # Add the task to the background tasks to sync user Microsoft data
-        async def run_microsoft_sync():
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                None,  # Use default thread pool
-                lambda: asyncio.run(initiate_microsoft_sync(
-                    user.id, sync_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
-                ))
-            )
-        
-        # Extract Redis connection from request
-        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-        
-        await create_task(redis_connection, run_microsoft_sync(), id=f"microsoft_sync_{user.id}")
-
-        await update_data_source_sync_status(user.id, 'microsoft', 'syncing')
-
-        return RedirectResponse(
-            url=DATASOURCES_URL,
-            status_code=302
-        )
-
-    except Exception as sync_error:
-        log.error(f"Microsoft sync failed for user {user.id}: {str(sync_error)}")
-        if "invalid_grant" in str(sync_error).lower() or "invalid_token" in str(sync_error).lower():
-            log.warning(f"Microsoft sync for user {user.id} failed due to invalid token. User may need to re-authorize.")
-            raise HTTPException(
-                status_code=401,
-                detail="Microsoft token invalid or expired. Please re-authorize your Microsoft integration."
-            )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Microsoft sync failed: {str(sync_error)}"
-        )
-
-@router.delete("/microsoft/disconnect")
-async def disconnect_microsoft(request: Request, user=Depends(get_verified_user),
-    microsoft_tenant_id: Optional[str] = None # Microsoft uses tenant IDs
-):
-    """
-    Disconnects a user's Microsoft integration, revoking tokens (where possible), deleting credentials,
-    cleaning up GCS files and updating the data source sync status.
-
-    Args:
-        user: The authenticated user object.
-        microsoft_tenant_id (Optional[str]): If provided, only attempts to disconnect the Microsoft
-                                       integration for this specific tenant ID (e.g., a specific
-                                       Microsoft 365 organization).
-
-    Returns:
-        JSONResponse: A message indicating success or failure.
-    """
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    user_id = user.id
-    log.info(f"Initiating Microsoft integration disconnection for user: {user_id}"
-             f"{f' (Tenant ID: {microsoft_tenant_id})' if microsoft_tenant_id else ''}"
-             f", GCS cleanup")
-
-    overall_success = True
-    messages = []
-
-    # --- Step 1: Revoke Microsoft Token(s) ---
-    # Microsoft generally handles token invalidation at the Azure AD level.
-    # There isn't a direct "revoke token" API endpoint for individual access/refresh tokens like Google.
-    # When a user removes an app's permissions, or changes password, or admin revokes session, tokens become invalid.
-    # For programmatic revocation, usually an admin action is required (e.g., invalidating a user's refresh token
-    # via the Azure AD Graph API or by disabling the service principal for the application).
-    # For the scope of a user-facing disconnect, primarily we'll delete the token from our DB and clean up data.
-    # We can provide a "logout" URL, but it primarily clears browser session.
-
-    # Fetch token entries to log which ones are being removed
-    microsoft_tokens_to_remove: List[OAuthTokenModel] = []
-    if microsoft_tenant_id:
-        token_entry = OAuthTokens.get_token_by_user_provider_details(
-            user_id=user_id,
-            provider_name="Microsoft",
-            # Assuming provider_team_id can store tenant_id for Microsoft
-            provider_team_id=microsoft_tenant_id
-        )
-        if token_entry:
-            microsoft_tokens_to_remove.append(token_entry)
-    else:
-        all_user_tokens = OAuthTokens.get_all_tokens_for_user(user_id=user_id)
-        microsoft_tokens_to_remove = [
-            token for token in all_user_tokens if token.provider_name == "Microsoft"
-        ]
-
-    if not microsoft_tokens_to_remove:
-        msg = f"No Microsoft tokens found for user {user_id}{f' (Tenant ID: {microsoft_tenant_id})' if microsoft_tenant_id else ''}. Skipping token revocation attempt."
-        log.warning(msg)
-        messages.append(msg)
-    else:
-        # Log that tokens are being removed from local DB
-        for token_entry in microsoft_tokens_to_remove:
-            msg = (f"Microsoft token ID: {token_entry.id} for user {user_id}"
-                   f" (Tenant ID: {token_entry.provider_team_id}) will be removed from DB.")
-            log.info(msg)
-            messages.append(msg)
-        
-        # Optionally, you could provide a link for the user to revoke permissions manually in their Microsoft account settings
-        # This is more robust for user-initiated revocation for Microsoft.
-        # "https://myapps.microsoft.com/" where they can see and revoke apps.
-
-    # --- Step 2: Remove stored Microsoft credentials (OAuthToken entry) from DB ---
-    try:
-        if microsoft_tenant_id:
-            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
-                user_id=user_id,
-                provider_name="Microsoft",
-                provider_team_id=microsoft_tenant_id
-            )
+                if updated_ds:
+                    msg = f"Successfully updated {provider.title()} data source status to 'unsynced'"
+                    log.info(msg)
+                    messages.append(msg)
+                else:
+                    msg = f"Failed to update {provider.title()} data source status"
+                    log.error(msg)
+                    messages.append(msg)
+                    overall_success = False
+            except Exception as e:
+                msg = f"Error updating {provider.title()} data source status: {e}"
+                log.exception(msg)
+                messages.append(msg)
+                overall_success = False
         else:
-            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
-                user_id=user_id,
-                provider_name="Microsoft"
-            )
-
-        if db_delete_success:
-            msg = f"Successfully deleted Microsoft OAuth token(s) from DB for user {user_id}{f' (Tenant ID: {microsoft_tenant_id})' if microsoft_tenant_id else ''}."
-            log.info(msg)
+            msg = f"{provider.title()} data source not found for user {user_id}"
+            log.warning(msg)
             messages.append(msg)
-        else:
-            msg = f"Failed to delete Microsoft OAuth token(s) from DB for user {user_id}{f' (Tenant ID: {microsoft_tenant_id})' if microsoft_tenant_id else ''}. It might have already been deleted or not found."
+
+        # Delete user data from GCS Bucket
+        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+            msg = "GCS configuration missing. Cannot perform GCS data cleanup."
             log.error(msg)
             messages.append(msg)
             overall_success = False
-    except Exception as e:
-        msg = f"Error deleting Microsoft OAuth token(s) from DB for user {user_id}: {e}"
-        log.exception(msg)
-        messages.append(msg)
-        overall_success = False
+        else:
+            try:
+                await create_background_delete_task(request, provider, user_id, layer)
+                msg = f"Successfully initiated GCS data cleanup for user {user_id}'s {provider.title()} folder"
+                log.info(msg)
+                messages.append(msg)
+            except Exception as e:
+                msg = f"Error during GCS data cleanup: {e}"
+                log.exception(msg)
+                messages.append(msg)
+                overall_success = False
 
-    # --- Step 3: Update Microsoft Data Source Sync Status ---
-    microsoft_data_source_found: Optional[DataSourceModel] = None
+        if overall_success:
+            log.info(f"{provider.title()} integration disconnection completed successfully for user: {user_id}")
+            return {"message": f"{provider.title()} integration disconnected successfully.", "details": messages}
+        else:
+            log.warning(f"{provider.title()} integration disconnection completed with failures for user: {user_id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"message": f"Failed to fully disconnect {provider.title()} integration.", "details": messages}
+            )
+    
+    return disconnect
+
+async def disconnect_provider_layer(provider: str, user_id: str, layer: str, team_id: str, request: Request, messages: List[str]) -> dict:
+    """Handle layer-specific disconnection for providers that support it."""
+    overall_success = True
+    
+    # Get tokens to process for layer removal
+    tokens_to_process: List[OAuthTokenModel] = []
+    if team_id:
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user_id,
+            provider_name=provider.title(),
+            provider_team_id=team_id
+        )
+        if token_entry:
+            tokens_to_process.append(token_entry)
+    else:
+        all_user_tokens = OAuthTokens.get_all_tokens_for_user(user_id=user_id)
+        tokens_to_process = [
+            token for token in all_user_tokens if token.provider_name == provider.title()
+        ]
+
+    if not tokens_to_process:
+        msg = f"No {provider.title()} tokens found for user {user_id}"
+        log.warning(msg)
+        messages.append(msg)
+    else:
+        for token_entry in tokens_to_process:
+            try:
+                current_layers = token_entry.layer if token_entry.layer else ""
+                
+                if not current_layers or layer not in current_layers.split(","):
+                    msg = f"Layer '{layer}' not found in token {token_entry.id}"
+                    log.info(msg)
+                    messages.append(msg)
+                    continue
+                
+                # Remove the specified layer
+                layer_set = set(current_layers.split(","))
+                layer_set.discard(layer)
+                remaining_layers = ",".join(sorted(layer_set)) if layer_set else ""
+                
+                if remaining_layers:
+                    # Update token with remaining layers
+                    updated_token = OAuthTokens.update_token_by_id(
+                        token_id=token_entry.id,
+                        encrypted_access_token=token_entry.encrypted_access_token,
+                        access_token_expires_at=token_entry.access_token_expires_at,
+                        scopes=token_entry.scopes,
+                        layer=remaining_layers
+                    )
+                    if updated_token:
+                        msg = f"Updated token {token_entry.id}, removed layer '{layer}', remaining: '{remaining_layers}'"
+                        log.info(msg)
+                        messages.append(msg)
+                    else:
+                        msg = f"Failed to update token {token_entry.id}"
+                        log.error(msg)
+                        messages.append(msg)
+                        overall_success = False
+                else:
+                    # No layers remaining, revoke and delete the entire token
+                    config = PROVIDER_CONFIGS[provider]
+                    if config['revoke_url']:
+                        try:
+                            decrypted_access_token, _ = decrypt_tokens(token_entry)
+                            
+                            if provider == 'slack':
+                                revoke_response = requests.post(
+                                    config['revoke_url'],
+                                    headers={'Authorization': f'Bearer {decrypted_access_token}'}
+                                )
+                            else:  # Google
+                                revoke_response = requests.post(
+                                    config['revoke_url'],
+                                    params={'token': decrypted_access_token}
+                                )
+                            
+                            if revoke_response.status_code == 200:
+                                msg = f"Successfully revoked {provider.title()} token ID: {token_entry.id}"
+                                log.info(msg)
+                                messages.append(msg)
+                        except Exception as e:
+                            msg = f"Error revoking token {token_entry.id}: {e}"
+                            log.error(msg)
+                            messages.append(msg)
+                            overall_success = False
+                    
+                    # Delete the token
+                    delete_success = OAuthTokens.delete_token_by_id(token_entry.id)
+                    if delete_success:
+                        msg = f"Successfully deleted token {token_entry.id} (no layers remaining)"
+                        log.info(msg)
+                        messages.append(msg)
+                    else:
+                        msg = f"Failed to delete token {token_entry.id}"
+                        log.error(msg)
+                        messages.append(msg)
+                        overall_success = False
+                        
+            except Exception as e:
+                msg = f"Error processing token {token_entry.id}: {e}"
+                log.error(msg)
+                messages.append(msg)
+                overall_success = False
+
+    # Update data source sync status for the specific layer
+    data_source_found: Optional[DataSourceModel] = None
     user_data_sources: List[DataSourceModel] = DataSources.get_data_sources_by_user_id(user_id)
     for ds in user_data_sources:
-        if ds.action == "microsoft":
-            microsoft_data_source_found = ds
+        if ds.layer == layer:
+            data_source_found = ds
             break
 
-    if microsoft_data_source_found:
+    if data_source_found:
         try:
             updated_ds = DataSources.update_data_source_sync_status_by_name(
                 user_id=user_id,
-                source_name=microsoft_data_source_found.name,
+                source_name=data_source_found.name,
+                layer_name=layer,
                 sync_status="unsynced",
                 last_sync=int(time.time())
             )
             if updated_ds:
-                msg = f"Successfully updated Microsoft data source status to 'unsynced' for user {user_id} (Data Source Name: {updated_ds.name})."
+                msg = f"Successfully updated {provider.title()} data source status to 'unsynced' for layer {layer}"
                 log.info(msg)
                 messages.append(msg)
             else:
-                msg = f"Failed to update Microsoft data source status to 'unsynced' for user {user_id} (Data Source Name: {microsoft_data_source_found.name})."
+                msg = f"Failed to update {provider.title()} data source status for layer {layer}"
                 log.error(msg)
                 messages.append(msg)
                 overall_success = False
         except Exception as e:
-            msg = f"Error updating Microsoft data source status for user {user_id}: {e}"
+            msg = f"Error updating {provider.title()} data source status for layer {layer}: {e}"
             log.exception(msg)
             messages.append(msg)
             overall_success = False
     else:
-        msg = f"Microsoft data source not found for user {user_id}. Cannot update sync status."
+        msg = f"{provider.title()} data source not found for layer {layer}"
         log.warning(msg)
         messages.append(msg)
 
-    # --- Step 4: Delete user data from GCS Bucket ---
+    # Delete layer-specific data from GCS
     if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        msg = ("GCS configuration missing (GCS_BUCKET_NAME or GCS_SERVICE_ACCOUNT_BASE64). "
-                "Cannot perform GCS data cleanup as requested.")
+        msg = "GCS configuration missing. Cannot perform GCS data cleanup."
         log.error(msg)
         messages.append(msg)
         overall_success = False
     else:
-        microsoft_folder_path = f"userResources/{user_id}/Microsoft/" 
         try:
-
-            # Add the task to the background tasks to sync user Microsoft data
-            async def delete_microsoft_sync():
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,  # Use default thread pool
-                    lambda: asyncio.run(delete_gcs_folder(microsoft_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
-                )
-            
-            # Extract Redis connection from request
-            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-            
-            await create_task(redis_connection, delete_microsoft_sync(), id=f"delete_google_sync_{user.id}")
-
-            msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Microsoft folder."
+            await create_background_delete_task(request, provider, user_id, layer)
+            msg = f"Successfully initiated GCS data cleanup for {provider.title()} layer '{layer}'"
             log.info(msg)
             messages.append(msg)
-            
         except Exception as e:
-            msg = f"Error during GCS data cleanup for user {user_id}'s Microsoft folder: {e}"
+            msg = f"Error during GCS data cleanup for layer '{layer}': {e}"
             log.exception(msg)
             messages.append(msg)
             overall_success = False
 
     if overall_success:
-        log.info(f"Microsoft integration disconnection process completed successfully for user: {user_id}")
-        return {"message": "Microsoft integration disconnected successfully.", "details": messages}
+        log.info(f"{provider.title()} layer disconnection completed successfully for user: {user_id}, layer: {layer}")
+        return {"message": f"{provider.title()} layer '{layer}' disconnected successfully.", "details": messages}
     else:
-        log.warning(f"Microsoft integration disconnection process completed with some failures for user: {user_id}")
+        log.warning(f"{provider.title()} layer disconnection completed with failures for user: {user_id}, layer: {layer}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"message": "Failed to fully disconnect Microsoft integration. See details.", "details": messages}
+            detail={"message": f"Failed to fully disconnect {provider.title()} layer '{layer}'.", "details": messages}
         )
 
 ############################
-# Slack Endpoints 
+# Create All Provider Endpoints
 ############################
-@router.get("/slack/initialize")
-def get_slack_auth_url(user=Depends(get_verified_user)):
-    """Generate Slack OAuth URL for the current authenticated user."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    
-    # Bot scopes - these will be granted to our app
-    bot_scopes = [
-        "channels:history",    # Read messages in public channels
-        "groups:history",      # Read messages in private channels
-        "im:history",          # Read direct messages
-        "mpim:history",        # Read group direct messages
-        "files:read",          # Access file information
-        "users:read",          # Get user information
-        "channels:read",       # List public channels
-        "groups:read",         # List private channels
-        "im:read",             # List direct messages
-        "mpim:read",           # List group direct messages
-    ]
-    
-    # User scopes - these will be granted to the user token
-    # These are the same permissions but acting as the user
-    user_scopes = [
-        "channels:history",
-        "groups:history", 
-        "im:history",
-        "mpim:history",
-        "files:read",
-        "users:read",
-        "channels:read",
-        "groups:read",
-        "im:read",
-        "mpim:read",
-    ]
-    
-    bot_scope_str = ",".join(bot_scopes)
-    user_scope_str = ",".join(user_scopes)
-    
-    # Use user ID as state parameter for security
-    state = user.id
-    oauth_state_store[state] = user.id  # Store for validation in callback
-    
-    auth_url = (
-        f"{SLACK_AUTHORIZE_URL}"
-        f"?client_id={SLACK_CLIENT_ID}"
-        f"&scope={bot_scope_str}"
-        f"&user_scope={user_scope_str}"  # This is the key addition
-        f"&redirect_uri={SLACK_REDIRECT_URI}"
-        f"&state={state}"
-    )
 
-    return {
-        "url": auth_url,
-        "user_id": user.id,
-        "bot_scopes": bot_scopes,
-        "user_scopes": user_scopes
-    }
-
-@router.get("/slack/callback")
-async def slack_callback(request: Request):
-    """Handle Slack OAuth callback and initiate sync process."""
-    code = request.query_params.get("code")
-    state = request.query_params.get("state")
-    error = request.query_params.get("error")
-
-    if error:
-        log.error(f"Slack OAuth error: {error}")
-        return Response(status_code=400, content=f"Slack OAuth error: {error}")
-
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing Slack OAuth code.")
-    
-    if not state or state not in oauth_state_store:
-        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
-    
-    user_id = oauth_state_store.pop(state)  # Remove state after use
-    
-    try:
-        # Exchange code for access token
-        response = requests.post(
-            SLACK_TOKEN_URL,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            data={
-                "client_id": SLACK_CLIENT_ID,
-                "client_secret": SLACK_CLIENT_SECRET,
-                "code": code,
-                "redirect_uri": SLACK_REDIRECT_URI,
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        
-        if not data.get("ok"):
-            raise HTTPException(status_code=400, detail=f"Slack OAuth failed: {data.get('error')}")
-
-        log.info(f"Slack OAuth successful for user {user_id}")
-
-        # Extract tokens and relevant Slack metadata
-        # The top-level `access_token` is usually the bot token.
-        # `authed_user.access_token` is the user token (if 'users:read', 'channels:read', etc. scopes were requested).
-        # For full user data access, `authed_user.access_token` is typically what you need.
-        bot_access_token = data.get("access_token")
-        user_access_token = data.get("authed_user", {}).get("access_token")
-        refresh_token = data.get("refresh_token") # Crucial for long-term access
-        expires_in = data.get("expires_in") # Time until access_token expires (in seconds)
-        team_id = data.get("team", {}).get("id")
-        slack_user_id = data.get("authed_user", {}).get("id")
-        granted_scopes = data.get("scope") # Comma-separated string of granted scopes
-
-        if not bot_access_token and not user_access_token:
-            raise HTTPException(
-                status_code=500,
-                detail="No valid token received from Slack OAuth. Ensure necessary scopes are requested."
-            )
-        
-        # Decide which token to store as the primary 'access_token' for syncing.
-        # For downloading conversations, the user's token (`authed_user.access_token`) is necessary.
-        # We will store the user's access token as `encrypted_access_token` in the DB.
-        # The bot token can be stored if needed for other app functionalities, perhaps in a separate token entry
-        # or as a secondary field if your schema supports it. For simplicity, we prioritize the user token for sync.
-        primary_access_token_for_storage = user_access_token if user_access_token else bot_access_token
-        
-        if not primary_access_token_for_storage:
-             raise HTTPException(
-                status_code=500,
-                detail="Failed to retrieve a primary token for storage. Ensure user-level scopes are requested."
-            )
-
-        # Encrypt tokens before storing
-        encrypted_primary_access_token = encrypt_data(primary_access_token_for_storage)
-        encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else None
-
-        # Calculate expiration time for access token
-        access_token_expires_at = None
-        if expires_in:
-            access_token_expires_at = int(time.time()) + expires_in
-
-        # Store tokens in the database using the new OAuthTokens class
-        try:
-            # We use the insert_new_token method which handles update-or-insert logic
-            OAuthTokens.insert_new_token(
-                user_id=user_id,
-                provider_name="Slack",
-                provider_user_id=slack_user_id,
-                provider_team_id=team_id,
-                encrypted_access_token=encrypted_primary_access_token,
-                encrypted_refresh_token=encrypted_refresh_token,
-                access_token_expires_at=access_token_expires_at,
-                scopes=granted_scopes,
-            )
-            log.info(f"Stored/Updated Slack OAuth tokens for user {user_id}, team {team_id}")
-
-        except Exception as db_error:
-            log.error(f"Failed to store Slack OAuth tokens in DB for user {user_id}: {db_error}")
-            raise HTTPException(status_code=500, detail="Failed to store Slack tokens securely.")
-
-        # Validate required environment variables for sync (still needed)
-        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-            raise HTTPException(
-                status_code=500, 
-                detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-            )
-
-        # Initiate the sync process with the *decrypted* sync token
-        # The immediate sync uses the token directly from the OAuth response.
-        # Future syncs will fetch from DB and decrypt.
-        sync_token_for_immediate_use = user_access_token if user_access_token else bot_access_token
-        if not sync_token_for_immediate_use:
-             raise HTTPException(
-                status_code=500,
-                detail="No suitable token for immediate sync."
-            )
-
-        # Initiate the sync process
-        try:
-            log.info(f"Starting Slack sync for user {user_id} with {'user' if user_access_token else 'bot'} token (retrieved from OAuth response)")
-            
-            # Add the task to the background tasks to sync user Slack data
-            async def run_slack_sync():
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,  # Use default thread pool
-                    lambda: asyncio.run(initiate_slack_sync(
-                        user_id, sync_token_for_immediate_use, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
-                    ))
-                )
-            
-            # Extract Redis connection from request
-            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-            
-            await create_task(redis_connection, run_slack_sync(), id=f"slack_sync_{user_id}")
-
-            await update_data_source_sync_status(user_id, 'slack', 'syncing')
-
-            return RedirectResponse(
-                url=DATASOURCES_URL,
-                status_code=302
-            )
-            
-        except Exception as sync_error:
-            log.error(f"Slack sync failed for user {user_id}: {str(sync_error)}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Slack sync failed: {str(sync_error)}"
-            )
-    
-    except requests.exceptions.RequestException as e:
-        log.error(f"Slack API Request Error: {str(e)}")
-        if hasattr(e, 'response') and e.response is not None:
-            log.error(f"Response: {e.response.text}")
-        raise HTTPException(status_code=500, detail="Failed to authenticate with Slack")
-
-@router.get("/slack/status")
-def get_slack_status(user=Depends(get_verified_user)):
-    """Get current user's Slack integration status."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    
-    # Check if required environment variables are configured
-    config_status = {
-        "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
-        "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
-        "slack_client_configured": bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_REDIRECT_URI),
-    }
-    
-    return {
-        "user_id": user.id,
-        "configuration": config_status,
-        "ready_for_sync": all(config_status.values())
-    }
-
-@router.post("/slack/sync")
-async def manual_slack_sync(
-    request: Request,
-    user=Depends(get_verified_user),
-):
-    """Manually trigger Slack sync for the authenticated user, fetching tokens from DB."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    
-    # Check if Slack sync is already in progress
-    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
-    slack_data_source = None
-    
-    for ds in user_data_sources:
-        if ds.action == 'slack':
-            slack_data_source = ds
-            break
-    
-    if slack_data_source and slack_data_source.sync_status == 'syncing':
-        return
-    
-    current_time = int(time.time())
-
-    # 1. Fetch encrypted tokens for the user and Slack provider
-    # Fetch the most recently updated Slack token associated with the user
-    token_entry = OAuthTokens.get_token_by_user_provider_details(
-        user_id=user.id,
-        provider_name="Slack"
-        # If a user can connect multiple Slack workspaces, you'd need a way
-        # to identify which specific team/workspace token to use, e.g., via a query parameter.
-        # For now, we fetch the "primary" one (most recently updated).
-    )
-
-    log.info(f"Fetched Slack token entry for user {user.id}: {token_entry}")
-
-    if not token_entry:
-        raise HTTPException(
-            status_code=404, 
-            detail="No Slack integration found for this user. Please authorize your Slack app first."
-        )
-
-    # 2. Decrypt tokens
-    try:
-        decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
-        decrypted_refresh_token = decrypt_data(token_entry.encrypted_refresh_token) if token_entry.encrypted_refresh_token else None
-        
-        sync_token = decrypted_access_token # This is the token we'll use for Slack API calls
-
-    except Exception as e:
-        log.error(f"Failed to decrypt tokens for user {user.id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to decrypt Slack tokens. Please try re-authorizing.")
-
-    # 3. Check token expiration and refresh if necessary
-    refresh_needed = False
-    if token_entry.access_token_expires_at:
-        if (token_entry.access_token_expires_at - current_time) < (5 * 60): # 5-minute grace period
-            refresh_needed = True
-            log.info(f"Access token for user {user.id} nearing expiration. Initiating refresh.")
-    elif decrypted_refresh_token: # If no explicit expiration, but refresh token exists, assume rotation
-        log.info(f"Access token for user {user.id} has no explicit expiry but a refresh token exists. Will attempt refresh if initial API call fails.")
-        # We will handle refresh reactively if the initial API call with `sync_token` fails.
-        # This is a common and often simpler strategy than purely proactive refreshing.
-    
-    if refresh_needed and decrypted_refresh_token:
-        try:
-            log.info(f"Attempting to refresh Slack token for user {user.id}")
-            refresh_response = requests.post(
-                SLACK_TOKEN_URL,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                data={
-                    "client_id": SLACK_CLIENT_ID,
-                    "client_secret": SLACK_CLIENT_SECRET,
-                    "grant_type": "refresh_token",
-                    "refresh_token": decrypted_refresh_token,
-                },
-            )
-            refresh_response.raise_for_status()
-            refresh_data = refresh_response.json()
-
-            if not refresh_data.get("ok"):
-                log.error(f"Slack token refresh failed for user {user.id}: {refresh_data.get('error')}")
-                raise HTTPException(status_code=400, detail=f"Failed to refresh Slack token: {refresh_data.get('error')}")
-            
-            # Get new tokens and update expiration
-            new_access_token = refresh_data.get("access_token")
-            new_refresh_token = refresh_data.get("refresh_token")
-            new_expires_in = refresh_data.get("expires_in")
-
-            if not new_access_token:
-                raise HTTPException(status_code=500, detail="No new access token received after refresh.")
-
-            # Encrypt new tokens
-            encrypted_new_access_token = encrypt_data(new_access_token)
-            encrypted_new_refresh_token = encrypt_data(new_refresh_token) if new_refresh_token else None
-            new_access_token_expires_at = int(time.time()) + new_expires_in if new_expires_in else None
-
-            # Update database with new tokens
-            updated_token_entry = OAuthTokens.update_token_by_id(
-                token_id=token_entry.id,
-                encrypted_access_token=encrypted_new_access_token,
-                encrypted_refresh_token=encrypted_new_refresh_token,
-                access_token_expires_at=new_access_token_expires_at,
-                scopes=refresh_data.get("scope", token_entry.scopes) # Update scopes if refresh response includes them
-            )
-            
-            if not updated_token_entry:
-                raise HTTPException(status_code=500, detail="Failed to update refreshed Slack tokens in database.")
-
-            log.info(f"Successfully refreshed and updated Slack tokens for user {user.id}")
-            sync_token = new_access_token # Use the newly acquired access token for sync
-
-        except requests.exceptions.RequestException as e:
-            log.error(f"Slack API Request Error during token refresh for user {user.id}: {str(e)}")
-            if hasattr(e, 'response') and e.response is not None:
-                log.error(f"Refresh response: {e.response.text}")
-            raise HTTPException(status_code=500, detail="Failed to refresh Slack token with provider.")
-        except Exception as e:
-            log.error(f"An error occurred during Slack token refresh for user {user.id}: {str(e)}")
-            raise HTTPException(status_code=500, detail="An internal server error occurred during token refresh.")
-    elif refresh_needed and not decrypted_refresh_token:
-        log.warning(f"Access token for user {user.id} nearing expiration but no refresh token available. User may need to re-authorize.")
-        raise HTTPException(
-            status_code=401, 
-            detail="Slack token is expired and cannot be refreshed. Please re-authorize your Slack integration."
-        )
-
-    # 4. Validate required environment variables for sync (still needed)
-    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        raise HTTPException(
-            status_code=500, 
-            detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-        )
-    
-    try:
-        log.info(f"Starting scheduled/manual Slack sync for user {user.id}")
-
-         # Add the task to the background tasks to sync user Slack data
-        async def run_slack_sync():
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                None,  # Use default thread pool
-                lambda: asyncio.run(initiate_slack_sync(
-                    user.id,
-            sync_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
-                ))
-            )
-        
-        # Extract Redis connection from request
-        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-        
-        await create_task(redis_connection, run_slack_sync(), id=f"slack_sync_{user.id}")
-
-        await update_data_source_sync_status(user.id, 'slack', 'syncing')
-
-        return RedirectResponse(
-            url=DATASOURCES_URL,
-            status_code=302
-        )
-        
-    except Exception as sync_error:
-        log.error(f"Slack sync failed for user {user.id}: {str(sync_error)}")
-        if "invalid_auth" in str(sync_error).lower(): # Simple check, refine based on actual error messages
-            log.warning(f"Slack sync for user {user.id} failed due to invalid token. User may need to re-authorize.")
-            # Consider deleting the invalid token from the DB here if it's consistently failing.
-            # OAuthTokens.delete_token_by_id(token_entry.id)
-            raise HTTPException(
-                status_code=401, 
-                detail="Slack token invalid or expired. Please re-authorize your Slack integration."
-            )
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Slack sync failed: {str(sync_error)}"
-        )
-
-@router.delete("/slack/disconnect")
-async def disconnect_slack(request: Request,user=Depends(get_verified_user),
-    slack_team_id: Optional[str] = None
-):
-    """
-    Disconnects a user's Slack integration, revoking tokens, deleting credentials,
-    cleaning up GCS files and updating the data source sync status.
-
-    Args:
-        user: The authenticated user object.
-        slack_team_id (Optional[str]): If provided, only attempts to disconnect the Slack
-                                       integration for this specific team ID.
-
-    Returns:
-        JSONResponse: A message indicating success or failure.
-    """
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    user_id = user.id
-    log.info(f"Initiating Slack integration disconnection for user: {user_id}"
-             f"{f' (Team ID: {slack_team_id})' if slack_team_id else ''}"
-             f", GCS cleanup")
-
-    overall_success = True
-    messages = []
-
-    # --- Step 1: Fetch and Revoke Slack Token(s) ---
-    slack_tokens_to_revoke: List[OAuthTokenModel] = []
-    if slack_team_id:
-        token_entry = OAuthTokens.get_token_by_user_provider_details(
-            user_id=user_id,
-            provider_name="Slack",
-            provider_team_id=slack_team_id
-        )
-        if token_entry:
-            slack_tokens_to_revoke.append(token_entry)
-    else:
-        all_user_tokens = OAuthTokens.get_all_tokens_for_user(user_id=user_id)
-        slack_tokens_to_revoke = [
-            token for token in all_user_tokens if token.provider_name == "Slack"
-        ]
-
-    if not slack_tokens_to_revoke:
-        msg = f"No Slack tokens found for user {user_id}{f' (Team ID: {slack_team_id})' if slack_team_id else ''}. Skipping token revocation."
-        log.warning(msg)
-        messages.append(msg)
-    else:
-        for token_entry in slack_tokens_to_revoke:
-            try:
-                decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
-                
-                log.info(f"Attempting to revoke Slack token for user {user_id}, "
-                         f"ID: {token_entry.id}, Team ID: {token_entry.provider_team_id}")
-                
-                revoke_response = requests.post(
-                    SLACK_AUTH_REVOKE_URL,
-                    headers={'Authorization': f'Bearer {decrypted_access_token}'}
-                )
-                revoke_response.raise_for_status()
-                revoke_data = revoke_response.json()
-
-                if revoke_data.get("ok"):
-                    msg = f"Successfully revoked Slack token ID: {token_entry.id} for user {user_id}"
-                    log.info(msg)
-                    messages.append(msg)
-                else:
-                    msg = (f"Failed to revoke Slack token ID: {token_entry.id} for user {user_id}. "
-                           f"Slack API Error: {revoke_data.get('error')}")
-                    log.warning(msg)
-                    messages.append(msg)
-            except Exception as e:
-                msg = (f"Error during Slack token revocation for user {user_id}, "
-                       f"token ID: {token_entry.id}: {e}")
-                log.error(msg)
-                messages.append(msg)
-                overall_success = False
-
-    # --- Step 2: Remove stored Slack credentials (OAuthToken entry) from DB ---
-    try:
-        if slack_team_id:
-            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
-                user_id=user_id,
-                provider_name="Slack",
-                provider_team_id=slack_team_id
-            )
-        else:
-            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
-                user_id=user_id,
-                provider_name="Slack"
-            )
-
-        if db_delete_success:
-            msg = f"Successfully deleted Slack OAuth token(s) from DB for user {user_id}{f' (Team ID: {slack_team_id})' if slack_team_id else ''}."
-            log.info(msg)
-            messages.append(msg)
-        else:
-            msg = f"Failed to delete Slack OAuth token(s) from DB for user {user_id}{f' (Team ID: {slack_team_id})' if slack_team_id else ''}. It might have already been deleted or not found."
-            log.error(msg)
-            messages.append(msg)
-    except Exception as e:
-        msg = f"Error deleting Slack OAuth token(s) from DB for user {user_id}: {e}"
-        log.exception(msg)
-        messages.append(msg)
-        overall_success = False
-
-    # --- Step 3: Update Slack Data Source Sync Status ---
-    # Find the data source by its 'action' ("slack") to get its 'name'
-    slack_data_source_found: Optional[DataSourceModel] = None
-    user_data_sources: List[DataSourceModel] = DataSources.get_data_sources_by_user_id(user_id)
-    for ds in user_data_sources:
-        if ds.action == "slack": 
-            slack_data_source_found = ds
-            break
-
-    if slack_data_source_found:
-        try:
-            updated_ds = DataSources.update_data_source_sync_status_by_name(
-                user_id=user_id,
-                source_name=slack_data_source_found.name,
-                sync_status="unsynced", # Set to a specific "disconnected" status
-                last_sync=int(time.time()) # Update last sync time to now
-            )
-            if updated_ds:
-                msg = f"Successfully updated Slack data source status to 'unsynced' for user {user_id} (Data Source Name: {updated_ds.name})."
-                log.info(msg)
-                messages.append(msg)
-            else:
-                msg = f"Failed to update Slack data source status to 'unsynced' for user {user_id} (Data Source Name: {slack_data_source_found.name})."
-                log.error(msg)
-                messages.append(msg)
-                overall_success = False
-        except Exception as e:
-            msg = f"Error updating Slack data source status for user {user_id}: {e}"
-            log.exception(msg)
-            messages.append(msg)
-            overall_success = False
-    else:
-        msg = f"Slack data source not found for user {user_id}. Cannot update sync status."
-        log.warning(msg)
-        messages.append(msg)
-
-    # --- Step 4: Delete user data from GCS Bucket ---
-    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        msg = ("GCS configuration missing (GCS_BUCKET_NAME or GCS_SERVICE_ACCOUNT_BASE64). "
-                "Cannot perform GCS data cleanup as requested.")
-        log.error(msg)
-        messages.append(msg)
-        overall_success = False
-    else:
-        slack_folder_path = f"userResources/{user_id}/Slack/"
-        try:
-            # Add the task to the background tasks to sync user Google data
-            async def delete_slack_sync():
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,  # Use default thread pool
-                    lambda: asyncio.run(delete_gcs_folder(slack_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
-                )
-            
-            # Extract Redis connection from request
-            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-            
-            await create_task(redis_connection, delete_slack_sync(), id=f"delete_slack_sync_{user.id}")
-
-            msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Slack folder."
-            log.info(msg)
-            messages.append(msg)
-            
-        except Exception as e:
-            msg = f"Error during GCS data cleanup for user {user_id}'s Slack folder: {e}"
-            log.exception(msg)
-            messages.append(msg)
-            overall_success = False
-    
-
-    if overall_success:
-        log.info(f"Slack integration disconnection process completed successfully for user: {user_id}")
-        return {"message": "Slack integration disconnected successfully.", "details": messages}
-    else:
-        log.warning(f"Slack integration disconnection process completed with some failures for user: {user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"message": "Failed to fully disconnect Slack integration. See details.", "details": messages}
-        )
-    
-
-############################
-# Atlassian Endpoints 
-############################
-@router.get("/atlassian/initialize")
-def get_atlassian_auth_url(user=Depends(get_verified_user)):
-    """Generate Atlassian OAuth URL for the current authenticated user."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
-    # Atlassian scopes for Jira and Confluence (read-only where possible)
-    # Refer to Atlassian's documentation for the most current and specific scopes.
-    # atlassian_scopes = [
-    #     "read:jira-user",        # Read user profile data in Jira
-    #     "read:jira-work",        # Read Jira project and issue data
-    #     "read:confluence-space", # Read Confluence spaces
-    #     "read:confluence-content",# Read Confluence page content and attachments
-    #     "offline_access",         # Crucial to get a refresh_token
-    #     "read:project:jira",
-    # ]
-
-    atlassian_scopes = [
-        "read:user:jira",
-        "read:issue:jira",
-        "read:comment:jira",
-        "read:attachment:jira",
-        "read:project:jira",
-        "read:issue-meta:jira",
-        "read:field:jira",
-        "read:filter:jira",
-        "read:jira-work",
-        "read:jira-user",
-        "read:me",
-        "read:account",
-        "report:personal-data"
-    ]
-
-    scope_str = " ".join(atlassian_scopes) # Atlassian scopes are space-separated
-
-    state = user.id
-    oauth_state_store[state] = user.id # Store for validation in callback
-
-    # Atlassian uses 'audience' for the API gateway
-    auth_url = (
-        f"{ATLASSIAN_AUTHORIZE_URL}"
-        f"?client_id={ATLASSIAN_CLIENT_ID}"
-        f"&redirect_uri={ATLASSIAN_REDIRECT_URL}"
-        f"&scope={scope_str}"
-        f"&response_type=code"
-        f"&prompt=consent"      # Ensures refresh token is always granted
-        f"&state={state}"
-        f"&audience={ATLASSIAN_API_GATEWAY}" # Required for Atlassian's 3LO
-    )
-
-    return {
-        "url": auth_url,
-        "user_id": user.id,
-        "scopes": atlassian_scopes
-    }
-
-@router.get("/atlassian/callback")
-async def atlassian_callback(request: Request):
-    """Handle Atlassian OAuth callback and initiate sync process."""
-    code = request.query_params.get("code")
-    state = request.query_params.get("state")
-    error = request.query_params.get("error")
-    error_description = request.query_params.get("error_description")
-
-    if error:
-        log.error(f"Atlassian OAuth error: {error} - {error_description}")
-        return Response(status_code=400, content=f"Atlassian OAuth error: {error_description or error}")
-
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing Atlassian OAuth code.")
-
-    if not state or state not in oauth_state_store:
-        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
-
-    user_id = oauth_state_store.pop(state) # Remove state after use
-
-    try:
-        response = requests.post(
-            ATLASSIAN_TOKEN_URL,
-            data={
-                "grant_type": "authorization_code",
-                "client_id": ATLASSIAN_CLIENT_ID,
-                "client_secret": ATLASSIAN_CLIENT_SECRET,
-                "code": code,
-                "redirect_uri": ATLASSIAN_REDIRECT_URL,
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        if "error" in data:
-            raise HTTPException(status_code=400, detail=f"Atlassian OAuth failed: {data.get('error_description', data.get('error'))}")
-
-        log.info(f"Atlassian OAuth successful for user {user_id}")
-
-        access_token = data.get("access_token")
-        refresh_token = data.get("refresh_token")
-        expires_in = data.get("expires_in")
-
-        # Atlassian's access token is often a JWT. You can decode it to get user info.
-        # The 'sub' claim might be the user's Atlassian account ID.
-        atlassian_user_id = None
-        if access_token:
-            try:
-                # In production, properly decode and verify the JWT.
-                # For basic info, just decode without verification for initial ID extraction.
-                decoded_access_token = jwt.decode(access_token, options={"verify_signature": False})
-                atlassian_user_id = decoded_access_token.get("sub") # 'sub' is the Atlassian Account ID
-                log.info(f"Decoded Atlassian user ID (sub): {atlassian_user_id}")
-            except ImportError:
-                log.warning("PyJWT not installed. Cannot decode access_token to get Atlassian User ID.")
-            except Exception as e:
-                log.error(f"Failed to decode Atlassian access_token: {e}")
-
-        if not access_token:
-            raise HTTPException(
-                status_code=500,
-                detail="No access token received from Atlassian OAuth. Ensure necessary scopes are requested."
-            )
-
-        encrypted_access_token = encrypt_data(access_token)
-        encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else None
-
-        access_token_expires_at = None
-        if expires_in:
-            access_token_expires_at = int(time.time()) + expires_in
-
-        try:
-            OAuthTokens.insert_new_token(
-                user_id=user_id,
-                provider_name="Atlassian",
-                provider_user_id=atlassian_user_id, # Store Atlassian Account ID
-                encrypted_access_token=encrypted_access_token,
-                encrypted_refresh_token=encrypted_refresh_token,
-                access_token_expires_at=access_token_expires_at,
-                scopes=data.get("scope"),
-            )
-            log.info(f"Stored/Updated Atlassian OAuth tokens for user {user_id}")
-
-        except Exception as db_error:
-            log.error(f"Failed to store Atlassian OAuth tokens in DB for user {user_id}: {db_error}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Failed to store Atlassian tokens securely.")
-
-        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-            raise HTTPException(
-                status_code=500,
-                detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-            )
-
-        try:
-            log.info(f"Starting Atlassian sync for user {user_id} with token (retrieved from OAuth response)")
-
-            # Add the task to the background tasks to sync user Atlassian data
-            async def run_atlassian_sync():
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,  # Use default thread pool
-                    lambda: asyncio.run(initiate_atlassian_sync(
-                        user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
-                    ))
-                )
-            
-            # Extract Redis connection from request
-            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-            
-            await create_task(redis_connection, run_atlassian_sync(), id=f"run_atlassian_sync_{user_id}")
-
-            await update_data_source_sync_status(user_id, 'atlassian', 'syncing')
-
-            return RedirectResponse(
-                url=DATASOURCES_URL,
-                status_code=302
-            )
-
-        except Exception as sync_error:
-            log.error(f"Atlassian sync failed for user {user_id}: {str(sync_error)}", exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Atlassian sync failed: {str(sync_error)}"
-            )
-
-    except requests.exceptions.RequestException as e:
-        log.error(f"Atlassian API Request Error: {str(e)}", exc_info=True)
-        if hasattr(e, 'response') and e.response is not None:
-            log.error(f"Response: {e.response.text}")
-        raise HTTPException(status_code=500, detail="Failed to authenticate with Atlassian")
-
-@router.get("/atlassian/status")
-def get_atlassian_status(user=Depends(get_verified_user)):
-    """Get current user's Atlassian integration status."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
-    config_status = {
-        "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
-        "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
-        "atlassian_client_configured": bool(ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET and ATLASSIAN_REDIRECT_URI),
-    }
-
-    atlassian_token_exists = OAuthTokens.get_token_by_user_provider_details(user_id=user.id, provider_name="Atlassian")
-
-    sync_status = "not_connected"
-    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
-    for ds in user_data_sources:
-        if ds.action == "atlassian":
-            sync_status = ds.sync_status
-            break
-
-    return {
-        "user_id": user.id,
-        "configuration": config_status,
-        "atlassian_token_present": bool(atlassian_token_exists),
-        "current_sync_status": sync_status,
-        "ready_for_sync": all(config_status.values()) and bool(atlassian_token_exists) and sync_status != "syncing"
-    }
-
-@router.post("/atlassian/sync")
-async def manual_atlassian_sync(request: Request, user=Depends(get_verified_user)):
-    """Manually trigger Atlassian sync for the authenticated user, fetching tokens from DB."""
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    
-    # Check if Slack sync is already in progress
-    user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
-    atlassian_data_source = None
-    
-    for ds in user_data_sources:
-        if ds.action == 'atlassian':
-            atlassian_data_source = ds
-            break
-    
-    if atlassian_data_source and atlassian_data_source.sync_status == 'syncing':
-        return
-
-    current_time = int(time.time())
-
-    token_entry = OAuthTokens.get_token_by_user_provider_details(
-        user_id=user.id,
-        provider_name="Atlassian"
-    )
-
-    if not token_entry:
-        raise HTTPException(
-            status_code=404,
-            detail="No Atlassian integration found for this user. Please authorize your Atlassian app first."
-        )
-
-    try:
-        decrypted_access_token = decrypt_data(token_entry.encrypted_access_token)
-        decrypted_refresh_token = decrypt_data(token_entry.encrypted_refresh_token) if token_entry.encrypted_refresh_token else None
-
-        sync_token = decrypted_access_token
-
-    except Exception as e:
-        log.error(f"Failed to decrypt tokens for user {user.id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to decrypt Atlassian tokens. Please try re-authorizing.")
-
-    refresh_needed = False
-    if token_entry.access_token_expires_at:
-        if (token_entry.access_token_expires_at - current_time) < (5 * 60): # Refresh if less than 5 mins
-            refresh_needed = True
-            log.info(f"Access token for user {user.id} nearing expiration. Initiating refresh.")
-    elif decrypted_refresh_token:
-        log.info(f"Access token for user {user.id} has no explicit expiry but a refresh token exists. Will attempt refresh.")
-        refresh_needed = True
-
-
-    if refresh_needed and decrypted_refresh_token:
-        try:
-            log.info(f"Attempting to refresh Atlassian token for user {user.id}")
-            refresh_response = requests.post(
-                ATLASSIAN_TOKEN_URL,
-                data={
-                    "grant_type": "refresh_token",
-                    "client_id": ATLASSIAN_CLIENT_ID,
-                    "client_secret": ATLASSIAN_CLIENT_SECRET,
-                    "refresh_token": decrypted_refresh_token,
-                },
-            )
-            refresh_response.raise_for_status()
-            refresh_data = refresh_response.json()
-
-            if "error" in refresh_data:
-                log.error(f"Atlassian token refresh failed for user {user.id}: {refresh_data.get('error_description', refresh_data.get('error'))}")
-                raise HTTPException(status_code=400, detail=f"Failed to refresh Atlassian token: {refresh_data.get('error_description', refresh_data.get('error'))}")
-
-            new_access_token = refresh_data.get("access_token")
-            new_refresh_token = refresh_data.get("refresh_token", decrypted_refresh_token)
-            new_expires_in = refresh_data.get("expires_in")
-
-            if not new_access_token:
-                raise HTTPException(status_code=500, detail="No new access token received after refresh.")
-
-            encrypted_new_access_token = encrypt_data(new_access_token)
-            encrypted_new_refresh_token = encrypt_data(new_refresh_token) if new_refresh_token else None
-            new_access_token_expires_at = int(time.time()) + new_expires_in if new_expires_in else None
-
-            updated_token_entry = OAuthTokens.update_token_by_id(
-                token_id=token_entry.id,
-                encrypted_access_token=encrypted_new_access_token,
-                encrypted_refresh_token=encrypted_new_refresh_token,
-                access_token_expires_at=new_access_token_expires_at,
-                scopes=refresh_data.get("scope", token_entry.scopes)
-            )
-
-            if not updated_token_entry:
-                raise HTTPException(status_code=500, detail="Failed to update refreshed Atlassian tokens in database.")
-
-            log.info(f"Successfully refreshed and updated Atlassian tokens for user {user.id}")
-            sync_token = new_access_token
-
-        except requests.exceptions.RequestException as e:
-            log.error(f"Atlassian API Request Error during token refresh for user {user.id}: {str(e)}", exc_info=True)
-            if hasattr(e, 'response') and e.response is not None:
-                log.error(f"Refresh response: {e.response.text}")
-            raise HTTPException(status_code=500, detail="Failed to refresh Atlassian token with provider.")
-        except Exception as e:
-            log.error(f"An error occurred during Atlassian token refresh for user {user.id}: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=500, detail="An internal server error occurred during token refresh.")
-    elif refresh_needed and not decrypted_refresh_token:
-        log.warning(f"Access token for user {user.id} nearing expiration but no valid refresh token available. Initiating re-authorization flow.")
-        try:
-            atlassian_auth_url = (
-                f"{ATLASSIAN_AUTHORIZE_URL}"
-                f"?client_id={ATLASSIAN_CLIENT_ID}&"
-                f"redirect_uri={ATLASSIAN_REDIRECT_URL}&"
-                f"scope=read:jira-user%20read:jira-work%20read:confluence-space%20read:confluence-content%20offline_access&" # Re-request necessary scopes
-                f"response_type=code&"
-                f"prompt=consent&"
-                f"state={user.id}&"
-                f"audience={ATLASSIAN_API_GATEWAY}"
-            )
-            log.info(f"Generated re-authorization URL for user {user.id}")
-
-            raise HTTPException(
-                status_code=201,
-                detail={
-                    "error": "token_expired_no_refresh",
-                    "message": "Atlassian token is expired and no valid refresh token is available. Re-authorization required.",
-                    "reauth_url": atlassian_auth_url,
-                    "action_required": "redirect_to_atlassian_auth",
-                    "user_id": str(user.id),
-                    "provider": "atlassian",
-                    "reason": "no_refresh_token" if not token_entry.encrypted_refresh_token else "invalid_refresh_token"
-                }
-            )
-        except HTTPException:
-            raise
-        except Exception as e:
-            log.error(f"Failed to generate re-authorization URL for user {user.id}: {str(e)}", exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "reauth_generation_failed",
-                    "message": "Atlassian token is expired and re-authorization flow could not be initiated. Please manually re-authorize your Atlassian integration.",
-                    "user_id": str(user.id)
-                }
-            )
-
-    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        raise HTTPException(
-            status_code=500,
-            detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-        )
-
-    try:
-        log.info(f"Starting scheduled/manual Atlassian sync for user {user.id}")
-
-        # Add the task to the background tasks to sync user Atlassian data
-        async def run_atlassian_sync():
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                None,  # Use default thread pool
-                lambda: asyncio.run(initiate_atlassian_sync(
-                    user.id,
-            sync_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
-                ))
-            )
-        
-        # Extract Redis connection from request
-        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-        
-        await create_task(redis_connection, run_atlassian_sync(), id=f"run_atlassian_sync_{user.id}")
-
-        await update_data_source_sync_status(user.id, 'atlassian', 'syncing')
-
-        return RedirectResponse(
-            url=DATASOURCES_URL,
-            status_code=302
-        )
-
-    except Exception as sync_error:
-        log.error(f"Atlassian sync failed for user {user.id}: {str(sync_error)}", exc_info=True)
-        if "invalid_grant" in str(sync_error).lower() or "invalid_token" in str(sync_error).lower():
-            log.warning(f"Atlassian sync for user {user.id} failed due to invalid token. User may need to re-authorize.")
-            raise HTTPException(
-                status_code=401,
-                detail="Atlassian token invalid or expired. Please re-authorize your Atlassian integration."
-            )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Atlassian sync failed: {str(sync_error)}"
-        )
-
-@router.delete("/atlassian/disconnect")
-async def disconnect_atlassian(request: Request, user=Depends(get_verified_user),
-    atlassian_cloud_id: Optional[str] = None # Atlassian uses cloud_id to identify specific sites
-):
-    """
-    Disconnects a user's Atlassian integration, removing tokens, deleting credentials,
-    cleaning up GCS files and updating the data source sync status.
-    """
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    user_id = user.id
-    log.info(f"Initiating Atlassian integration disconnection for user: {user_id}"
-             f"{f' (Cloud ID: {atlassian_cloud_id})' if atlassian_cloud_id else ''}"
-             f", GCS cleanup")
-
-    overall_success = True
-    messages = []
-
-    # --- Step 1: Token Revocation ---
-    # Atlassian OAuth 2.0 (3LO) tokens are managed at the app level.
-    # There's no direct API to "revoke a single refresh token" for a user's app grant.
-    # Revocation typically happens when a user removes the app's consent via their Atlassian account settings.
-    # We primarily focus on removing the token from our DB.
-    atlassian_tokens_to_remove: List[OAuthTokenModel] = []
-    if atlassian_cloud_id:
-        token_entry = OAuthTokens.get_token_by_user_provider_details(
-            user_id=user_id,
-            provider_name="Atlassian",
-            provider_team_id=atlassian_cloud_id # Assuming provider_team_id stores cloud_id
-        )
-        if token_entry:
-            atlassian_tokens_to_remove.append(token_entry)
-    else:
-        all_user_tokens = OAuthTokens.get_all_tokens_for_user(user_id=user_id)
-        atlassian_tokens_to_remove = [
-            token for token in all_user_tokens if token.provider_name == "Atlassian"
-        ]
-
-    if not atlassian_tokens_to_remove:
-        msg = f"No Atlassian tokens found for user {user_id}{f' (Cloud ID: {atlassian_cloud_id})' if atlassian_cloud_id else ''}. Skipping token revocation attempt."
-        log.warning(msg)
-        messages.append(msg)
-    else:
-        for token_entry in atlassian_tokens_to_remove:
-            msg = (f"Atlassian token ID: {token_entry.id} for user {user_id}"
-                   f" (Cloud ID: {token_entry.provider_team_id or 'N/A'}) will be removed from DB.")
-            log.info(msg)
-            messages.append(msg)
-            # You could optionally include a link for the user to revoke permissions manually:
-            # "https://id.atlassian.com/manage-profile/profile-and-visibility" or "https://id.atlassian.com/manage-profile/apps-and-services"
-
-    # --- Step 2: Remove stored Atlassian credentials (OAuthToken entry) from DB ---
-    try:
-        if atlassian_cloud_id:
-            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
-                user_id=user_id,
-                provider_name="Atlassian",
-                provider_team_id=atlassian_cloud_id
-            )
-        else:
-            db_delete_success = OAuthTokens.delete_tokens_for_user_by_provider(
-                user_id=user_id,
-                provider_name="Atlassian"
-            )
-
-        if db_delete_success:
-            msg = f"Successfully deleted Atlassian OAuth token(s) from DB for user {user_id}{f' (Cloud ID: {atlassian_cloud_id})' if atlassian_cloud_id else ''}."
-            log.info(msg)
-            messages.append(msg)
-        else:
-            msg = f"Failed to delete Atlassian OAuth token(s) from DB for user {user_id}{f' (Cloud ID: {atlassian_cloud_id})' if atlassian_cloud_id else ''}. It might have already been deleted or not found."
-            log.error(msg)
-            messages.append(msg)
-            overall_success = False
-    except Exception as e:
-        msg = f"Error deleting Atlassian OAuth token(s) from DB for user {user_id}: {e}"
-        log.exception(msg)
-        messages.append(msg)
-        overall_success = False
-
-    # --- Step 3: Update Atlassian Data Source Sync Status ---
-    atlassian_data_source_found: Optional[DataSourceModel] = None
-    user_data_sources: List[DataSourceModel] = DataSources.get_data_sources_by_user_id(user_id)
-    for ds in user_data_sources:
-        if ds.action == "atlassian": # Assuming 'atlassian' as the action type
-            atlassian_data_source_found = ds
-            break
-
-    if atlassian_data_source_found:
-        try:
-            updated_ds = DataSources.update_data_source_sync_status_by_name(
-                user_id=user_id,
-                source_name=atlassian_data_source_found.name,
-                sync_status="unsynced",
-                last_sync=int(time.time())
-            )
-            if updated_ds:
-                msg = f"Successfully updated Atlassian data source status to 'unsynced' for user {user_id} (Data Source Name: {updated_ds.name})."
-                log.info(msg)
-                messages.append(msg)
-            else:
-                msg = f"Failed to update Atlassian data source status to 'unsynced' for user {user_id} (Data Source Name: {atlassian_data_source_found.name})."
-                log.error(msg)
-                messages.append(msg)
-                overall_success = False
-        except Exception as e:
-            msg = f"Error updating Atlassian data source status for user {user_id}: {e}"
-            log.exception(msg)
-            messages.append(msg)
-            overall_success = False
-    else:
-        msg = f"Atlassian data source not found for user {user_id}. Cannot update sync status."
-        log.warning(msg)
-        messages.append(msg)
-
-    # --- Step 4: Delete user data from GCS Bucket ---
-    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        msg = ("GCS configuration missing (GCS_BUCKET_NAME or GCS_SERVICE_ACCOUNT_BASE64). "
-                "Cannot perform GCS data cleanup as requested.")
-        log.error(msg)
-        messages.append(msg)
-        overall_success = False
-    else:
-        atlassian_folder_path = f"userResources/{user_id}/Atlassian/"
-        try:
-            # Add the task to the background tasks to sync user Atlassian data
-            async def delete_atlassian_sync():
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,  
-                    lambda: asyncio.run(delete_gcs_folder(atlassian_folder_path,GCS_SERVICE_ACCOUNT_BASE64,GCS_BUCKET_NAME))
-                )
-            
-            # Extract Redis connection from request
-            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-            
-            await create_task(redis_connection, delete_atlassian_sync(), id=f"delete_atlassian_sync_{user.id}")
-
-            msg = f"Successfully initiated GCS data cleanup for user {user_id}'s Atlassian folder."
-            log.info(msg)
-            messages.append(msg)
-
-        except Exception as e:
-            msg = f"Error during GCS data cleanup for user {user_id}'s Atlassian folder: {e}"
-            log.exception(msg)
-            messages.append(msg)
-            overall_success = False
-
-    if overall_success:
-        log.info(f"Atlassian integration disconnection process completed successfully for user: {user_id}")
-        return {"message": "Atlassian integration disconnected successfully.", "details": messages}
-    else:
-        log.warning(f"Atlassian integration disconnection process completed with some failures for user: {user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"message": "Failed to fully disconnect Atlassian integration. See details.", "details": messages}
-        )
+# Create endpoints for all providers
+for provider in ['google', 'microsoft', 'slack', 'atlassian']:
+    create_universal_initialize_endpoint(provider)
+    create_universal_callback_endpoint(provider)
+    create_universal_status_endpoint(provider)
+    create_universal_sync_endpoint(provider)
+    create_universal_disconnect_endpoint(provider)
