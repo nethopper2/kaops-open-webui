@@ -1,15 +1,20 @@
 <script lang="ts">
-import { getContext, onMount } from 'svelte';
+import { getContext, onMount, onDestroy } from 'svelte';
 import { toast } from 'svelte-sonner';
-import { currentTokenReplacerSubView } from '../stores';
+import { currentTokenReplacerSubView, selectedTokenizedDocId } from '../stores';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
 import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
+import { chatId } from '$lib/stores';
+import { loadTokenReplacerDraft, saveTokenReplacerDraft, clearTokenReplacerDraft, type TokenReplacerDraft } from '../drafts';
 
 const i18n = getContext('i18n');
 
 // Stubbed data types
 type Token = string;
 type ReplacementValues = Record<string, string>;
+
+// Prevent re-saving drafts during certain lifecycle windows (e.g., right after successful submit)
+let suppressDraftPersistence = false;
 
 let isLoading = true;
 let isSubmitting = false;
@@ -88,7 +93,9 @@ $: filteredTokens = query
 	: tokens;
 
 function updateValue(token: string, value: string) {
+	suppressDraftPersistence = false; // user changed something; allow drafts to persist again
 	values = { ...values, [token]: value };
+	persistDraftDebounced();
 }
 
 function handleInput(token: string) {
@@ -102,6 +109,48 @@ function getInputId(token: string): string {
 	return `input-${token.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase().slice(0, 64)}`;
 }
 
+function getContextIds() {
+	const cId = $chatId as string | null;
+	const dId = $selectedTokenizedDocId as string | null;
+	return { cId, dId };
+}
+
+function mergeDraftValues(base: ReplacementValues, draftVals: Record<string, string> | undefined, allowedTokens: string[]): ReplacementValues {
+	if (!draftVals) return base;
+	const allowed = new Set(allowedTokens);
+	const filtered: ReplacementValues = {};
+	for (const [k, v] of Object.entries(draftVals)) {
+		if (allowed.has(k)) {
+			filtered[k] = v ?? '';
+		}
+	}
+	// Important: API (base) takes precedence over drafts on conflict.
+	// Draft values are used only for tokens that are not provided by the API.
+	return { ...filtered, ...base };
+}
+
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+const DEBOUNCE_MS = 250;
+async function persistDraftNow() {
+	if (suppressDraftPersistence) return;
+	const { cId, dId } = getContextIds();
+	if (!cId || !dId) return;
+	// If no non-empty values, clear any existing draft instead of saving empties
+	const hasAny = tokens.some((t) => (values[t]?.trim()?.length ?? 0) > 0);
+	if (!hasAny) {
+		await clearTokenReplacerDraft(cId, dId);
+		return;
+	}
+	const draft: TokenReplacerDraft = { values, updatedAt: Date.now() };
+	await saveTokenReplacerDraft(cId, dId, draft);
+}
+function persistDraftDebounced() {
+	if (saveTimeout) clearTimeout(saveTimeout);
+	saveTimeout = setTimeout(() => {
+		persistDraftNow();
+	}, DEBOUNCE_MS);
+}
+
 async function handleSubmit() {
 	submitError = null;
 	submitSuccess = false;
@@ -112,6 +161,12 @@ async function handleSubmit() {
 		const payload = tokens.map((t) => ({ token: t, value: values[t] ?? '' }));
 		await submitReplacementValues(payload);
 		submitSuccess = true;
+		suppressDraftPersistence = true; // prevent re-saving this session unless user edits again
+		// Clear the saved draft on successful submit so future sessions start fresh
+		const { cId, dId } = getContextIds();
+		if (cId && dId) {
+			await clearTokenReplacerDraft(cId, dId);
+		}
 		toast.success($i18n.t('🎉 Replacement values submitted!'));
 	} catch (e) {
 		console.error(e);
@@ -131,13 +186,30 @@ onMount(async () => {
 	try {
 		const { tokens: tk, values: vals } = await loadTokensAndValues();
 		tokens = tk;
-		values = vals;
+		let merged = vals;
+		const { cId, dId } = getContextIds();
+		if (cId && dId) {
+			const draft = await loadTokenReplacerDraft(cId, dId);
+			if (draft?.values) {
+				merged = mergeDraftValues(vals, draft.values, tk);
+			}
+		}
+		values = merged;
 	} catch (e) {
 		console.error(e);
 		loadError = $i18n.t('Failed to load tokens.');
 	} finally {
 		isLoading = false;
 	}
+});
+
+onDestroy(() => {
+	if (saveTimeout) {
+		clearTimeout(saveTimeout);
+		saveTimeout = null;
+	}
+	// Persist the latest state when the component is destroyed (e.g., panel closes)
+	void persistDraftNow();
 });
 </script>
 
