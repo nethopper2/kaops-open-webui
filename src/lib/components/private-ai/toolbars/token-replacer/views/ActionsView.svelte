@@ -36,7 +36,7 @@
   />
 {/if}
 
-<div class="flex flex-col w-full h-full items-stretch justify-start py-4">
+<div class="flex flex-col w-full h-full items-stretch justify-start px-4 py-4">
   <div class="text-sm text-gray-600 dark:text-gray-300 mb-3 text-center px-4">
     {$i18n.t('Choose an action to continue.')}
   </div>

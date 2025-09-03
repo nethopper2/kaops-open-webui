@@ -3,6 +3,7 @@
   import Tooltip from '$lib/components/common/Tooltip.svelte';
   import Eye from '$lib/components/icons/Eye.svelte';
   import { selectedTokenizedDoc, selectedTokenizedDocId } from '../stores';
+	import Document from '$lib/components/icons/Document.svelte';
 
   const i18n = getContext('i18n');
 
@@ -32,32 +33,32 @@
 </script>
 
 {#if $selectedTokenizedDocId !== '' && $selectedTokenizedDoc}
-  <div class="w-full max-w-sm mb-4 px-4 mx-auto">
+  <div class="mb-4">
     <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{$i18n.t('Selected document')}</div>
-    <div class="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2">
+    <!-- whole card is a clickable preview button. Tooltip on filename shows full path. -->
+    <button
+      type="button"
+      class="w-full text-left rounded-md bg-transparent dark:bg-transparent p-2 hover:bg-gray-100/60 dark:hover:bg-white/5 shadow-none hover:shadow-sm transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+      aria-label={$i18n.t('Preview Document')}
+      on:click={() => dispatch('preview')}
+    >
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">
-          <div class="text-sm font-medium text-gray-800 dark:text-gray-200 line-clamp-1">{$selectedTokenizedDoc.name ?? 'Untitled'}</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400">
-            <Tooltip content={stripQuery($selectedTokenizedDoc.url)} placement="top">
-              <span class="inline-block max-w-full align-top" aria-label={stripQuery($selectedTokenizedDoc.url)}>
-                {middleTruncate(stripQuery($selectedTokenizedDoc.url), 80)}
-              </span>
-            </Tooltip>
-          </div>
+          <Tooltip content={stripQuery($selectedTokenizedDoc.url)} placement="top">
+            <div class="flex items-center gap-1 text-sm font-medium text-gray-800 dark:text-gray-200 line-clamp-1" aria-label={stripQuery($selectedTokenizedDoc.url)}>
+							<Document/>
+              {middleTruncate($selectedTokenizedDoc.name ?? 'Untitled', 80)}
+            </div>
+          </Tooltip>
         </div>
-        <div class="shrink-0 self-start">
-          <Tooltip content="Preview Document" placement="top">
-            <button
-              class="p-1 rounded border bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900"
-              aria-label="Preview Document"
-              on:click={() => dispatch('preview')}
-            >
+        <div class="shrink-0 self-start text-gray-500 dark:text-gray-400" aria-hidden="true">
+          <Tooltip content={$i18n.t('Preview Document')} placement="top">
+            <span class="inline-flex items-center">
               <Eye className="w-5 h-5" />
-            </button>
+            </span>
           </Tooltip>
         </div>
       </div>
-    </div>
+    </button>
   </div>
 {/if}

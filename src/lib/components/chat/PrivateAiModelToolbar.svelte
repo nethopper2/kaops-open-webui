@@ -129,7 +129,7 @@ onDestroy(() => {
           showPrivateAiModelToolbar.set(false);
         }}
 			>
-				<div class="px-6 py-4 h-full">
+				<div class="h-full">
 					<div
 						class="h-full max-h-[100dvh] bg-white text-gray-700 dark:bg-black dark:text-gray-300 flex items-center justify-center">
       {#if isLoading}
@@ -194,9 +194,9 @@ onDestroy(() => {
 				{#if $showPrivateAiModelToolbar}
 					<div class="flex max-h-full min-h-full">
 						<div
-							class="w-full px-4 py-4 bg-white dark:shadow-lg dark:bg-gray-850 border border-gray-100 dark:border-gray-850 z-40 pointer-events-auto overflow-y-auto scrollbar-hidden">
+							class="w-full bg-white dark:shadow-lg dark:bg-gray-850 border border-gray-100 dark:border-gray-850 z-40 pointer-events-auto overflow-y-auto scrollbar-hidden">
 							<div class="flex flex-col w-full h-full">
-								<div class="flex items-center justify-between dark:text-gray-100 mb-2">
+								<div class="flex items-center justify-between dark:text-gray-100 mb-2 p-2">
 									<div class="flex items-center gap-2">
 										<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover"
 												 draggable="false" />
