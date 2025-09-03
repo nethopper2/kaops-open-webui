@@ -1,4 +1,5 @@
 <script lang="ts">
+import Spinner from '../common/Spinner.svelte';
 import { SvelteFlowProvider } from '@xyflow/svelte';
 import { Pane, PaneResizer } from 'paneforge';
 import { createEventDispatcher, getContext, onDestroy, onMount } from 'svelte';
@@ -6,17 +7,56 @@ import Drawer from '../common/Drawer.svelte';
 import EllipsisVertical from '../icons/EllipsisVertical.svelte';
 import {
 	showPrivateAiModelToolbar, activeRightPane, privateAiModelToolbarComponent, currentSelectedModelId,
-	privateAiSelectedModelAvatarUrl
+	privateAiSelectedModelAvatarUrl, chatId
 } from '$lib/stores';
 import { calcMinSize, createPaneBehavior, isPaneHandle, type PaneHandle, rightPaneSize } from '$lib/utils/pane';
 import XMark from '$lib/components/icons/XMark.svelte';
+import { loadPrivateAiToolbarState, type PrivateAiToolbarState } from '$lib/private-ai/state';
+
+/**
+ * REMINDER: Auto open/close of this component is orchestrated by Chat.svelte via appHooks 'model.changed'.
+ */
 
 const dispatch = createEventDispatcher();
 const i18n = getContext('i18n');
 
+// Initial state loaded for the current chat+toolbar; passed to inner toolbar component via prop
+let initialToolbarState: PrivateAiToolbarState | null = null;
+let lastLoadedKey = '';
+let isLoading = false;
+async function loadToolbarStateIfNeeded() {
+	try {
+		const cId = $chatId;
+		const tId = $currentSelectedModelId;
+		if (!cId || !tId) return;
+		const key = `${cId}|${tId}`;
+		if (lastLoadedKey === key && initialToolbarState !== null) return;
+		initialToolbarState = await loadPrivateAiToolbarState(cId, tId);
+		lastLoadedKey = key;
+	} catch {
+		// ignore
+	}
+}
+
 export let pane: unknown;
 let activeInPaneGroup = false;
 $: activeInPaneGroup = $activeRightPane === 'private';
+// When the toolbar is shown and the component is resolved, attempt to load state
+$: if ($showPrivateAiModelToolbar) {
+	// start loading when toolbar is requested; component may resolve async as well
+	isLoading = true;
+	loadToolbarStateIfNeeded().finally(() => {
+		// only clear loading once the component is resolved too
+		if ($privateAiModelToolbarComponent) {
+			isLoading = false;
+		}
+	});
+}
+
+// Also, clear loading when the component becomes available later (dynamic import)
+$: if ($showPrivateAiModelToolbar && $privateAiModelToolbarComponent && isLoading) {
+	isLoading = false;
+}
 
 let mediaQuery: MediaQueryList;
 let largeScreen = false;
@@ -78,14 +118,6 @@ onMount(() => {
 onDestroy(() => {
 	showPrivateAiModelToolbar.set(false);
 });
-
-// Keep Pane width in sync with visibility on desktop (defer resizes to avoid assertions)
-// $: if (largeScreen && activeInPaneGroup && paneHandle && $showPrivateAiModelToolbar) {
-//   if (!paneHandle.isExpanded() || paneHandle.getSize() === 0) {
-//     openPane?.();
-//   }
-// }
-// Auto open/close is orchestrated by Chat.svelte via appHooks 'model.changed'.
 </script>
 
 <SvelteFlowProvider>
@@ -100,15 +132,22 @@ onDestroy(() => {
 				<div class="px-6 py-4 h-full">
 					<div
 						class="h-full max-h-[100dvh] bg-white text-gray-700 dark:bg-black dark:text-gray-300 flex items-center justify-center">
-						{#if $privateAiModelToolbarComponent}
-							<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} />
-						{:else}
-							<div class="text-center">
-								<div class="text-base font-semibold">{$i18n.t('Model Sidekick')}</div>
-								<div
-									class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No toolbar available for this model.')}</div>
-							</div>
-						{/if}
+      {#if isLoading}
+								<div class="flex items-center justify-center py-8">
+									<div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+										<Spinner className="size-4" />
+										<span>{$i18n.t('Loading...')}</span>
+									</div>
+								</div>
+							{:else if $privateAiModelToolbarComponent}
+								<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} initialState={initialToolbarState} />
+							{:else}
+								<div class="text-center">
+									<div class="text-base font-semibold">{$i18n.t('Model Sidekick')}</div>
+									<div
+										class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No toolbar available for this model.')}</div>
+								</div>
+							{/if}
 					</div>
 				</div>
 			</Drawer>
@@ -173,14 +212,21 @@ onDestroy(() => {
 									</button>
 								</div>
 
-								{#if $privateAiModelToolbarComponent}
-									<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} />
-								{:else}
-									<div class="text-center">
-										<div
-											class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('Not available for this model.')}</div>
+        {#if isLoading}
+								<div class="flex items-center justify-center py-8">
+									<div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+										<Spinner className="size-4" />
+										<span>{$i18n.t('Loading...')}</span>
 									</div>
-								{/if}
+								</div>
+							{:else if $privateAiModelToolbarComponent}
+								<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} initialState={initialToolbarState} />
+							{:else}
+								<div class="text-center">
+									<div
+										class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('Not available for this model.')}</div>
+								</div>
+							{/if}
 							</div>
 						</div>
 					</div>

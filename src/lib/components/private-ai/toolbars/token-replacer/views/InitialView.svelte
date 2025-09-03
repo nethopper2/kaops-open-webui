@@ -5,9 +5,10 @@
   import FilePreviewDialog from '$lib/components/chat/MessageInput/FilePreviewDialog.svelte';
   import { onMount, tick } from 'svelte';
   import { appHooks } from '$lib/utils/hooks';
-  import { isChatStarted } from '$lib/stores';
+  import { isChatStarted, chatId } from '$lib/stores';
   import { ensureFilesFetched, tokenizedFiles, selectedTokenizedDocId, selectedTokenizedDoc, filesLoading, currentTokenReplacerSubView } from '../stores';
   import type { TokenFile } from '../stores';
+  import { savePrivateAiToolbarState } from '$lib/private-ai/state';
 
   export let modelId: string | null = null;
   $: void modelId;
@@ -107,6 +108,29 @@
             appHooks.callHook('chat.submit', { prompt });
             // Switch to the actions sub-view after the beginning
             currentTokenReplacerSubView.set('actions');
+            // Persist toolbar UI state (selected document) for this chat+toolbar
+            ;(async () => {
+              try {
+                const tId = modelId;
+                if (!tId) return;
+                const cNow = $chatId;
+                const doSave = async (cid) => {
+                  await savePrivateAiToolbarState(cid, tId, { toolbarId: tId, selectedTokenizedDocId: $selectedTokenizedDocId });
+                };
+                if (cNow) {
+                  await doSave(cNow);
+                } else {
+                  // Chat id not yet assigned (new chat). Save once chatId becomes available.
+                  const unsub = chatId.subscribe(async (cid) => {
+                    if (cid) {
+                      try { await doSave(cid); } finally { unsub(); }
+                    }
+                  });
+                }
+              } catch {
+                // ignore persistence errors
+              }
+            })();
           }}
         >
           {$isChatStarted ? 'Continue' : 'Begin'}
