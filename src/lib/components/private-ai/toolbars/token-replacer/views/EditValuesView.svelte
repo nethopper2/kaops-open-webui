@@ -1,5 +1,6 @@
 <script lang="ts">
 import { getContext, onMount } from 'svelte';
+import { toast } from 'svelte-sonner';
 import { currentTokenReplacerSubView } from '../stores';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
 import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
@@ -105,16 +106,22 @@ async function handleSubmit() {
 	submitError = null;
 	submitSuccess = false;
 	isSubmitting = true;
+	const dismiss = toast.info($i18n.t('Submitting replacement values...'));
 	try {
 		// Build payload from ALL tokens, not only filtered ones
 		const payload = tokens.map((t) => ({ token: t, value: values[t] ?? '' }));
 		await submitReplacementValues(payload);
 		submitSuccess = true;
+		toast.success($i18n.t('🎉 Replacement values submitted!'));
 	} catch (e) {
 		console.error(e);
 		submitError = $i18n.t('Failed to submit replacement values.');
+		toast.error(submitError);
 	} finally {
 		isSubmitting = false;
+		if (dismiss && typeof dismiss === 'function') {
+			try { dismiss(); } catch {}
+		}
 	}
 }
 
@@ -180,10 +187,10 @@ onMount(async () => {
 				<div class="space-y-4">
 					{#each filteredTokens as token}
 						<div class="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:gap-4 items-start">
-							<div
-								class="lg:col-span-1 text-xs lg:text-sm text-gray-700 dark:text-gray-300 break-words whitespace-pre-wrap select-text">
-								{token}
-							</div>
+       <div
+							class="lg:col-span-1 text-[11px] lg:text-xs font-semibold text-gray-800 dark:text-gray-200 break-words whitespace-pre-wrap select-text">
+							{token}
+						</div>
 							<div class="lg:col-span-2">
 								<input
 									id={getInputId(token)}
