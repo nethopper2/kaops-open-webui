@@ -2,6 +2,7 @@
 import { getContext, onMount } from 'svelte';
 import { currentTokenReplacerSubView } from '../stores';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
+import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 
 const i18n = getContext('i18n');
 
@@ -19,6 +20,20 @@ let submitSuccess = false;
 let tokens: Token[] = [];
 let values: ReplacementValues = {};
 let searchQuery = '';
+let showConfirm = false;
+
+// Derived counts for confirmation
+$: totalTokens = tokens.length;
+$: providedCount = tokens.reduce((acc, t) => (values[t]?.trim()?.length ? acc + 1 : acc), 0);
+$: emptyCount = Math.max(0, totalTokens - providedCount);
+
+// Build confirmation message (markdown supported by ConfirmDialog)
+$: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs for the selected document.')}\n\n` +
+  `- ${$i18n.t('Tokens total')}: ${totalTokens}\n` +
+  `- ${$i18n.t('Replacement values provided')}: ${providedCount}\n` +
+  `- ${$i18n.t('Replacement values empty')}: ${emptyCount}\n\n` +
+  `${$i18n.t('All tokens will be submitted, including those not currently visible due to search filters.')}\n\n` +
+  `${$i18n.t('Do you want to continue?')}`;
 
 // Fake loader simulating future REST API
 async function loadTokensAndValues(): Promise<{ tokens: Token[]; values: ReplacementValues }> {
@@ -206,9 +221,9 @@ onMount(async () => {
 			<button
 				class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-blue-500 dark:hover:bg-blue-600"
 				disabled={isLoading || isSubmitting || tokens.length === 0}
-				on:click={handleSubmit}
+				on:click={() => (showConfirm = true)}
 			>
-				{$i18n.t('Submit All')}
+				{$i18n.t('Submit')}
 			</button>
 		</div>
 		{#if submitError}
@@ -216,3 +231,13 @@ onMount(async () => {
 		{/if}
 	</div>
 </div>
+
+
+<ConfirmDialog
+  bind:show={showConfirm}
+  title={$i18n.t('Confirm submission')}
+  message={confirmMessage}
+  cancelLabel={$i18n.t('Cancel')}
+  confirmLabel={$i18n.t('Submit All')}
+  onConfirm={handleSubmit}
+/>
