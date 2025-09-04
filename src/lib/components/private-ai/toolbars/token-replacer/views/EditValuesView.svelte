@@ -100,11 +100,12 @@ async function submitReplacementValues(payload: { token: string; value: string }
 	console.debug('Submitting replacement values (stub):', payload);
 }
 
-// Derived filtered tokens
+// Derived filtered tokens with optional "needs value" filter
+let isOnlyNeedingValues = true;
 $: query = searchQuery.trim().toLowerCase();
-$: filteredTokens = query
-	? tokens.filter((t) => t.toLowerCase().includes(query))
-	: tokens;
+$: filteredTokens = tokens
+  .filter((t) => (isOnlyNeedingValues ? !(typeof values[t] === 'string' && values[t].trim().length > 0) : true))
+  .filter((t) => (query ? t.toLowerCase().includes(query) : true));
 
 function updateValue(token: string, value: string) {
 	suppressDraftPersistence = false; // user changed something; allow drafts to persist again
@@ -246,9 +247,19 @@ onDestroy(() => {
 		<div class="mb-2">
    <SelectedDocumentSummary on:preview={openPreviewPanel} />
 		</div>
-		<label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1" for="token-search">
-			{$i18n.t('Search tokens')}
-		</label>
+		<div class="flex items-center justify-between gap-3 mb-1">
+			<label class="block text-xs font-medium text-gray-700 dark:text-gray-300" for="token-search">
+				{$i18n.t('Search tokens')}
+			</label>
+			<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
+				<input
+					type="checkbox"
+					class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+					bind:checked={isOnlyNeedingValues}
+				/>
+				<span>{$i18n.t('Only show tokens needing a value')}</span>
+			</label>
+		</div>
 		<input
 			id="token-search"
 			class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
@@ -268,7 +279,13 @@ onDestroy(() => {
 			<div class="text-sm text-red-600 dark:text-red-400" role="alert">{loadError}</div>
 		{:else}
 			{#if filteredTokens.length === 0}
-				<div class="text-sm text-gray-600 dark:text-gray-300">{$i18n.t('No tokens match your search.')}</div>
+				<div class="text-sm text-gray-600 dark:text-gray-300">
+					{#if isOnlyNeedingValues}
+						{$i18n.t('No tokens need a value for the current search.')}
+					{:else}
+						{$i18n.t('No tokens match your search.')}
+					{/if}
+				</div>
 			{:else}
 				<div class="space-y-4">
 					{#each filteredTokens as token}
