@@ -48,11 +48,11 @@ $: providedCount = tokens.reduce((acc, t) => (values[t]?.trim()?.length ? acc + 
 $: emptyCount = Math.max(0, totalTokens - providedCount);
 
 // Build confirmation message (markdown supported by ConfirmDialog)
-$: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs for the selected document.')}\n\n` +
-  `- ${$i18n.t('Tokens total')}: ${totalTokens}\n` +
-  `- ${$i18n.t('Replacement values provided')}: ${providedCount}\n` +
-  `- ${$i18n.t('Replacement values empty')}: ${emptyCount}\n\n` +
-  `${$i18n.t('All tokens will be submitted, including those not currently visible due to search filters.')}\n\n` +
+$: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs for the selected document.')}<br><br>` +
+  `${$i18n.t('Tokens total')}: <b>${totalTokens}</b><br>` +
+  `${$i18n.t('Replacement values provided')}: <b>${providedCount}</b><br>` +
+  `${$i18n.t('Replacement values empty')}: <b>${emptyCount}</b><br><br>` +
+  `${$i18n.t('All tokens will be submitted, including those not currently visible due to search filters.')}<br><br>` +
   `${$i18n.t('Do you want to continue?')}`;
 
 // Fake loader simulating future REST API
