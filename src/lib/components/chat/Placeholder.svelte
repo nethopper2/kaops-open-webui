@@ -23,7 +23,7 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import MessageInput from './MessageInput.svelte';
-	import { canShowPrivateAiModelToolbar } from '$lib/stores';
+	import { canShowPrivateAiSidekick } from '$lib/stores';
 	import FolderPlaceholder from './Placeholder/FolderPlaceholder.svelte';
 	import FolderTitle from './Placeholder/FolderTitle.svelte';
 	import { getChatList } from '$lib/apis/chats';
@@ -217,7 +217,7 @@
 				</div>
 			{/if}
 
-			{#if !$canShowPrivateAiModelToolbar}
+			{#if !$canShowPrivateAiSidekick}
 				<div class="text-base font-normal @md:max-w-3xl w-full py-3 {atSelectedModel ? 'mt-2' : ''}">
 					<MessageInput
 						bind:this={messageInput}

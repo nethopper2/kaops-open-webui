@@ -1,5 +1,5 @@
 // Token Replacer: lightweight local draft persistence for replacement values
-// Scoped strictly to the Token Replacer toolbar. Drafts are keyed by (chatId + docId).
+// Scoped strictly to the Token Replacer sidekick. Drafts are keyed by (chatId + docId).
 // This keeps user input across component unmounts (e.g., closing the side panel)
 // and avoids any global/private-ai wide scope.
 
@@ -8,7 +8,7 @@ export type TokenReplacerDraft = {
   updatedAt: number;
 };
 
-const DRAFTS_STORAGE_KEY = 'private-ai:token-replacer-drafts:v1';
+const DRAFTS_STORAGE_KEY = 'private-ai:token-replacer-sidekick-drafts:v1';
 
 type DraftsStore = Record<string, Record<string, TokenReplacerDraft>>; // drafts[chatId][docId]
 

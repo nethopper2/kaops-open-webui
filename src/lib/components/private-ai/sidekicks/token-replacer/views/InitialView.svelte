@@ -6,7 +6,7 @@
   import { appHooks } from '$lib/utils/hooks';
   import { isChatStarted, chatId } from '$lib/stores';
   import { ensureFilesFetched, tokenizedFiles, selectedTokenizedDocId, selectedTokenizedDoc, filesLoading, currentTokenReplacerSubView } from '../stores';
-  import { savePrivateAiToolbarState } from '$lib/private-ai/state';
+  import { savePrivateAiSidekickState } from '$lib/private-ai/state';
   import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
 
   export let modelId: string | null = null;
@@ -99,14 +99,14 @@
             appHooks.callHook('chat.submit', { prompt });
             // Switch to the actions sub-view after the beginning
             currentTokenReplacerSubView.set('actions');
-            // Persist toolbar UI state (selected document) for this chat+toolbar
+            // Persist sidekick UI state (selected document) for this chat+sidekick
             ;(async () => {
               try {
                 const tId = modelId;
                 if (!tId) return;
                 const cNow = $chatId;
                 const doSave = async (cid) => {
-                  await savePrivateAiToolbarState(cid, tId, { toolbarId: tId, selectedTokenizedDocId: $selectedTokenizedDocId });
+                  await savePrivateAiSidekickState(cid, tId, { sidekickId: tId, selectedTokenizedDocId: $selectedTokenizedDocId });
                 };
                 if (cNow) {
                   await doSave(cNow);

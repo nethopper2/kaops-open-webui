@@ -10,11 +10,12 @@ export const filesLoading: Writable<boolean> = writable(false);
 export const filesFetched: Writable<boolean> = writable(false);
 
 export const selectedTokenizedDocId: Writable<string> = writable('');
+export const isTokenizedDocSelected = derived(selectedTokenizedDocId, ($selectedTokenizedDocId) => Boolean($selectedTokenizedDocId));
 export const selectedTokenizedDoc = derived([tokenizedFiles, selectedTokenizedDocId], ([$files, $id]) => {
   return ($files ?? []).find((f) => String(f.id) === String($id)) ?? null;
 });
 
-// Manage which sub-view is shown within the token-replacer toolbar
+// Manage which sub-view is shown within the token-replacer sidekick
 export type TokenReplacerSubView = 'initial' | 'actions' | 'editValues';
 export const currentTokenReplacerSubView: Writable<TokenReplacerSubView> = writable('actions');
 

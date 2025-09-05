@@ -29,7 +29,7 @@
 		socket,
 		showControls,
 		showCallOverlay,
-		showPrivateAiModelToolbar,
+		showPrivateAiSidekick,
 		currentChatPage,
 		temporaryChatEnabled,
 		mobile,
@@ -41,7 +41,7 @@
 		selectedFolder,
 		pinnedChats,
 		currentSelectedModelId,
-		canShowPrivateAiModelToolbar
+		canShowPrivateAiSidekick
 	} from '$lib/stores';
 	import {
 		convertMessagesToHistory,
@@ -84,7 +84,7 @@
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
  import ChatControls from './ChatControls.svelte';
- import PrivateAiModelToolbar from './PrivateAiModelToolbar.svelte';
+ import PrivateAiSidekick from './PrivateAiSidekick.svelte';
  import ChatOverlay from './ChatOverlay.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import Placeholder from './Placeholder.svelte';
@@ -137,7 +137,7 @@
  	currentSelectedModelId.set(singleId);
  }
  
-// Auto open/close of Private AI toolbar is now handled via appHooks 'model.changed' in onMount.
+// Auto open/close of Private AI sidekick is now handled via appHooks 'model.changed' in onMount.
 import { appHooks } from '$lib/utils/hooks';
 
 let __unhookModelChanged: (() => void) | undefined;
@@ -159,20 +159,20 @@ onMount(() => {
 			return;
 		}
 		if (canShowPrivateAiToolbar) {
-			showPrivateAiModelToolbar.set(true);
+			showPrivateAiSidekick.set(true);
 			await tick();
 			privateAiPaneComponent?.openPane?.();
 		} else {
-			showPrivateAiModelToolbar.set(false);
+			showPrivateAiSidekick.set(false);
 		}
 	};
 	__unhookModelChanged = appHooks.hook('model.changed', handler);
 	// Call once on mount to handle initial state
 	(async () => {
-		await handler({ prevModelId: null, modelId: get(currentSelectedModelId), canShowPrivateAiToolbar: get(canShowPrivateAiModelToolbar) });
+		await handler({ prevModelId: null, modelId: get(currentSelectedModelId), canShowPrivateAiToolbar: get(canShowPrivateAiSidekick) });
 	})();
 
-	// Allow external components (e.g., Private AI toolbars) to submit a prompt
+	// Allow external components (e.g., Private AI sidekicks) to submit a prompt
 	__unhookChatSubmit = appHooks.hook('chat.submit', ({ prompt }) => {
 		submitPrompt(prompt);
 	});
@@ -193,8 +193,8 @@ onMount(() => {
 		}
 	});
 
-	// Close overlay if the Private AI toolbar closes
-	__unsubShowPrivateToolbar = showPrivateAiModelToolbar.subscribe((v) => {
+	// Close overlay if the Private AI sidekick closes
+	__unsubShowPrivateToolbar = showPrivateAiSidekick.subscribe((v) => {
 		if (!v) {
 			overlayShow = false;
 		}
@@ -260,15 +260,15 @@ onDestroy(() => {
 			loading = false;
 			window.setTimeout(() => scrollToBottom(), 0);
 
-			// Ensure Private AI toolbar opens when an existing chat is loaded
+			// Ensure Private AI sidekick opens when an existing chat is loaded
 			try {
-				if (get(canShowPrivateAiModelToolbar)) {
-					showPrivateAiModelToolbar.set(true);
+				if (get(canShowPrivateAiSidekick)) {
+					showPrivateAiSidekick.set(true);
 					await tick();
 					privateAiPaneComponent?.openPane?.();
 				}
 			} catch {
-				// ignore any errors initializing the toolbar on chat load
+				// ignore any errors initializing the sidekick on chat load
 			}
 
 			await tick();
@@ -2529,11 +2529,11 @@ onDestroy(() => {
 					{eventTarget}
 				/>
 
-    <PrivateAiModelToolbar
+    <PrivateAiSidekick
 					bind:this={privateAiPaneComponent}
 					bind:pane={privateAiPane}
      on:close={() => {
-						showPrivateAiModelToolbar.set(false);
+						showPrivateAiSidekick.set(false);
 					}}
 					/>
 			</PaneGroup>

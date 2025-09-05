@@ -25,7 +25,7 @@ export function calcMinSize(container: HTMLElement, pixels = 350): number {
 	return Math.floor((pixels / width) * 100);
 }
 
-// Shared behavior for right-hand panes (Controls and Private AI Toolbar)
+// Shared behavior for right-hand panes (Controls and Private AI Model sidekick)
 export function createPaneBehavior(params: {
 	storageKey: string;
 	showStore: Writable<boolean>;

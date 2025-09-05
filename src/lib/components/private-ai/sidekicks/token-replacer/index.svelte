@@ -1,16 +1,16 @@
 <script lang="ts">
   import { getContext } from 'svelte';
-  import InitialView from '$lib/components/private-ai/toolbars/token-replacer/views/InitialView.svelte';
-  import ActionsView from '$lib/components/private-ai/toolbars/token-replacer/views/ActionsView.svelte';
-  import EditValuesView from '$lib/components/private-ai/toolbars/token-replacer/views/EditValuesView.svelte';
+  import InitialView from '$lib/components/private-ai/sidekicks/token-replacer/views/InitialView.svelte';
+  import ActionsView from '$lib/components/private-ai/sidekicks/token-replacer/views/ActionsView.svelte';
+  import EditValuesView from '$lib/components/private-ai/sidekicks/token-replacer/views/EditValuesView.svelte';
   import { isChatStarted } from '$lib/stores';
   import { currentTokenReplacerSubView, selectedTokenizedDocId } from './stores';
-  import type { PrivateAiToolbarState } from '$lib/private-ai/state';
+  import type { PrivateAiSidekickState } from '$lib/private-ai/state';
 
   const i18n = getContext('i18n');
 
   export let modelId: string | null = null;
-  export let initialState: PrivateAiToolbarState | null = null;
+  export let initialState: PrivateAiSidekickState | null = null;
   $: void modelId;
 
   // Hydrate selection from the initial state once

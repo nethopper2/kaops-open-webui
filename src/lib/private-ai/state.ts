@@ -1,22 +1,22 @@
-// Centralized persistence for Private AI toolbar UI state.
+// Centralized persistence for Private AI sidekick UI state.
 // For now, this uses LocalStorage. Replace the implementations of
-// loadPrivateAiToolbarState/savePrivateAiToolbarState with REST calls when ready.
+// loadPrivateAiSidekickState/savePrivateAiSidekickState with REST calls when ready.
 
-export type PrivateAiToolbarCommonState = {
-  // Which toolbar is this state for (e.g., 'private-ai-token-replacer')
-  toolbarId: string;
+export type PrivateAiSidekickCommonState = {
+  // Which sidekick is this state for (e.g., 'private-ai-token-replacer')
+  sidekickId: string;
 };
 
-export type TokenReplacerState = PrivateAiToolbarCommonState & {
+export type TokenReplacerState = PrivateAiSidekickCommonState & {
   selectedTokenizedDocId?: string;
 };
 
-// Union of possible toolbar states; extend as more toolbars are added
-export type PrivateAiToolbarState = TokenReplacerState;
+// Union of possible sidekick states; extend as more sidekicks are added
+export type PrivateAiSidekickState = TokenReplacerState;
 
-const STORAGE_KEY = 'private-ai:toolbar-state:v1';
+const STORAGE_KEY = 'private-ai:sidekick-state:v1';
 
-function safeRead(): Record<string, Record<string, PrivateAiToolbarState>> {
+function safeRead(): Record<string, Record<string, PrivateAiSidekickState>> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
@@ -28,7 +28,7 @@ function safeRead(): Record<string, Record<string, PrivateAiToolbarState>> {
   }
 }
 
-function safeWrite(data: Record<string, Record<string, PrivateAiToolbarState>>): void {
+function safeWrite(data: Record<string, Record<string, PrivateAiSidekickState>>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {
@@ -36,25 +36,25 @@ function safeWrite(data: Record<string, Record<string, PrivateAiToolbarState>>):
   }
 }
 
-// Key space: state[chatId][toolbarId] -> toolbarState
-export async function loadPrivateAiToolbarState(
+// Key space: state[chatId][sidekickId] -> sidekickState
+export async function loadPrivateAiSidekickState(
   chatId: string | null | undefined,
-  toolbarId: string | null | undefined
-): Promise<PrivateAiToolbarState | null> {
-  if (!chatId || !toolbarId) return null;
+  sidekickId: string | null | undefined
+): Promise<PrivateAiSidekickState | null> {
+  if (!chatId || !sidekickId) return null;
   const store = safeRead();
-  return store?.[chatId]?.[toolbarId] ?? null;
+  return store?.[chatId]?.[sidekickId] ?? null;
 }
 
-export async function savePrivateAiToolbarState(
+export async function savePrivateAiSidekickState(
   chatId: string | null | undefined,
-  toolbarId: string | null | undefined,
-  state: PrivateAiToolbarState
+  sidekickId: string | null | undefined,
+  state: PrivateAiSidekickState
 ): Promise<void> {
-  if (!chatId || !toolbarId) return;
+  if (!chatId || !sidekickId) return;
   const store = safeRead();
   const byChat = store[chatId] ?? {};
-  byChat[toolbarId] = state;
+  byChat[sidekickId] = state;
   store[chatId] = byChat;
   safeWrite(store);
 }

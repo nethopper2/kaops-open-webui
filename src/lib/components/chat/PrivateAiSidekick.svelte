@@ -6,12 +6,12 @@ import { createEventDispatcher, getContext, onDestroy, onMount } from 'svelte';
 import Drawer from '../common/Drawer.svelte';
 import EllipsisVertical from '../icons/EllipsisVertical.svelte';
 import {
-	showPrivateAiModelToolbar, activeRightPane, privateAiModelToolbarComponent, currentSelectedModelId,
+	showPrivateAiSidekick, activeRightPane, privateAiSidekickComponent, currentSelectedModelId,
 	privateAiSelectedModelAvatarUrl, chatId
 } from '$lib/stores';
 import { calcMinSize, createPaneBehavior, isPaneHandle, type PaneHandle, rightPaneSize } from '$lib/utils/pane';
 import XMark from '$lib/components/icons/XMark.svelte';
-import { loadPrivateAiToolbarState, type PrivateAiToolbarState } from '$lib/private-ai/state';
+import { loadPrivateAiSidekickState, type PrivateAiSidekickState } from '$lib/private-ai/state';
 
 /**
  * REMINDER: Auto open/close of this component is orchestrated by Chat.svelte via appHooks 'model.changed'.
@@ -20,8 +20,8 @@ import { loadPrivateAiToolbarState, type PrivateAiToolbarState } from '$lib/priv
 const dispatch = createEventDispatcher();
 const i18n = getContext('i18n');
 
-// Initial state loaded for the current chat+toolbar; passed to inner toolbar component via prop
-let initialToolbarState: PrivateAiToolbarState | null = null;
+// Initial state loaded for the current chat+sidekick; passed to inner sidekick component via prop
+let initialSidekickState: PrivateAiSidekickState | null = null;
 let lastLoadedKey = '';
 let isLoading = false;
 async function loadToolbarStateIfNeeded() {
@@ -30,8 +30,8 @@ async function loadToolbarStateIfNeeded() {
 		const tId = $currentSelectedModelId;
 		if (!cId || !tId) return;
 		const key = `${cId}|${tId}`;
-		if (lastLoadedKey === key && initialToolbarState !== null) return;
-		initialToolbarState = await loadPrivateAiToolbarState(cId, tId);
+		if (lastLoadedKey === key && initialSidekickState !== null) return;
+		initialSidekickState = await loadPrivateAiSidekickState(cId, tId);
 		lastLoadedKey = key;
 	} catch {
 		// ignore
@@ -41,20 +41,20 @@ async function loadToolbarStateIfNeeded() {
 export let pane: unknown;
 let activeInPaneGroup = false;
 $: activeInPaneGroup = $activeRightPane === 'private';
-// When the toolbar is shown and the component is resolved, attempt to load state
-$: if ($showPrivateAiModelToolbar) {
-	// start loading when toolbar is requested; component may resolve async as well
+// When the sidekick is shown and the component is resolved, attempt to load state
+$: if ($showPrivateAiSidekick) {
+	// start loading when sidekick is requested; component may resolve async as well
 	isLoading = true;
 	loadToolbarStateIfNeeded().finally(() => {
 		// only clear loading once the component is resolved too
-		if ($privateAiModelToolbarComponent) {
+		if ($privateAiSidekickComponent) {
 			isLoading = false;
 		}
 	});
 }
 
 // Also, clear loading when the component becomes available later (dynamic import)
-$: if ($showPrivateAiModelToolbar && $privateAiModelToolbarComponent && isLoading) {
+$: if ($showPrivateAiSidekick && $privateAiSidekickComponent && isLoading) {
 	isLoading = false;
 }
 
@@ -66,8 +66,8 @@ let paneHandle: PaneHandle | null = null;
 $: paneHandle = isPaneHandle(pane) ? (pane as PaneHandle) : null;
 
 const behavior = createPaneBehavior({
-	storageKey: 'privateAiToolbarSize',
-	showStore: showPrivateAiModelToolbar,
+	storageKey: 'privateAiSidekickSize',
+	showStore: showPrivateAiSidekick,
 	isActiveInPaneGroup: () => activeInPaneGroup,
 	getMinSize: () => minSize
 });
@@ -104,7 +104,7 @@ onMount(() => {
 			for (const entry of entries) {
 				minSize = calcMinSize(entry.target as HTMLElement, MIN_SIZE);
 
-				if ($showPrivateAiModelToolbar && activeInPaneGroup) {
+				if ($showPrivateAiSidekick && activeInPaneGroup) {
 					if (paneHandle && paneHandle.isExpanded() && paneHandle.getSize() < minSize) {
 						behavior.clamp(paneHandle, minSize);
 					}
@@ -116,17 +116,17 @@ onMount(() => {
 });
 
 onDestroy(() => {
-	showPrivateAiModelToolbar.set(false);
+	showPrivateAiSidekick.set(false);
 });
 </script>
 
 <SvelteFlowProvider>
 	{#if !largeScreen}
-		{#if $showPrivateAiModelToolbar}
+		{#if $showPrivateAiSidekick}
 			<Drawer
-				show={$showPrivateAiModelToolbar}
+				show={$showPrivateAiSidekick}
 				onClose={() => {
-          showPrivateAiModelToolbar.set(false);
+          showPrivateAiSidekick.set(false);
         }}
 			>
 				<div class="h-full">
@@ -139,13 +139,13 @@ onDestroy(() => {
 										<span>{$i18n.t('Loading...')}</span>
 									</div>
 								</div>
-							{:else if $privateAiModelToolbarComponent}
-								<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} initialState={initialToolbarState} />
+							{:else if $privateAiSidekickComponent}
+								<svelte:component this={$privateAiSidekickComponent} modelId={$currentSelectedModelId} initialState={initialSidekickState} />
 							{:else}
 								<div class="text-center">
 									<div class="text-base font-semibold">{$i18n.t('Model Sidekick')}</div>
 									<div
-										class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No toolbar available for this model.')}</div>
+										class="text-sm text-gray-500 dark:text-gray-400 mt-1">{$i18n.t('No sidekick available for this model.')}</div>
 								</div>
 							{/if}
 					</div>
@@ -153,9 +153,9 @@ onDestroy(() => {
 			</Drawer>
 		{/if}
 	{:else}
-		{#if activeInPaneGroup && $showPrivateAiModelToolbar}
+		{#if activeInPaneGroup && $showPrivateAiSidekick}
 			<PaneResizer class="relative flex w-2 items-center justify-center bg-background group"
-									 id="private-ai-toolbar-resizer">
+									 id="private-ai-sidekick-resizer">
 				<div class="z-10 flex h-7 w-5 items-center justify-center rounded-xs">
 					<EllipsisVertical className="size-4 invisible group-hover:visible" />
 				</div>
@@ -171,7 +171,7 @@ onDestroy(() => {
           if (size > 0) {
             hasExpanded = true;
           }
-          if ($showPrivateAiModelToolbar && paneHandle && paneHandle.isExpanded()) {
+          if ($showPrivateAiSidekick && paneHandle && paneHandle.isExpanded()) {
             if (size < minSize) {
               behavior.clamp(paneHandle, minSize);
             }
@@ -185,25 +185,25 @@ onDestroy(() => {
           if (opening) return;
           // Only hide after the pane has actually expanded at least once; ignore initial mount collapse
           if (hasExpanded) {
-            showPrivateAiModelToolbar.set(false);
+            showPrivateAiSidekick.set(false);
           }
         }}
 				collapsible={true}
 				class="z-10"
 			>
-				{#if $showPrivateAiModelToolbar}
+				{#if $showPrivateAiSidekick}
 					<div class="flex max-h-full min-h-full">
 						<div
 							class="w-full bg-white dark:shadow-lg dark:bg-gray-850 border border-gray-100 dark:border-gray-850 z-40 pointer-events-auto overflow-y-auto scrollbar-hidden">
 							<div class="flex flex-col w-full h-full">
-								<div class="flex items-center justify-between dark:text-gray-100 mb-2 p-2">
+								<div class="flex items-center justify-between dark:text-gray-100 mb-2 p-4">
 									<div class="flex items-center gap-2">
 										<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover"
 												 draggable="false" />
 										<div class=" text-lg font-medium self-center font-primary">{$i18n.t('Model Sidekick')}</div>
 									</div>
 									<button
-										class="self-center"
+										class="self-center mr-1.5"
 										on:click={() => {
 										dispatch('close');
 									}}
@@ -219,8 +219,8 @@ onDestroy(() => {
 										<span>{$i18n.t('Loading...')}</span>
 									</div>
 								</div>
-							{:else if $privateAiModelToolbarComponent}
-								<svelte:component this={$privateAiModelToolbarComponent} modelId={$currentSelectedModelId} initialState={initialToolbarState} />
+							{:else if $privateAiSidekickComponent}
+								<svelte:component this={$privateAiSidekickComponent} modelId={$currentSelectedModelId} initialState={initialSidekickState} />
 							{:else}
 								<div class="text-center">
 									<div
