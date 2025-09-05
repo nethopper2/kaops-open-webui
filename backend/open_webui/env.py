@@ -478,7 +478,7 @@ MICROSOFT_INTROSPECT_URL = os.environ.get(
 
 ATLASSIAN_CLIENT_ID = os.environ.get("ATLASSIAN_CLIENT_ID", None)
 ATLASSIAN_CLIENT_SECRET = os.environ.get("ATLASSIAN_CLIENT_SECRET", None)
-ATLASSIAN_REDIRECT_URL = os.environ.get("ATLASSIAN_REDIRECT_URL", None)
+ATLASSIAN_REDIRECT_URL = os.environ.get("ATLASSIAN_REDIRECT_URI", None)
 
 ATLASSIAN_AUTH_SERVER =  os.environ.get("ATLASSIAN_AUTH_SERVER", "https://auth.atlassian.com")
 ATLASSIAN_API_GATEWAY = os.environ.get("ATLASSIAN_API_GATEWAY", "https://api.atlassian.com")
