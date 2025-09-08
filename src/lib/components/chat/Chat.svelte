@@ -330,6 +330,20 @@
 					if (autoScroll) {
 						scrollToBottom('smooth');
 					}
+				} else if (type === 'task-cancelled') {
+					// Handle user-initiated STOP / cancellation
+          // Update status history for the current message
+          const cancelledStatus = { state: 'cancelled', description: 'Chat stopped by user', timestamp: Date.now() };
+          if (message?.statusHistory) {
+            message.statusHistory.push(cancelledStatus);
+          } else {
+            message.statusHistory = [cancelledStatus];
+          }
+
+          // Clear any in-progress indicator
+          processing = '';
+          // Optional: notify user
+          toast.info('Chat stopped by user');
 				} else if (type === 'chat:title') {
 					chatTitle.set(data);
 					currentChatPage.set(1);
