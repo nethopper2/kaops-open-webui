@@ -335,15 +335,21 @@
           // Update status history for the current message
           const cancelledStatus = { state: 'cancelled', description: 'Chat stopped by user', timestamp: Date.now() };
           if (message?.statusHistory) {
-            message.statusHistory.push(cancelledStatus);
-          } else {
-            message.statusHistory = [cancelledStatus];
-          }
+						message.statusHistory.push(cancelledStatus);
+					} else {
+						message.statusHistory = [cancelledStatus];
+					}
+					// Simple flag some components can read directly
+					message.status = 'cancelled';
 
-          // Clear any in-progress indicator
-          processing = '';
-          // Optional: notify user
-          toast.info('Chat stopped by user');
+					// Persist so it survives refresh
+					// saveChatHandler is already used elsewhere to persist history
+					await tick();
+					saveChatHandler($chatId, history);
+
+					// Clear any in-progress indicator and notify
+					processing = '';
+					toast.info('Chat stopped by user');
 				} else if (type === 'chat:title') {
 					chatTitle.set(data);
 					currentChatPage.set(1);
