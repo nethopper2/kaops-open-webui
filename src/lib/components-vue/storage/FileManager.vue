@@ -25,6 +25,12 @@ const svelteHost = useHost();
 
 const i18nRef = ref<any>(null);
 const i18nReady = computed(() => !!(i18nRef.value && typeof i18nRef.value.t === 'function'));
+// Provide a safe fallback i18n so children always have a t() available
+const safeI18n = computed(() => {
+	const candidate = i18nRef.value ?? props.i18n;
+	if (candidate && typeof candidate.t === 'function') return candidate;
+	return { t: (s: string) => s };
+});
 
 // Sync when prop arrives (if the CE prop bridge ever sets it)
 watch(
@@ -70,9 +76,24 @@ const currentFileItem = ref<FileSystemItem>();
 
 let fileSystemProvider: RemoteFileSystemProvider;
 
+async function waitForI18nReady(timeoutMs = 800) {
+	if (i18nReady.value) return;
+	await new Promise<void>((resolve) => {
+		const start = Date.now();
+		const iv = setInterval(() => {
+			if (i18nReady.value || Date.now() - start > timeoutMs) {
+				clearInterval(iv);
+				resolve();
+			}
+		}, 25);
+	});
+}
+
 async function handleContextMenuItemClick(e: ContextMenuItemClickEvent) {
 	if (e.itemData.options.action === 'editMetadata') {
 		currentFileItem.value = e.fileSystemItem;
+		// Wait briefly so translated strings are available before opening
+		await waitForI18nReady();
 		showEditMetadataPopup.value = true;
 	}
 }
@@ -101,10 +122,10 @@ onMounted(async () => {
 	loading.value = true;
 
 	const backendConfig = await getBackendConfig();
-	
+
 	// Check if we should use the new nh-pai-data-service
 	const useNewService = localStorage.getItem('use_nh_data_service') === 'true';
-	
+
 	let endpointUrl;
 	if (useNewService) {
 		// Use nh-pai-data-service
@@ -132,7 +153,7 @@ onMounted(async () => {
 		:file-system-provider="fileSystemProvider"
 		:on-context-menu-item-click="handleContextMenuItemClick"
 		:on-context-menu-showing="handleContextMenuShowing"
-		:root-folder-name="(i18nRef?.t?.('Knowledge Data')) ?? 'Knowledge Data'"
+		:root-folder-name="(safeI18n.t?.('Knowledge Data')) ?? 'Knowledge Data'"
 		v-bind="$attrs"
 	>
 		<dx-permissions
@@ -146,7 +167,7 @@ onMounted(async () => {
 		/>
 
 		<dx-context-menu>
-			<dx-item :text="(i18nRef?.t?.('Edit Metadata')) ?? 'Edit Metadata'" :options="{ action: 'editMetadata' }" />
+			<dx-item :text="(safeI18n.t?.('Edit Metadata')) ?? 'Edit Metadata'" :options="{ action: 'editMetadata' }" />
 		</dx-context-menu>
 
 		<dx-item-view>
@@ -156,7 +177,7 @@ onMounted(async () => {
 				<dx-column
 					data-field="dateModified"
 					dataType="datetime"
-					:caption="(i18nRef?.t?.('Date Modified')) ?? 'Date Modified'"
+					:caption="(safeI18n.t?.('Date Modified')) ?? 'Date Modified'"
 					width="auto"
 				/>
 				<dx-column data-field="size" />
@@ -174,7 +195,7 @@ onMounted(async () => {
 	<popup-metadata-edit
 		v-model:visible="showEditMetadataPopup"
 		:file-item="currentFileItem as FileSystemItem"
-		:i18n="i18nRef || props.i18n"
+		:i18n="safeI18n"
 	/>
 </template>
 
