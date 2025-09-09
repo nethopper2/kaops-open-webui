@@ -56,7 +56,7 @@ export function resetTokenReplacerStores(): void {
 }
 
 // Centralized chat change handling to avoid component lifecycle race conditions.
-// This subscription runs at module load and persists across Pane/Drawer swaps.
+// This subscription runs at module load-time and persists across Pane/Drawer swaps.
 let __prevChatId: string = '';
 let __initializing = true;
 chatId.subscribe((newIdRaw) => {
@@ -86,7 +86,7 @@ chatId.subscribe((newIdRaw) => {
 		return;
 	}
 
-	// Starting a brand-new chat ('' -> someId): preserve current selection; show actions
+	// Starting a brand-new chat ('' -> someId): preserve the current selection; show actions
 	if (prev === '' && newId !== '') {
 		currentTokenReplacerSubView.set('actions');
 		return;
