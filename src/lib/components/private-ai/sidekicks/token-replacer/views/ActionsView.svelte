@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
-  import { ensureFilesFetched, selectedTokenizedDoc, selectedTokenizedDocId, currentTokenReplacerSubView } from '../stores';
+  import { ensureFilesFetched, selectedTokenizedDoc, selectedTokenizedDocPath, currentTokenReplacerSubView } from '../stores';
   import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
   import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
   import { appHooks } from '$lib/utils/hooks';
@@ -25,7 +25,7 @@
 
 
 <div class="flex flex-col w-full h-full items-stretch justify-start px-4 py-4">
-  {#if $selectedTokenizedDocId === ''}
+  {#if $selectedTokenizedDocPath === ''}
     <div class="w-full max-w-sm mb-4 px-4 text-center mx-auto">
       <div class="text-sm text-gray-600 dark:text-gray-300 mb-2">{$i18n.t('No document selected')}</div>
       <div class="text-xs text-gray-500 dark:text-gray-400 mb-3">{$i18n.t('Please select a tokenized document to proceed with token replacement actions.')}</div>
@@ -38,7 +38,7 @@
     </div>
   {/if}
 
-  {#if $selectedTokenizedDocId !== ''}
+  {#if $selectedTokenizedDocPath !== ''}
 		<SelectedDocumentSummary on:preview={() => openPreviewDialog()} />
 
 		<div class="text-sm text-gray-600 dark:text-gray-300 mb-3 text-center px-4">

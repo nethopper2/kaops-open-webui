@@ -11,7 +11,8 @@ import {
 } from '$lib/stores';
 import { calcMinSize, createPaneBehavior, isPaneHandle, type PaneHandle, rightPaneSize } from '$lib/utils/pane';
 import XMark from '$lib/components/icons/XMark.svelte';
-import { loadPrivateAiSidekickState, type PrivateAiSidekickState } from '$lib/private-ai/state';
+import { loadPrivateAiSidekickState } from '$lib/private-ai/state';
+import type { PrivateAiSidekickState } from '$lib/apis/private-ai/sidekicks';
 
 /**
  * REMINDER: Auto open/close of this component is orchestrated by Chat.svelte via appHooks 'model.changed'.
@@ -20,7 +21,7 @@ import { loadPrivateAiSidekickState, type PrivateAiSidekickState } from '$lib/pr
 const dispatch = createEventDispatcher();
 const i18n = getContext('i18n');
 
-// Initial state loaded for the current chat+sidekick; passed to inner sidekick component via prop
+// Initial state loaded for the current chat+sidekick; passed to the inner sidekick component via prop
 let initialSidekickState: PrivateAiSidekickState | null = null;
 let lastLoadedKey = '';
 let isLoading = false;

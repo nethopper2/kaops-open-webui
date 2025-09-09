@@ -2,7 +2,7 @@
   import { createEventDispatcher, getContext } from 'svelte';
   import Tooltip from '$lib/components/common/Tooltip.svelte';
   import Eye from '$lib/components/icons/Eye.svelte';
-  import { selectedTokenizedDoc, selectedTokenizedDocId } from '../stores';
+  import { selectedTokenizedDoc, selectedTokenizedDocPath } from '../stores';
 	import Document from '$lib/components/icons/Document.svelte';
 
   const i18n = getContext('i18n');
@@ -32,7 +32,7 @@
   const dispatch = createEventDispatcher<{ preview: void }>();
 </script>
 
-{#if $selectedTokenizedDocId !== '' && $selectedTokenizedDoc}
+{#if $selectedTokenizedDocPath !== '' && $selectedTokenizedDoc}
   <div class="mb-4">
     <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{$i18n.t('Selected document')}</div>
     <!-- whole card is a clickable preview button. Tooltip on filename shows full path. -->

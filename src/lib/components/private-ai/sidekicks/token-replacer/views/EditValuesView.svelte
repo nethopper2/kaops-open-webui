@@ -1,7 +1,7 @@
 <script lang="ts">
 import { getContext, onMount, onDestroy } from 'svelte';
 import { toast } from 'svelte-sonner';
-import { currentTokenReplacerSubView, selectedTokenizedDocId, selectedTokenizedDoc } from '../stores';
+import { currentTokenReplacerSubView, selectedTokenizedDocPath, selectedTokenizedDoc } from '../stores';
 import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
 import { appHooks } from '$lib/utils/hooks';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
@@ -126,7 +126,7 @@ function getInputId(token: string): string {
 
 function getContextIds() {
 	const cId = $chatId as string | null;
-	const dId = $selectedTokenizedDocId as string | null;
+	const dId = $selectedTokenizedDocPath as string | null;
 	return { cId, dId };
 }
 

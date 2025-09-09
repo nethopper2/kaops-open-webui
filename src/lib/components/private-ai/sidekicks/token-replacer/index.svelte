@@ -4,19 +4,23 @@
   import ActionsView from '$lib/components/private-ai/sidekicks/token-replacer/views/ActionsView.svelte';
   import EditValuesView from '$lib/components/private-ai/sidekicks/token-replacer/views/EditValuesView.svelte';
   import { isChatStarted } from '$lib/stores';
-  import { currentTokenReplacerSubView, selectedTokenizedDocId } from './stores';
-  import type { PrivateAiSidekickState } from '$lib/private-ai/state';
+  import { currentTokenReplacerSubView, selectedTokenizedDocPath } from './stores';
+	import type { PrivateAiSidekickState } from '$lib/apis/private-ai/sidekicks';
 
   const i18n = getContext('i18n');
 
+	type TokenReplacerState = {
+		selectedTokenizedDocPath?: string;
+	};
+
   export let modelId: string | null = null;
-  export let initialState: PrivateAiSidekickState | null = null;
+  export let initialState: PrivateAiSidekickState<TokenReplacerState> | null = null;
   $: void modelId;
 
   // Hydrate selection from the initial state once
   let hydrated = false;
-  $: if (!hydrated && initialState?.selectedTokenizedDocId) {
-    selectedTokenizedDocId.set(String(initialState.selectedTokenizedDocId));
+  $: if (!hydrated && initialState?.selectedTokenizedDocPath) {
+    selectedTokenizedDocPath.set(String(initialState.selectedTokenizedDocPath));
     hydrated = true;
   }
 

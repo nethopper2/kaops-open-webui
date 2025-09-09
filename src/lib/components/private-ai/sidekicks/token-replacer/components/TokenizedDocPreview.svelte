@@ -1,7 +1,7 @@
 <script lang="ts">
   import DOMPurify from 'dompurify';
   import { getContext } from 'svelte';
-  import { fetchFilePreview } from '$lib/apis/tokenizedFiles';
+  import { fetchFilePreview } from '$lib/apis/private-ai/sidekicks/token-replacer';
   import type { TokenFile } from '../stores';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 
@@ -23,7 +23,7 @@
         previewError = $i18n.t('No file selected.');
         return;
       }
-      const res = await fetchFilePreview(previewType, (file as any).path ?? file.url);
+      const res = await fetchFilePreview(previewType, file.fullPath);
       previewHtml = res.preview ?? '';
     } catch (e) {
       previewError = $i18n.t('Failed to load preview.');
@@ -43,7 +43,7 @@
   <div class="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-800">
     {#if file}
       <span class="font-medium">{$i18n.t('Document')}:</span>
-      <span class="ml-1">{file.name ?? file.url}</span>
+      <span class="ml-1">{file.name}</span>
     {:else}
       {$i18n.t('No document selected')}
     {/if}
@@ -71,6 +71,7 @@
 <style>
   .preview-html { font-size: 0.75em; }
   :global(.preview-html p) { margin: 0 0 1em 0; }
+	/* token class name is provided from server preview  */
   :global(.preview-html .token) {
     background: #fffbe6;
     color: #b26a00;
