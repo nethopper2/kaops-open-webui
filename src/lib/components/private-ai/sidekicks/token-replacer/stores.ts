@@ -1,5 +1,5 @@
 import { writable, get, type Writable, derived } from 'svelte/store';
-import { fetchTokenizedFiles } from '$lib/apis/private-ai/sidekicks/token-replacer';
+import { getTokenizedFiles } from '$lib/apis/private-ai/sidekicks/token-replacer';
 import { chatId } from '$lib/stores';
 
 export type TokenFile = {
@@ -36,7 +36,7 @@ export async function ensureFilesFetched(): Promise<void> {
 	if (get(filesFetched) || get(filesLoading)) return;
 	filesLoading.set(true);
 	try {
-		const result = await fetchTokenizedFiles();
+		const result = await getTokenizedFiles();
 		const files = result?.data ?? [];
 
 		tokenizedFiles.set(files);

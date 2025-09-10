@@ -1,7 +1,7 @@
 <script lang="ts">
   import DOMPurify from 'dompurify';
   import { getContext } from 'svelte';
-  import { fetchFilePreview } from '$lib/apis/private-ai/sidekicks/token-replacer';
+  import { getFilePreview } from '$lib/apis/private-ai/sidekicks/token-replacer';
   import type { TokenFile } from '../stores';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 
@@ -23,7 +23,7 @@
         previewError = $i18n.t('No file selected.');
         return;
       }
-      const res = await fetchFilePreview(previewType, file.fullPath);
+      const res = await getFilePreview(previewType, file.fullPath);
       previewHtml = res.preview ?? '';
     } catch (e) {
       previewError = $i18n.t('Failed to load preview.');

@@ -6,7 +6,8 @@ import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
 import { appHooks } from '$lib/utils/hooks';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
 import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
-import { chatId } from '$lib/stores';
+import { chatId, currentSelectedModelId } from '$lib/stores';
+import { getTokenReplacementValues, putTokenReplacementValues, type TokenReplacementValue } from '$lib/apis/private-ai/sidekicks/token-replacer';
 import { loadTokenReplacerDraft, saveTokenReplacerDraft, clearTokenReplacerDraft, type TokenReplacerDraft } from '../drafts';
 
 const i18n = getContext('i18n');
@@ -55,52 +56,35 @@ $: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs fo
   `${$i18n.t('All tokens will be submitted, including those not currently visible due to search filters.')}<br><br>` +
   `${$i18n.t('Do you want to continue?')}`;
 
-// Fake loader simulating future REST API
+// Load tokens and values from API
 async function loadTokensAndValues(): Promise<{ tokens: Token[]; values: ReplacementValues }> {
-	// Simulate network latency
-	await new Promise((r) => setTimeout(r, 200));
-	const fakeTokens: Token[] = [
-		'[[FIRST_NAME]]',
-		'[[LAST_NAME]]',
-		'[[EMAIL]]',
-		'[[COMPANY]]',
-		'[[JOB_TITLE]]',
-		'[[ADDRESS_LINE_1]]',
-		'[[ADDRESS_LINE_2]]',
-		'[[CITY]]',
-		'[[STATE]]',
-		'[[POSTAL_CODE]]',
-		'[[COUNTRY]]',
-		'[[LONG_SENTENCE_TOKEN_THAT_COULD_BE_VERY_LONG_SO_WRAP_PROPERLY]]'
-	];
-
-	const fakeValues: ReplacementValues = {
-		'[[FIRST_NAME]]': '',
-		'[[LAST_NAME]]': '',
-		'[[EMAIL]]': '',
-		'[[COMPANY]]': 'My Company',
-		'[[JOB_TITLE]]': '',
-		'[[ADDRESS_LINE_1]]': '',
-		'[[ADDRESS_LINE_2]]': '',
-		'[[CITY]]': '',
-		'[[STATE]]': '',
-		'[[POSTAL_CODE]]': '',
-		'[[COUNTRY]]': '',
-		'[[LONG_SENTENCE_TOKEN_THAT_COULD_BE_VERY_LONG_SO_WRAP_PROPERLY]]': ''
-	};
-
-	return { tokens: fakeTokens, values: fakeValues };
+	const cId = $chatId as string | null;
+	const mId = $currentSelectedModelId as string | null;
+	const dPath = $selectedTokenizedDocPath as string | null;
+	if (!cId || !mId || !dPath) {
+		throw new Error('Missing context: chat, model, or document path');
+	}
+	const res = await getTokenReplacementValues(cId, mId);
+	const data = (res as any)?.data ?? res;
+	const tokensFromApi: string[] = data?.tokens ?? [];
+	const valuesFromApi: Record<string, string> = data?.values ?? {};
+	return { tokens: tokensFromApi, values: valuesFromApi };
 }
 
-// Fake submitter simulating future REST API
+// Submit replacement values to API
 async function submitReplacementValues(payload: { token: string; value: string }[]): Promise<void> {
-	// Simulate network latency and success
-	await new Promise((r) => setTimeout(r, 300));
-	// For now, just log. Replace with real API when available.
-	console.debug('Submitting replacement values (stub):', payload);
+	const cId = $chatId as string | null;
+	const mId = $currentSelectedModelId as string | null;
+	const dPath = $selectedTokenizedDocPath as string | null;
+	if (!cId || !mId || !dPath) {
+		throw new Error('Missing context: chat, model, or document path');
+	}
+	// Filter to TokenReplacementValue type explicitly
+	const valuesToSend: TokenReplacementValue[] = payload.map((p) => ({ token: String(p.token), value: String(p.value ?? '') }));
+	await putTokenReplacementValues(cId, mId, valuesToSend);
 }
 
-// Derived filtered tokens with optional "needs value" filter
+// Derived filtered tokens with an optional "needs value" filter
 let isOnlyNeedingValues = true;
 $: query = searchQuery.trim().toLowerCase();
 $: filteredTokens = tokens
