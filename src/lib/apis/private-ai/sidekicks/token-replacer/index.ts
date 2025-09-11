@@ -7,7 +7,7 @@ export async function getTokenizedFiles() {
 
 export async function getFilePreview(type: 'docx' | 'csv', path: string) {
 	const params: Record<string, string> = {};
-	return apiFetch(`/file/preview/${type}/${path}`, { params });
+	return apiFetch(`/files/preview/${type}/${path}`, { params });
 }
 
 // Types for Token Replacer values API
@@ -42,7 +42,7 @@ export async function getTokenReplacementValues(chatId: string, modelId: string)
 		}
 	}
 
-	// We don't assume server returns saved values in GET; start with empty values
+	// We don't assume the server returns saved values in GET; start with empty values
 	const tokens = Array.from(tokenSet);
 	const values: Record<string, string> = {};
 
