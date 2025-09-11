@@ -56,18 +56,16 @@ export async function putTokenReplacementValues(
 	modelId: string,
 	values: TokenReplacementValue[]
 ) {
-	// Build maps the backend expects: savedTokens (only provided/non-empty) and allTokens (every token)
-	const allTokens: Record<string, string> = {};
-	const savedTokens: Record<string, string> = {};
+	// Build maps the backend expects.
+	const tokens: Record<string, string> = {};
 	for (const { token, value } of values) {
 		const t = String(token);
 		const v = String(value ?? '');
-		allTokens[t] = v;
-		if (v.trim().length > 0) savedTokens[t] = v;
+		if (t.trim().length > 0) tokens[t] = v;
 	}
 
 	return apiFetch<any>(
 		`/tools/token-replacer/values/chat/${encodeURIComponent(chatId)}/model/${encodeURIComponent(modelId)}`,
-		{ method: 'PUT', body: { savedTokens, allTokens } }
+		{ method: 'PUT', body: { tokens } }
 	);
 }

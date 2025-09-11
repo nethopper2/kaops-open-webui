@@ -39,7 +39,10 @@ let submitSuccess = false;
 
 // Local state
 let tokens: Token[] = [];
+// values = current editable values (may include drafts)
 let values: ReplacementValues = {};
+// savedValues = last known server-saved values from GET or after successful PUT
+let savedValues: ReplacementValues = {};
 let searchQuery = '';
 let showConfirm = false;
 
@@ -88,7 +91,8 @@ async function submitReplacementValues(payload: { token: string; value: string }
 let isOnlyNeedingValues = true;
 $: query = searchQuery.trim().toLowerCase();
 $: filteredTokens = tokens
-  .filter((t) => (isOnlyNeedingValues ? !(typeof values[t] === 'string' && values[t].trim().length > 0) : true))
+  // Only hide rows that already have a value SAVED on the server.
+  .filter((t) => (isOnlyNeedingValues ? !(typeof savedValues[t] === 'string' && savedValues[t].trim().length > 0) : true))
   .filter((t) => (query ? t.toLowerCase().includes(query) : true));
 
 function updateValue(token: string, value: string) {
@@ -159,6 +163,8 @@ async function handleSubmit() {
 		// Build payload from ALL tokens, not only filtered ones
 		const payload = tokens.map((t) => ({ token: t, value: values[t] ?? '' }));
 		await submitReplacementValues(payload);
+		// On success, server-saved values now match local edits
+		savedValues = { ...values };
 		submitSuccess = true;
 		suppressDraftPersistence = true; // prevent re-saving this session unless user edits again
 		// Clear the saved draft on successful submit so future sessions start fresh
@@ -185,6 +191,8 @@ onMount(async () => {
 	try {
 		const { tokens: tk, values: vals } = await loadTokensAndValues();
 		tokens = tk;
+		// Track server-saved values separately from editable values
+		savedValues = vals;
 		let merged = vals;
 		const { cId, dId } = getContextIds();
 		if (cId && dId) {
@@ -274,22 +282,31 @@ onDestroy(() => {
 				<div class="space-y-4">
 					{#each filteredTokens as token}
 						<div class="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:gap-4 items-start">
-       <div
+       			<div
 							class="lg:col-span-1 text-[11px] lg:text-xs font-semibold text-gray-800 dark:text-gray-200 break-words whitespace-pre-wrap select-text">
 							{token}
 						</div>
 							<div class="lg:col-span-2">
-								<input
-									id={getInputId(token)}
-									class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-									type="text"
-									placeholder={$i18n.t('Replacement value')}
-									aria-label={$i18n.t('Replacement value')}
-									value={values[token] ?? ''}
-									on:input={handleInput(token)}
-									autocomplete="off"
-								/>
-							</div>
+ 							{#key token}
+ 								<input
+ 									id={getInputId(token)}
+ 									class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
+ 									type="text"
+ 									placeholder={$i18n.t('Replacement value')}
+ 									aria-label={$i18n.t('Replacement value')}
+ 									aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
+ 									value={values[token] ?? ''}
+ 									on:input={handleInput(token)}
+ 									autocomplete="off"
+ 								/>
+ 								{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
+ 									<div id={`${getInputId(token)}-draft`} class="mt-1 text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+ 										<span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
+ 										<span class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
+ 									</div>
+ 								{/if}
+ 							{/key}
+ 						</div>
 						</div>
 					{/each}
 				</div>
