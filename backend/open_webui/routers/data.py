@@ -6,6 +6,7 @@ import os
 import logging
 import jwt
 from typing import Optional, List, Dict, Any, Tuple
+import base64
 
 from open_webui.env import SRC_LOG_LEVELS
 from open_webui.constants import ERROR_MESSAGES
@@ -30,6 +31,7 @@ from open_webui.utils.data.slack import initiate_slack_sync
 from open_webui.utils.data.google import initiate_google_file_sync
 from open_webui.utils.data.microsoft import initiate_microsoft_sync
 from open_webui.utils.data.atlassian import initiate_atlassian_sync
+from open_webui.utils.data.mineral import initiate_mineral_sync
 from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
@@ -68,6 +70,13 @@ from open_webui.env import (
     ATLASSIAN_CLIENT_ID,
     ATLASSIAN_CLIENT_SECRET,
     ATLASSIAN_REDIRECT_URL,
+
+    MINERAL_CLIENT_ID,
+    MINERAL_CLIENT_SECRET,
+    MINERAL_REDIRECT_URI,
+    MINERAL_BASE_URL,
+    MINERAL_AUTHORIZE_URL,
+    MINERAL_TOKEN_URL,
 
     DATASOURCES_URL,
     GCS_SERVICE_ACCOUNT_BASE64,
@@ -252,11 +261,30 @@ PROVIDER_CONFIGS = {
             'jira': 'Jira',
             'confluence': 'Confluence'
         }
+    },
+    'mineral': {
+        'client_id': MINERAL_CLIENT_ID,
+        'client_secret': MINERAL_CLIENT_SECRET,
+        'redirect_uri': MINERAL_REDIRECT_URI,
+        'authorize_url': MINERAL_AUTHORIZE_URL,
+        'token_url': MINERAL_TOKEN_URL,
+        'revoke_url': None,  
+        'scope_separator': ' ',
+        'default_scopes': [
+            "read:handbooks",
+            "read:profile"
+        ],
+        'layer_scopes': {
+            'handbooks': ['read:handbooks', 'read:profile']
+        },
+        'layer_folders': {
+            'handbooks': 'Handbooks'
+        }
     }
 }
 
 ############################
-# Reusable Helper Functions
+# Helper Functions
 ############################
 
 def create_oauth_state(user_id: str, layer: str) -> str:
@@ -514,6 +542,18 @@ async def create_background_sync_task(request: Request, provider: str, user_id: 
             )
         
         await create_task(redis_connection, run_atlassian_sync(), id=f"atlassian_sync_{user_id}")
+    
+    elif provider == 'mineral':
+        async def run_mineral_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(initiate_mineral_sync(
+                    user_id, access_token, MINERAL_BASE_URL, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME
+                ))
+            )
+        
+        await create_task(redis_connection, run_mineral_sync(), id=f"mineral_sync_{user_id}")
 
 async def create_background_delete_task(request: Request, provider: str, user_id: str, layer: str = None):
     """Create background GCS cleanup task for any provider."""
@@ -529,7 +569,8 @@ async def create_background_delete_task(request: Request, provider: str, user_id
             'google': 'Google',
             'microsoft': 'Microsoft', 
             'slack': 'Slack',
-            'atlassian': 'Atlassian'
+            'atlassian': 'Atlassian',
+            'mineral': 'Mineral'
         }
         folder_path = f"userResources/{user_id}/{folder_map.get(provider, provider.title())}/"
     
@@ -845,6 +886,107 @@ async def delete_data_source_by_id(
             detail=ERROR_MESSAGES.NOT_FOUND,
         )
 
+
+class MineralAuthForm(BaseModel):
+    username: str
+    password: str
+
+@router.post("/mineral/auth")
+async def mineral_auth(
+    request: Request,
+    form_data: MineralAuthForm,
+    user=Depends(get_verified_user)
+):
+    """Authenticate user with Mineral using password grant and store tokens"""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    try:    
+        # Prepare Basic Auth header
+        credentials = f"{MINERAL_CLIENT_ID}:{MINERAL_CLIENT_SECRET}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        
+        # Prepare request data
+        request_data = {
+            'grant_type': 'password',
+            'username': form_data.username,
+            'password': form_data.password
+        }
+        
+        request_headers = {
+            'Authorization': f'Basic {encoded_credentials}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json, text/plain, */*'
+        }
+        
+        # Call Mineral token endpoint
+        response = requests.post(
+            f"{MINERAL_BASE_URL}/v2/oauth/token",
+            data=request_data,
+            headers=request_headers
+        )
+        
+        if not response.ok:
+            error_detail = response.text
+            try:
+                error_json = response.json()
+                error_detail = error_json.get('error_description', error_json.get('error', error_detail))
+            except:
+                pass
+            
+            log.error(f"Mineral token request failed: {response.status_code} - {error_detail}")
+            raise HTTPException(
+                status_code=response.status_code, 
+                detail=f"Mineral authentication failed: {error_detail}"
+            )
+        
+        token_data = response.json()
+        log.info(f"Mineral token response: {token_data}")
+        
+        # Extract tokens
+        access_token = token_data.get('access_token')
+        refresh_token = token_data.get('refresh_token')
+        expires_in = token_data.get('expires_in')
+        
+        if not access_token:
+            raise HTTPException(status_code=500, detail="No access token received from Mineral")
+        
+        # Encrypt and store tokens
+        encrypted_access_token, encrypted_refresh_token = encrypt_tokens(access_token, refresh_token)
+        access_token_expires_at = int(time.time()) + expires_in if expires_in else None
+        
+        try:
+            OAuthTokens.insert_new_token(
+                user_id=user.id,
+                provider_name='Mineral',
+                provider_user_id=form_data.username,
+                provider_team_id=None,
+                encrypted_access_token=encrypted_access_token,
+                encrypted_refresh_token=encrypted_refresh_token,
+                access_token_expires_at=access_token_expires_at,
+                scopes=token_data.get('scope', 'read:handbooks read:profile'),
+                layer='handbooks'
+            )
+            
+            log.info(f"Stored Mineral OAuth tokens for user {user.id}")
+            
+            # Initiate sync
+            await create_background_sync_task(request, 'mineral', user.id, access_token, 'handbooks')
+            
+            return {"success": True, "message": "Mineral authentication and sync initiated successfully"}
+            
+        except Exception as db_error:
+            log.error(f"Failed to store Mineral tokens: {db_error}")
+            raise HTTPException(status_code=500, detail="Failed to store authentication tokens")
+            
+    except requests.exceptions.RequestException as e:
+        log.error(f"Mineral API request failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to communicate with Mineral API")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Mineral auth error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 ############################
 # Universal OAuth Endpoints
 ############################
@@ -967,7 +1109,79 @@ def create_universal_callback_endpoint(provider: str):
                 log.info(f"Starting {provider.title()} sync for user {user_id}")
                 await create_background_sync_task(request, provider, user_id, access_token, layer)
                 
-                return RedirectResponse(url=DATASOURCES_URL, status_code=302)
+                # Return success popup instead of redirect
+                layer_text = f" ({layer})" if layer else ""
+                return HTMLResponse(
+                    content=f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>{provider.title()} Connected Successfully</title>
+                        <style>
+                            body {{ 
+                                font-family: Arial, sans-serif; 
+                                display: flex; 
+                                justify-content: center; 
+                                align-items: center; 
+                                height: 100vh; 
+                                margin: 0; 
+                                background-color: #f5f5f5; 
+                            }}
+                            .popup {{ 
+                                background: white; 
+                                padding: 30px; 
+                                border-radius: 8px; 
+                                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+                                text-align: center; 
+                                max-width: 400px; 
+                            }}
+                            .success {{ 
+                                color: #28a745; 
+                                margin-bottom: 20px; 
+                            }}
+                            .checkmark {{ 
+                                font-size: 48px; 
+                                color: #28a745; 
+                                margin-bottom: 10px; 
+                            }}
+                            .countdown {{ 
+                                font-size: 14px; 
+                                color: #666; 
+                                margin-top: 15px; 
+                            }}
+                            .sync-status {{ 
+                                font-size: 14px; 
+                                color: #007bff; 
+                                margin-top: 10px; 
+                                font-style: italic; 
+                            }}
+                        </style>
+                    </head>
+                    <body>
+                        <div class="popup">
+                            <div class="checkmark">✓</div>
+                            <h2 class="success">{provider.title()} Connected Successfully!</h2>
+                            <p>Your {provider.title()}{layer_text} integration has been set up and sync has started.</p>
+                            <div class="sync-status">Syncing your data in the background...</div>
+                            <div class="countdown">This window will close in <span id="countdown">5</span> seconds</div>
+                        </div>
+                        <script>
+                            let countdown = 5;
+                            const countdownElement = document.getElementById('countdown');
+                            const timer = setInterval(() => {{
+                                countdown--;
+                                countdownElement.textContent = countdown;
+                                if (countdown <= 0) {{
+                                    clearInterval(timer);
+                                    window.close();
+                                }}
+                            }}, 1000);
+                        </script>
+                    </body>
+                    </html>
+                    """,
+                    status_code=200
+                )
 
             except Exception as sync_error:
                 log.error(f"{provider.title()} sync failed for user {user_id}: {str(sync_error)}")
@@ -1026,7 +1240,7 @@ def create_universal_sync_endpoint(provider: str):
         layer: str = Query(None, description=f"Specific {provider.title()} Data Layer to sync"),
         user=Depends(get_verified_user),
     ):
-        f"""Manually trigger {provider.title()} sync for the authenticated user."""
+        log.info(f"""Manually trigger {provider.title()} sync for the authenticated user.""")
         if not user:
             raise HTTPException(status_code=401, detail="User not authenticated")
         
@@ -1075,6 +1289,8 @@ def create_universal_sync_endpoint(provider: str):
                 status_code=500,
                 detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
             )
+    
+        log.info(f"""Manually trigger {provider.title()} sync for the authenticated user.""")
 
         try:
             log.info(f"Starting manual {provider.title()} sync for user {user.id}")
@@ -1432,7 +1648,7 @@ async def disconnect_provider_layer(provider: str, user_id: str, layer: str, tea
 ############################
 
 # Create endpoints for all providers
-for provider in ['google', 'microsoft', 'slack', 'atlassian']:
+for provider in ['google', 'microsoft', 'slack', 'atlassian', 'mineral']:
     create_universal_initialize_endpoint(provider)
     create_universal_callback_endpoint(provider)
     create_universal_status_endpoint(provider)

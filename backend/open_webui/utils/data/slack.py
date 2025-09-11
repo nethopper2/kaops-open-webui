@@ -1096,10 +1096,6 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
                         file_info = file_futures[future]
                         print(f"Error processing file {file_info.get('name', 'unknown')}: {str(e)}")
         
-        # Clean up orphaned files - only for the specific layer if provided
-        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME)
-        gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
-        
         if layer and layer in LAYER_CONFIG:
             # Only clean up files in this specific layer's folder
             layer_folder = LAYER_CONFIG[layer]['folder']
@@ -1107,6 +1103,10 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
         else:
             # Clean up all Slack files
             user_prefix = f"userResources/{USER_ID}/Slack/"
+
+        # Clean up orphaned files - only for the specific layer if provided
+        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME, prefix=user_prefix)
+        gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
         
         all_current_paths = conversation_paths | file_paths
         

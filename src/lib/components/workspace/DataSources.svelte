@@ -23,6 +23,7 @@
 	import OneNote from '../icons/OneNote.svelte';
 	import Jira from '../icons/Jira.svelte';
 	import Confluence from '../icons/Confluence.svelte';
+	import Mineral from '../icons/Mineral.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -30,10 +31,17 @@
 	let query = '';
 
 	let dataSources: Array<DataSource> = [];
+	let processingActions = new Set<string>(); // Track processing actions to prevent double clicks
 
-	let filteredItems = [];
+	// Sort data sources by action, then by name
+	$: sortedDataSources = [...dataSources].sort((a, b) => {
+		if (a.action === b.action) {
+			return a.sync_status.localeCompare(b.sync_status);
+		}
+		return (a.action || '').localeCompare(b.action || '');
+	});
 
-	$: filteredItems = dataSources.filter(
+	$: filteredItems = sortedDataSources.filter(
 		(ds) =>
 			query === '' ||
 			ds.context.toLowerCase().includes(query.toLowerCase()) ||
@@ -88,21 +96,142 @@
 			Sharepoint: Sharepoint,
 			OneNote: OneNote,
 			JIRA: Jira,
-			Confluence: Confluence
+			Confluence: Confluence,
+			Mineral: Mineral // Using Microsoft icon as placeholder for Mineral
 		} as const;
 		return iconMap[iconName as keyof typeof iconMap];
 	};
 
-	const handleSync = (dataSource: DataSource) => {
-		console.log('Syncing:', dataSource.name);
+	const getActionKey = (dataSource: DataSource) => {
+		return `${dataSource.action}-${dataSource.layer || 'default'}`;
+	};
 
-		switch ((dataSource.sync_status as string).toLowerCase()) {
-			case 'synced':
-				return updateSync(dataSource.action as string, dataSource.layer as string);
-			case 'error':
-				return updateSync(dataSource.action as string, dataSource.layer as string);
-			case 'unsynced':
-				return initializeSync(dataSource.action as string, dataSource.layer as string);
+	const handleSync = async (dataSource: DataSource) => {
+		const actionKey = getActionKey(dataSource);
+
+		// Prevent double clicks
+		if (processingActions.has(actionKey)) {
+			return;
+		}
+
+		processingActions.add(actionKey);
+		processingActions = processingActions; // Trigger reactivity
+
+		try {
+			console.log('Syncing:', dataSource.name);
+
+			// Special handling for Mineral
+			if (dataSource.action === 'mineral') {
+				await handleMineralSync(dataSource);
+				return;
+			}
+
+			switch ((dataSource.sync_status as string).toLowerCase()) {
+				case 'synced':
+					await updateSync(dataSource.action as string, dataSource.layer as string);
+					break;
+				case 'error':
+					await updateSync(dataSource.action as string, dataSource.layer as string);
+					break;
+				case 'unsynced':
+					await initializeSync(dataSource.action as string, dataSource.layer as string);
+					break;
+			}
+		} finally {
+			processingActions.delete(actionKey);
+			processingActions = processingActions; // Trigger reactivity
+		}
+	};
+
+	const handleMineralSync = async (dataSource: DataSource) => {
+		if (dataSource.sync_status === 'unsynced') {
+			// Show Mineral auth popup for initialization
+			showMineralAuthPopup();
+		} else {
+			// Regular sync for already connected Mineral
+			await updateSync(dataSource.action as string, dataSource.layer as string);
+		}
+	};
+
+	const showMineralAuthPopup = () => {
+		const popup = window.open(
+			'',
+			'MineralAuth',
+			'width=400,height=500,resizable=no,scrollbars=yes'
+		);
+
+		if (popup) {
+			popup.document.open();
+			popup.document.write(
+				'<!DOCTYPE html><html><head><title>Private AI | Mineral Authentication</title>'
+			);
+			popup.document.write(
+				'<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:2rem;margin:0;background:#f8f9fa}.form-container{background:white;padding:2rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1)}h2{color:#333;margin-bottom:1.5rem;text-align:center}.form-group{margin-bottom:1rem}label{display:block;margin-bottom:0.5rem;color:#555;font-weight:500}input{width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:4px;font-size:1rem;box-sizing:border-box}input:focus{outline:none;border-color:#007bff;box-shadow:0 0 0 2px rgba(0,123,255,0.25)}button{width:100%;padding:0.75rem;background:#007bff;color:white;border:none;border-radius:4px;font-size:1rem;cursor:pointer;margin-top:1rem}button:hover{background:#0056b3}button:disabled{background:#6c757d;cursor:not-allowed}.error{color:#dc3545;font-size:0.875rem;margin-top:0.5rem}.loading{text-align:center;margin-top:1rem}</style>'
+			);
+			popup.document.write(
+				'</head><body><div class="form-container"><h2>Connect to Mineral HR</h2>'
+			);
+			popup.document.write(
+				'<form id="mineralForm"><div class="form-group"><label for="username">Username</label>'
+			);
+			popup.document.write('<input type="text" id="username" name="username" required></div>');
+			popup.document.write('<div class="form-group"><label for="password">Password</label>');
+			popup.document.write('<input type="password" id="password" name="password" required></div>');
+			popup.document.write('<button type="submit" id="submitBtn">Connect</button>');
+			popup.document.write('<div id="error" class="error" style="display:none;"></div>');
+			popup.document.write(
+				'<div id="loading" class="loading" style="display:none;">Connecting to Mineral...</div>'
+			);
+			popup.document.write('</form></div></body></html>');
+			popup.document.close();
+
+			// Add JavaScript functionality after document is ready
+			popup.addEventListener('load', () => {
+				const form = popup.document.getElementById('mineralForm');
+				form?.addEventListener('submit', async (e) => {
+					e.preventDefault();
+
+					const submitBtn = popup.document.getElementById('submitBtn') as HTMLButtonElement;
+					const errorDiv = popup.document.getElementById('error') as HTMLDivElement;
+					const loadingDiv = popup.document.getElementById('loading') as HTMLDivElement;
+					const username = (popup.document.getElementById('username') as HTMLInputElement)?.value;
+					const password = (popup.document.getElementById('password') as HTMLInputElement)?.value;
+
+					if (errorDiv && loadingDiv && submitBtn) {
+						errorDiv.style.display = 'none';
+						loadingDiv.style.display = 'block';
+						submitBtn.disabled = true;
+					}
+
+					try {
+						const response = await fetch(WEBUI_BASE_URL + '/api/v1/data/mineral/auth', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								Authorization: 'Bearer ' + localStorage.getItem('token')
+							},
+							body: JSON.stringify({
+								username: username,
+								password: password
+							})
+						});
+
+						if (response.ok) {
+							window.location.reload();
+							popup.close();
+						} else {
+							const error = await response.json();
+							throw new Error(error.detail || 'Authentication failed');
+						}
+					} catch (error) {
+						const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+						errorDiv.textContent = errorMessage;
+						errorDiv.style.display = 'block';
+						loadingDiv.style.display = 'none';
+						submitBtn.disabled = false;
+					}
+				});
+			});
 		}
 	};
 
@@ -138,6 +267,11 @@
 		let syncDetails = await manualDataSync(localStorage.token, action, layer);
 
 		if (syncDetails.detail?.reauth_url) {
+			if (action === 'mineral') {
+				await showMineralAuthPopup();
+				return;
+			}
+
 			return window.open(syncDetails.detail.reauth_url, '_blank');
 		}
 
@@ -145,14 +279,28 @@
 	};
 
 	const handleDelete = async (dataSource: DataSource) => {
-		const action = dataSource.action;
-		const layer = dataSource.layer;
+		const actionKey = getActionKey(dataSource);
 
-		console.log('Disconnecting sync for:', action);
+		// Prevent double clicks
+		if (processingActions.has(actionKey)) {
+			return;
+		}
 
-		await disconnectDataSync(localStorage.token, action as string, layer as string);
+		processingActions.add(actionKey);
+		processingActions = processingActions; // Trigger reactivity
 
-		dataSources = await getDataSources(localStorage.token);
+		try {
+			const action = dataSource.action;
+			const layer = dataSource.layer;
+
+			console.log('Disconnecting sync for:', action);
+
+			await disconnectDataSync(localStorage.token, action as string, layer as string);
+			dataSources = await getDataSources(localStorage.token);
+		} finally {
+			processingActions.delete(actionKey);
+			processingActions = processingActions; // Trigger reactivity
+		}
 	};
 
 	const getSyncStatusText = (status: string) => {
@@ -172,6 +320,11 @@
 			default:
 				return 'Unknown';
 		}
+	};
+
+	const isProcessing = (dataSource: DataSource) => {
+		const actionKey = getActionKey(dataSource);
+		return processingActions.has(actionKey) || dataSource.sync_status === 'syncing';
 	};
 
 	export const getBackendConfig = async () => {
@@ -248,13 +401,12 @@
 
 	<div class="mb-5">
 		{#if filteredItems.length > 0}
-			<div class="overflow-x-auto">
+			<!-- Desktop Table View -->
+			<div class="hidden lg:block overflow-x-auto">
 				<table class="w-full">
 					<thead>
 						<tr class="border-b border-gray-200 dark:border-gray-700">
-							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
-								{$i18n.t('Name')}
-							</th>
+							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300"> </th>
 							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
 								{$i18n.t('Sync Status')}
 							</th>
@@ -316,17 +468,17 @@
 									<div class="flex items-center gap-2">
 										<button
 											class="px-2 py-1.5 text-xs font-medium rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-											disabled={dataSource.sync_status === 'syncing'}
+											disabled={isProcessing(dataSource)}
 											on:click={() => handleSync(dataSource)}
 										>
-											{dataSource.sync_status === 'syncing' ? 'Syncing...' : 'Sync'}
+											{isProcessing(dataSource) ? 'Processing...' : 'Sync'}
 										</button>
 										<button
 											class="px-2 py-1.5 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-											disabled={dataSource.sync_status !== 'synced'}
+											disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
 											on:click={() => handleDelete(dataSource)}
 										>
-											Delete
+											{isProcessing(dataSource) ? 'Processing...' : 'Delete'}
 										</button>
 									</div>
 								</td>
@@ -334,6 +486,69 @@
 						{/each}
 					</tbody>
 				</table>
+			</div>
+
+			<!-- Mobile Card View -->
+			<div class="lg:hidden space-y-4">
+				{#each filteredItems as dataSource}
+					<div
+						class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4"
+					>
+						<div class="flex items-center gap-3 mb-3">
+							<div
+								class="flex-shrink-0 w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center"
+							>
+								<svelte:component this={getIconComponent(dataSource.icon)} className="size-5" />
+							</div>
+							<div class="flex flex-col min-w-0 flex-1">
+								<div class="font-semibold text-gray-900 dark:text-gray-100 truncate">
+									{dataSource.name}
+								</div>
+								<div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+									{dataSource.context}
+								</div>
+							</div>
+						</div>
+
+						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+							<div class="flex items-center gap-2">
+								<span
+									class="text-xs font-bold px-2 py-1 rounded-full uppercase {getSyncStatusColor(
+										dataSource.sync_status
+									)}"
+								>
+									{getSyncStatusText(dataSource.sync_status)}
+								</span>
+								{#if dataSource.sync_status === 'syncing'}
+									<div class="w-3 h-3">
+										<Spinner className="w-3 h-3" />
+									</div>
+								{/if}
+							</div>
+
+							<div class="text-xs text-gray-500 dark:text-gray-400">
+								Last sync: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Never'}
+							</div>
+						</div>
+
+						<div class="flex gap-2 mt-3">
+							<button
+								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+								disabled={isProcessing(dataSource)}
+								on:click={() => handleSync(dataSource)}
+							>
+								{isProcessing(dataSource) ? 'Processing...' : 'Sync'}
+							</button>
+							<button
+								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+								disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
+								on:click={() => handleDelete(dataSource)}
+							>
+								{isProcessing(dataSource) ? 'Processing...' : 'Delete'}
+							</button>
+						</div>
+					</div>
+				{/each}
 			</div>
 		{:else}
 			<div class="text-center py-8 text-gray-500 dark:text-gray-400">

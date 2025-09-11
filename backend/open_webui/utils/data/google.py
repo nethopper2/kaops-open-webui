@@ -252,8 +252,8 @@ async def sync_gmail_to_gcs(auth_token, service_account_base64, gcs_bucket_name,
         
         # Get existing GCS files for Gmail to check for duplicates
         print("Checking existing Gmail files in GCS...")
-        gcs_files = list_gcs_files(service_account_base64, gcs_bucket_name)
         gmail_prefix = f"userResources/{USER_ID}/Google/Gmail/"
+        gcs_files = list_gcs_files(service_account_base64, gcs_bucket_name, prefix=gmail_prefix)
         existing_email_files = {
             gcs_file['name'] for gcs_file in gcs_files 
             if gcs_file['name'].startswith(gmail_prefix)
@@ -774,17 +774,17 @@ async def sync_drive_to_gcs(auth_token, service_account_base64):
                     print(f"Error processing shared drive folder {drive_name}/{folder['name']}: {str(e)}")
         
         print(f"Found {len(all_files)} files across all directories")
-        
-        # List all GCS files
-        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME)
-        gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
-        drive_file_paths = {file['fullPath'] for file in all_files}
 
         #Fetch USER_ID
         global USER_ID
         
-        # Delete orphaned GCS files that belong to this user
+        # List all GCS files
         user_prefix = f"userResources/{USER_ID}/Google/Google Drive/"
+        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME, prefix=user_prefix)
+        gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
+        drive_file_paths = {file['fullPath'] for file in all_files}
+
+        
         for gcs_name, gcs_file in gcs_file_map.items():
             # Only consider files that belong to this user's Google Drive folder
             if gcs_name.startswith(user_prefix) and gcs_name not in drive_file_paths:
