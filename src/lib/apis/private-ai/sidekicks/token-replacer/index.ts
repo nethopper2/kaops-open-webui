@@ -42,9 +42,24 @@ export async function getTokenReplacementValues(chatId: string, modelId: string)
 		}
 	}
 
-	// We don't assume the server returns saved values in GET; start with empty values
+ // Build values map from server data if provided; prefer non-empty string values
 	const tokens = Array.from(tokenSet);
 	const values: Record<string, string> = {};
+
+	const rows = Array.isArray(wrapped)
+		? wrapped
+		: (wrapped && typeof wrapped === 'object' && Array.isArray((wrapped as any).data))
+		? (wrapped as any).data
+		: [];
+
+	for (const row of rows) {
+		const m = row?.tokens ?? {};
+		for (const [k, v] of Object.entries(m)) {
+			if (typeof v === 'string' && v.trim().length > 0) {
+				values[k] = v;
+			}
+		}
+	}
 
 	const normalized: TokenReplacementValuesResponse = { tokens, values };
 	return normalized;

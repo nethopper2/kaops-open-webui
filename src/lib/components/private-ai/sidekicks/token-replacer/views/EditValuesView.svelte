@@ -1,27 +1,36 @@
 <script lang="ts">
-import { getContext, onMount, onDestroy } from 'svelte';
+import { getContext, onDestroy, onMount } from 'svelte';
 import { toast } from 'svelte-sonner';
-import { currentTokenReplacerSubView, selectedTokenizedDocPath, selectedTokenizedDoc } from '../stores';
+import { currentTokenReplacerSubView, selectedTokenizedDoc, selectedTokenizedDocPath } from '../stores';
 import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
 import { appHooks } from '$lib/utils/hooks';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
 import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 import { chatId, currentSelectedModelId } from '$lib/stores';
-import { getTokenReplacementValues, putTokenReplacementValues, type TokenReplacementValue } from '$lib/apis/private-ai/sidekicks/token-replacer';
-import { loadTokenReplacerDraft, saveTokenReplacerDraft, clearTokenReplacerDraft, type TokenReplacerDraft } from '../drafts';
+import {
+	getTokenReplacementValues,
+	putTokenReplacementValues,
+	type TokenReplacementValue
+} from '$lib/apis/private-ai/sidekicks/token-replacer';
+import {
+	clearTokenReplacerDraft,
+	loadTokenReplacerDraft,
+	saveTokenReplacerDraft,
+	type TokenReplacerDraft
+} from '../drafts';
 
 const i18n = getContext('i18n');
 
 function openPreviewPanel() {
-  const file = $selectedTokenizedDoc;
-  if (file) {
-    appHooks.callHook('chat.overlay', {
-      action: 'open',
-      title: $i18n.t('Preview'),
-      component: TokenizedDocPreview,
-      props: { file, previewType: 'docx' }
-    });
-  }
+	const file = $selectedTokenizedDoc;
+	if (file) {
+		appHooks.callHook('chat.overlay', {
+			action: 'open',
+			title: $i18n.t('Preview'),
+			component: TokenizedDocPreview,
+			props: { file, previewType: 'docx' }
+		});
+	}
 }
 
 // Stubbed data types
@@ -53,11 +62,11 @@ $: emptyCount = Math.max(0, totalTokens - providedCount);
 
 // Build confirmation message (markdown supported by ConfirmDialog)
 $: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs for the selected document.')}<br><br>` +
-  `${$i18n.t('Tokens total')}: <b>${totalTokens}</b><br>` +
-  `${$i18n.t('Replacement values provided')}: <b>${providedCount}</b><br>` +
-  `${$i18n.t('Replacement values empty')}: <b>${emptyCount}</b><br><br>` +
-  `${$i18n.t('All tokens will be submitted, including those not currently visible due to search filters.')}<br><br>` +
-  `${$i18n.t('Do you want to continue?')}`;
+	`${$i18n.t('Tokens total')}: <b>${totalTokens}</b><br>` +
+	`${$i18n.t('Replacement values provided')}: <b>${providedCount}</b><br>` +
+	`${$i18n.t('Replacement values empty')}: <b>${emptyCount}</b><br><br>` +
+	`${$i18n.t('All tokens will be submitted, including those not currently visible due to search filters.')}<br><br>` +
+	`${$i18n.t('Do you want to continue?')}`;
 
 // Load tokens and values from API
 async function loadTokensAndValues(): Promise<{ tokens: Token[]; values: ReplacementValues }> {
@@ -83,7 +92,10 @@ async function submitReplacementValues(payload: { token: string; value: string }
 		throw new Error('Missing context: chat, model, or document path');
 	}
 	// Filter to TokenReplacementValue type explicitly
-	const valuesToSend: TokenReplacementValue[] = payload.map((p) => ({ token: String(p.token), value: String(p.value ?? '') }));
+	const valuesToSend: TokenReplacementValue[] = payload.map((p) => ({
+		token: String(p.token),
+		value: String(p.value ?? '')
+	}));
 	await putTokenReplacementValues(cId, mId, valuesToSend);
 }
 
@@ -91,9 +103,9 @@ async function submitReplacementValues(payload: { token: string; value: string }
 let isOnlyNeedingValues = true;
 $: query = searchQuery.trim().toLowerCase();
 $: filteredTokens = tokens
-  // Only hide rows that already have a value SAVED on the server.
-  .filter((t) => (isOnlyNeedingValues ? !(typeof savedValues[t] === 'string' && savedValues[t].trim().length > 0) : true))
-  .filter((t) => (query ? t.toLowerCase().includes(query) : true));
+	// Only hide rows that already have a value SAVED on the server.
+	.filter((t) => (isOnlyNeedingValues ? !(typeof savedValues[t] === 'string' && savedValues[t].trim().length > 0) : true))
+	.filter((t) => (query ? t.toLowerCase().includes(query) : true));
 
 function updateValue(token: string, value: string) {
 	suppressDraftPersistence = false; // user changed something; allow drafts to persist again
@@ -134,6 +146,7 @@ function mergeDraftValues(base: ReplacementValues, draftVals: Record<string, str
 
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 const DEBOUNCE_MS = 250;
+
 async function persistDraftNow() {
 	if (suppressDraftPersistence) return;
 	const { cId, dId } = getContextIds();
@@ -147,6 +160,7 @@ async function persistDraftNow() {
 	const draft: TokenReplacerDraft = { values, updatedAt: Date.now() };
 	await saveTokenReplacerDraft(cId, dId, draft);
 }
+
 function persistDraftDebounced() {
 	if (saveTimeout) clearTimeout(saveTimeout);
 	saveTimeout = setTimeout(() => {
@@ -180,7 +194,10 @@ async function handleSubmit() {
 	} finally {
 		isSubmitting = false;
 		if (dismiss && typeof dismiss === 'function') {
-			try { dismiss(); } catch {}
+			try {
+				dismiss();
+			} catch {
+			}
 		}
 	}
 }
@@ -233,85 +250,93 @@ onDestroy(() => {
 		</button>
 	</div>
 
-	<!-- Search and Selected document summary (sticky under header) -->
-	<div
-		class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 sticky top-[48px] bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10">
-		<div class="mb-2">
-   <SelectedDocumentSummary on:preview={openPreviewPanel} />
+	<!-- Scrollable content area (excludes header and submit bar) -->
+	<div class="flex-1 overflow-y-auto">
+		<!-- Selected document summary (non-sticky) -->
+		<div class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+			<SelectedDocumentSummary on:preview={openPreviewPanel} />
 		</div>
-		<div class="flex items-center justify-between gap-3 mb-1">
-			<label class="block text-xs font-medium text-gray-700 dark:text-gray-300" for="token-search">
-				{$i18n.t('Search tokens')}
-			</label>
-			<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
-				<input
-					type="checkbox"
-					class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-					bind:checked={isOnlyNeedingValues}
-				/>
-				<span>{$i18n.t('Only show tokens needing a value')}</span>
-			</label>
-		</div>
-		<input
-			id="token-search"
-			class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-			type="text"
-			bind:value={searchQuery}
-			placeholder={$i18n.t('Type to filter tokens...')}
-			autocomplete="off"
-			spellcheck={false}
-		/>
-	</div>
 
-	<!-- Content area -->
-	<div class="flex-1 px-4 py-2 pb-24 space-y-3">
-		{#if isLoading}
-			<div class="text-sm text-gray-600 dark:text-gray-300" aria-live="polite">{$i18n.t('Loading tokens...')}</div>
-		{:else if loadError}
-			<div class="text-sm text-red-600 dark:text-red-400" role="alert">{loadError}</div>
-		{:else}
-			{#if filteredTokens.length === 0}
-				<div class="text-sm text-gray-600 dark:text-gray-300">
-					{#if isOnlyNeedingValues}
-						{$i18n.t('No tokens need a value for the current search.')}
-					{:else}
-						{$i18n.t('No tokens match your search.')}
-					{/if}
-				</div>
+		<!-- Search and filtering (sticky within scroll container) -->
+		<div
+			class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10">
+			<div class="flex items-center justify-between gap-3 mb-1">
+				<label class="block text-xs font-medium text-gray-700 dark:text-gray-300" for="token-search">
+					{$i18n.t('Search tokens')}
+				</label>
+				<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
+					<input
+						type="checkbox"
+						class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+						bind:checked={isOnlyNeedingValues}
+					/>
+					<span>{$i18n.t('Only show tokens needing a value')}</span>
+				</label>
+			</div>
+			<input
+				id="token-search"
+				class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+				type="text"
+				bind:value={searchQuery}
+				placeholder={$i18n.t('Type to filter tokens...')}
+				autocomplete="off"
+				spellcheck={false}
+			/>
+		</div>
+
+		<!-- Content area -->
+		<div class="px-4 py-2 pb-24 space-y-3">
+			{#if isLoading}
+				<div class="text-sm text-gray-600 dark:text-gray-300" aria-live="polite">{$i18n.t('Loading tokens...')}</div>
+			{:else if loadError}
+				<div class="text-sm text-red-600 dark:text-red-400" role="alert">{loadError}</div>
 			{:else}
-				<div class="space-y-4">
-					{#each filteredTokens as token}
-						<div class="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:gap-4 items-start">
-       			<div
-							class="lg:col-span-1 text-[11px] lg:text-xs font-semibold text-gray-800 dark:text-gray-200 break-words whitespace-pre-wrap select-text">
-							{token}
-						</div>
-							<div class="lg:col-span-2">
- 							{#key token}
- 								<input
- 									id={getInputId(token)}
- 									class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
- 									type="text"
- 									placeholder={$i18n.t('Replacement value')}
- 									aria-label={$i18n.t('Replacement value')}
- 									aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
- 									value={values[token] ?? ''}
- 									on:input={handleInput(token)}
- 									autocomplete="off"
- 								/>
- 								{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
- 									<div id={`${getInputId(token)}-draft`} class="mt-1 text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
- 										<span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
- 										<span class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
- 									</div>
- 								{/if}
- 							{/key}
- 						</div>
-						</div>
-					{/each}
-				</div>
+				{#if filteredTokens.length === 0}
+					<div class="text-sm text-gray-600 dark:text-gray-300">
+						{#if isOnlyNeedingValues}
+							{$i18n.t('No tokens need a value for the current search.')}
+						{:else}
+							{$i18n.t('No tokens match your search.')}
+						{/if}
+					</div>
+				{:else}
+					<div class="space-y-4">
+						{#each filteredTokens as token}
+							<div class="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:gap-4 items-start">
+								<div
+									class="lg:col-span-1 text-[11px] lg:text-xs font-semibold text-gray-800 dark:text-gray-200 break-words whitespace-pre-wrap select-text">
+									{token}
+								</div>
+								<div class="lg:col-span-2">
+									{#key token}
+										<input
+											id={getInputId(token)}
+											class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
+											type="text"
+											placeholder={$i18n.t('Replacement value')}
+											aria-label={$i18n.t('Replacement value')}
+											aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
+											value={values[token] ?? ''}
+											on:input={handleInput(token)}
+											autocomplete="off"
+										/>
+										{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
+											<div id={`${getInputId(token)}-draft`}
+													 class="mt-1 text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+												<span
+													class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
+												<span
+													class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
+											</div>
+										{/if}
+									{/key}
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
 			{/if}
-		{/if}
+		</div>
 	</div>
 
 	<!-- Submit bar (sticky bottom) -->
@@ -345,10 +370,10 @@ onDestroy(() => {
 
 
 <ConfirmDialog
-  bind:show={showConfirm}
-  title={$i18n.t('Confirm submission')}
-  message={confirmMessage}
-  cancelLabel={$i18n.t('Cancel')}
-  confirmLabel={$i18n.t('Submit All')}
-  onConfirm={handleSubmit}
+	bind:show={showConfirm}
+	title={$i18n.t('Confirm submission')}
+	message={confirmMessage}
+	cancelLabel={$i18n.t('Cancel')}
+	confirmLabel={$i18n.t('Submit All')}
+	onConfirm={handleSubmit}
 />
