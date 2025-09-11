@@ -80,10 +80,18 @@
           aria-label={$isChatStarted ? "Continue Token Replacement" : "Begin Token Replacement"}
           on:click={() => {
             const file = $selectedTokenizedDoc;
-            const name = file?.name ?? 'selected document';
-            let url = file?.url || '';
-            if (url.includes('?')) url = url.split('?')[0];
-            const prompt = `Begin the token replacement assistant session. The user has selected a tokenized document named "${name}". Please briefly explain how we will proceed to replace tokens in this document, what information you will need, and how the user can confirm or adjust replacements. Document URL: ${url}`;
+            const fullPath = $selectedTokenizedDocPath;
+            // Build directive envelope as a JSON string
+            const directive = {
+              _kind: 'openwebui.directive',
+              version: 1,
+              name: 'token_replacer.begin',
+              assistant_only: true,
+              payload: {
+                file_path: String(fullPath || '')
+              }
+            };
+            const prompt = JSON.stringify(directive);
             appHooks.callHook('chat.submit', { prompt });
             // Switch to the actions sub-view after the beginning
             currentTokenReplacerSubView.set('actions');

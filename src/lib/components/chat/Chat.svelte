@@ -396,6 +396,60 @@ onDestroy(() => {
 		saveChatHandler(_chatId, history);
 	};
 
+	// Helper: parse directive envelope from a string; returns object or null
+	const parseDirectiveEnvelope = (text: string) => {
+		if (typeof text !== 'string') return null;
+		try {
+			const data = JSON.parse(text);
+			if (
+				data &&
+				typeof data === 'object' &&
+				data._kind === 'openwebui.directive' &&
+				(data.version === 1 || data.version === '1') &&
+				typeof data.name === 'string' && data.name
+			) {
+				return data;
+			}
+		} catch {}
+		return null;
+	};
+
+	// Helper: delete a message by id, re-parent its children, and persist
+	const deleteMessageById = async (targetId: string) => {
+		if (!targetId || !history.messages[targetId]) return;
+		const target = history.messages[targetId];
+		const parentId = target.parentId;
+		const children = Array.isArray(target.childrenIds) ? [...target.childrenIds] : [];
+		// Remove target from parent's childrenIds
+		if (parentId && history.messages[parentId]) {
+			history.messages[parentId].childrenIds = history.messages[parentId].childrenIds.filter((cid) => cid !== targetId);
+		}
+		// Re-parent children to target's parent
+		for (const childId of children) {
+			if (history.messages[childId]) {
+				history.messages[childId].parentId = parentId ?? null;
+				if (parentId && history.messages[parentId]) {
+					const p = history.messages[parentId];
+					if (!Array.isArray(p.childrenIds)) p.childrenIds = [];
+					if (!p.childrenIds.includes(childId)) {
+						p.childrenIds.push(childId);
+					}
+				}
+			}
+		}
+		// If currentId points to the deleted message, move currentId to last child or parent
+		if (history.currentId === targetId) {
+			if (children.length > 0) {
+				history.currentId = children[children.length - 1];
+			} else {
+				history.currentId = parentId ?? null;
+			}
+		}
+		// Finally, remove the target message
+		delete history.messages[targetId];
+		await saveChatHandler($chatId, history);
+	};
+
 	const chatEventHandler = async (event, cb) => {
 		console.log(event);
 
@@ -412,6 +466,10 @@ onDestroy(() => {
 						message.statusHistory.push(data);
 					} else {
 						message.statusHistory = [data];
+					}
+					// If the backend indicates the response is done via status, mark the message as done
+					if (data?.done === true) {
+						message.done = true;
 					}
 				} else if (type === 'chat:completion') {
 					chatCompletionEventHandler(data, message, event.chat_id);
@@ -505,6 +563,13 @@ onDestroy(() => {
 					eventConfirmationMessage = data.message;
 					eventConfirmationInputPlaceholder = data.placeholder;
 					eventConfirmationInputValue = data?.value ?? '';
+				} else if (type === 'chat:message:delete') {
+					// NOTE: private-ai added the `chat:message:delete` message type
+					// Delete a specific message by ID and optionally re-parent its children
+					const targetId = data?.id ?? null;
+					if (targetId) {
+						await deleteMessageById(targetId);
+					}
 				} else if (type === 'metadata') {
 					message.metadata = data;
 				} else {
@@ -1564,6 +1629,8 @@ onDestroy(() => {
 
 		// Create user message
 		let userMessageId = uuidv4();
+		const directive = parseDirectiveEnvelope(userPrompt);
+		const isAssistantOnlyDirective = Boolean(directive?.assistant_only === true);
 		let userMessage = {
 			id: userMessageId,
 			parentId: messages.length !== 0 ? messages.at(-1).id : null,
@@ -1572,7 +1639,8 @@ onDestroy(() => {
 			content: userPrompt,
 			files: _files.length > 0 ? _files : undefined,
 			timestamp: Math.floor(Date.now() / 1000), // Unix epoch
-			models: selectedModels
+			models: selectedModels,
+			...(isAssistantOnlyDirective ? { hidden: true } : {})
 		};
 
 		// Add message to history and Set currentId to messageId
@@ -1591,6 +1659,11 @@ onDestroy(() => {
 		saveSessionSelectedModels();
 
 		await sendMessage(history, userMessageId, { newChat: true });
+
+		// If this was an assistant-only directive, remove the user message immediately on the client
+		if (isAssistantOnlyDirective) {
+			await deleteMessageById(userMessageId);
+		}
 	};
 
 	const sendMessage = async (
