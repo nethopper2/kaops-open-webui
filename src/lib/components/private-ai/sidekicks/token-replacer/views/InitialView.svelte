@@ -102,7 +102,7 @@
                 if (!tId) return;
                 const cNow = $chatId;
                 const doSave = async (cid) => {
-                  await savePrivateAiSidekickState(cid, tId, { selectedTokenizedDocPath: $selectedTokenizedDocPath });
+                  await savePrivateAiSidekickState(cid, tId, { tokenizedDocPath: $selectedTokenizedDocPath });
                 };
                 if (cNow) {
                   await doSave(cNow);

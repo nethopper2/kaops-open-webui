@@ -10,7 +10,7 @@
   const i18n = getContext('i18n');
 
 	type TokenReplacerState = {
-		selectedTokenizedDocPath?: string;
+		tokenizedDocPath?: string;
 	};
 
   export let modelId: string | null = null;
@@ -19,8 +19,8 @@
 
   // Hydrate selection from the initial state once
   let hydrated = false;
-  $: if (!hydrated && initialState?.selectedTokenizedDocPath) {
-    selectedTokenizedDocPath.set(String(initialState.selectedTokenizedDocPath));
+  $: if (!hydrated && initialState?.tokenizedDocPath) {
+    selectedTokenizedDocPath.set(String(initialState.tokenizedDocPath));
     hydrated = true;
   }
 
