@@ -66,10 +66,15 @@ function updateHeaderHeight() {
 	headerHeight = headerEl?.offsetHeight ?? 0;
 }
 
-// Derived counts for confirmation
+// Derived counts and stats
 $: totalTokens = tokens.length;
-$: providedCount = tokens.reduce((acc, t) => (values[t]?.trim()?.length ? acc + 1 : acc), 0);
-$: emptyCount = Math.max(0, totalTokens - providedCount);
+$: providedCount = tokens.reduce((acc, t) => {
+	const v = (values[t] ?? '').trim();
+	const s = (savedValues[t] ?? '').trim();
+	return v.length > 0 && v === s ? acc + 1 : acc;
+}, 0);
+$: emptyCount = tokens.reduce((acc, t) => (((values[t] ?? '').trim().length === 0) ? acc + 1 : acc), 0);
+$: draftCount = tokens.reduce((acc, t) => ((values[t] ?? '').trim() !== (savedValues[t] ?? '').trim() ? acc + 1 : acc), 0);
 
 // Build confirmation message (markdown supported by ConfirmDialog)
 $: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs for the selected document.')}<br><br>` +
@@ -310,24 +315,35 @@ onDestroy(() => {
 	<!-- Header -->
 	<div
 		bind:this={headerEl}
-		class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20">
-		<div class="text-base font-medium text-gray-800 dark:text-gray-100">
-			{$i18n.t('Edit Replacement Values')}
+		class="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20">
+		<div class="hidden sm:flex items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
+			<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 border border-green-300/70 dark:border-green-700/60 text-green-800 dark:text-green-300">
+				{$i18n.t('Complete')}: {providedCount}
+			</span>
+			<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+				{$i18n.t('Incomplete')}: {emptyCount}
+			</span>
+			<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
+				{$i18n.t('Total')}: {totalTokens}
+			</span>
+			<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+				{$i18n.t('Drafts')}: {draftCount}
+			</span>
 		</div>
 	</div>
 
 	<!-- Content area container (page scroll) -->
 	<div>
 		<!-- Selected document summary (non-sticky) -->
-		<div class="p-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
 			<SelectedDocumentSummary on:preview={openPreviewPanel} />
 		</div>
 
 		<!-- Search and filtering (sticky within scroll container) -->
 		<div
-			class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 sticky bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10 shadow"
+			class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 sticky bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10 shadow"
 			style={`top: ${headerHeight}px`}>
-			<div class="flex items-center justify-between gap-3 mb-1">
+			<div class="flex items-center justify-between gap-2 mb-1">
 				<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
 					<input
 						type="checkbox"
@@ -346,13 +362,28 @@ onDestroy(() => {
 			</div>
 			<input
 				id="token-search"
-				class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+				class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
 				type="text"
 				bind:value={searchQuery}
 				placeholder={$i18n.t('Type to filter tokens...')}
 				autocomplete="off"
 				spellcheck={false}
 			/>
+			<!-- Small-screen stats under search -->
+			<div class="mt-1 sm:hidden flex flex-wrap items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
+				<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 border border-green-300/70 dark:border-green-700/60 text-green-800 dark:text-green-300">
+					{$i18n.t('Complete')}: {providedCount}
+				</span>
+				<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+					{$i18n.t('Incomplete')}: {emptyCount}
+				</span>
+				<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
+					{$i18n.t('Total')}: {totalTokens}
+				</span>
+				<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+					{$i18n.t('Drafts')}: {draftCount}
+				</span>
+			</div>
 		</div>
 
 		<!-- Content area -->

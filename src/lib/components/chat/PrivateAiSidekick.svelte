@@ -197,7 +197,7 @@ onDestroy(() => {
 						<div
 							class="w-full bg-white dark:shadow-lg dark:bg-gray-850 border border-gray-100 dark:border-gray-850 z-40 pointer-events-auto overflow-y-auto scrollbar-hidden">
 							<div class="flex flex-col w-full h-full">
-								<div class="flex items-center justify-between dark:text-gray-100 mb-2 p-4">
+								<div class="flex items-center justify-between dark:text-gray-100 pt-4 px-4">
 									<div class="flex items-center gap-2">
 										<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover"
 												 draggable="false" />
