@@ -29,7 +29,7 @@
 		socket,
 		showControls,
 		showCallOverlay,
-		showPrivateAiModelToolbar,
+		showPrivateAiSidekick,
 		currentChatPage,
 		temporaryChatEnabled,
 		mobile,
@@ -41,7 +41,7 @@
 		selectedFolder,
 		pinnedChats,
 		currentSelectedModelId,
-		canShowPrivateAiModelToolbar
+		canShowPrivateAiSidekick
 	} from '$lib/stores';
 	import {
 		convertMessagesToHistory,
@@ -84,7 +84,8 @@
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
  import ChatControls from './ChatControls.svelte';
- import PrivateAiModelToolbar from './PrivateAiModelToolbar.svelte';
+ import PrivateAiSidekick from './PrivateAiSidekick.svelte';
+ import ChatOverlay from './ChatOverlay.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import Placeholder from './Placeholder.svelte';
 	import NotificationToast from '../NotificationToast.svelte';
@@ -136,11 +137,19 @@
  	currentSelectedModelId.set(singleId);
  }
  
-// Auto open/close of Private AI toolbar is now handled via appHooks 'model.changed' in onMount.
+// Auto open/close of Private AI sidekick is now handled via appHooks 'model.changed' in onMount.
 import { appHooks } from '$lib/utils/hooks';
 
 let __unhookModelChanged: (() => void) | undefined;
 let __unhookChatSubmit: (() => void) | undefined;
+let __unhookChatOverlay: (() => void) | undefined;
+let __unsubShowPrivateToolbar: Unsubscriber | undefined;
+
+// Overlay state controlled via appHooks 'chat.overlay'
+let overlayShow = false;
+let overlayTitle = '';
+let overlayComponent: any = null;
+let overlayProps: Record<string, unknown> = {};
 
 onMount(() => {
 	const handler = async ({ prevModelId, modelId, canShowPrivateAiToolbar }: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => {
@@ -150,28 +159,53 @@ onMount(() => {
 			return;
 		}
 		if (canShowPrivateAiToolbar) {
-			showPrivateAiModelToolbar.set(true);
+			showPrivateAiSidekick.set(true);
 			await tick();
 			privateAiPaneComponent?.openPane?.();
 		} else {
-			showPrivateAiModelToolbar.set(false);
+			showPrivateAiSidekick.set(false);
 		}
 	};
 	__unhookModelChanged = appHooks.hook('model.changed', handler);
 	// Call once on mount to handle initial state
 	(async () => {
-		await handler({ prevModelId: null, modelId: get(currentSelectedModelId), canShowPrivateAiToolbar: get(canShowPrivateAiModelToolbar) });
+		await handler({ prevModelId: null, modelId: get(currentSelectedModelId), canShowPrivateAiToolbar: get(canShowPrivateAiSidekick) });
 	})();
 
-	// Allow external components (e.g., Private AI toolbars) to submit a prompt
+	// Allow external components (e.g., Private AI sidekicks) to submit a prompt
 	__unhookChatSubmit = appHooks.hook('chat.submit', ({ prompt }) => {
 		submitPrompt(prompt);
+	});
+
+	// Hook for chat-level overlay control
+	__unhookChatOverlay = appHooks.hook('chat.overlay', ({ action, title, component, props }) => {
+		if (action === 'open') {
+			overlayTitle = title ?? '';
+			overlayComponent = component ?? null;
+			overlayProps = props ?? {};
+			overlayShow = true;
+		} else if (action === 'update') {
+			overlayTitle = title ?? overlayTitle;
+			overlayComponent = component ?? overlayComponent;
+			overlayProps = props ? { ...overlayProps, ...props } : overlayProps;
+		} else if (action === 'close') {
+			overlayShow = false;
+		}
+	});
+
+	// Close overlay if the Private AI sidekick closes
+	__unsubShowPrivateToolbar = showPrivateAiSidekick.subscribe((v) => {
+		if (!v) {
+			overlayShow = false;
+		}
 	});
 });
 
 onDestroy(() => {
 	__unhookModelChanged?.();
 	__unhookChatSubmit?.();
+	__unhookChatOverlay?.();
+	__unsubShowPrivateToolbar?.();
 });
 
 	let selectedToolIds = [];
@@ -226,15 +260,15 @@ onDestroy(() => {
 			loading = false;
 			window.setTimeout(() => scrollToBottom(), 0);
 
-			// Ensure Private AI toolbar opens when an existing chat is loaded
+			// Ensure Private AI sidekick opens when an existing chat is loaded
 			try {
-				if (get(canShowPrivateAiModelToolbar)) {
-					showPrivateAiModelToolbar.set(true);
+				if (get(canShowPrivateAiSidekick)) {
+					showPrivateAiSidekick.set(true);
 					await tick();
 					privateAiPaneComponent?.openPane?.();
 				}
 			} catch {
-				// ignore any errors initializing the toolbar on chat load
+				// ignore any errors initializing the sidekick on chat load
 			}
 
 			await tick();
@@ -362,6 +396,60 @@ onDestroy(() => {
 		saveChatHandler(_chatId, history);
 	};
 
+	// Helper: parse directive envelope from a string; returns object or null
+	const parseDirectiveEnvelope = (text: string) => {
+		if (typeof text !== 'string') return null;
+		try {
+			const data = JSON.parse(text);
+			if (
+				data &&
+				typeof data === 'object' &&
+				data._kind === 'openwebui.directive' &&
+				(data.version === 1 || data.version === '1') &&
+				typeof data.name === 'string' && data.name
+			) {
+				return data;
+			}
+		} catch {}
+		return null;
+	};
+
+	// Helper: delete a message by id, re-parent its children, and persist
+	const deleteMessageById = async (targetId: string) => {
+		if (!targetId || !history.messages[targetId]) return;
+		const target = history.messages[targetId];
+		const parentId = target.parentId;
+		const children = Array.isArray(target.childrenIds) ? [...target.childrenIds] : [];
+		// Remove target from parent's childrenIds
+		if (parentId && history.messages[parentId]) {
+			history.messages[parentId].childrenIds = history.messages[parentId].childrenIds.filter((cid) => cid !== targetId);
+		}
+		// Re-parent children to target's parent
+		for (const childId of children) {
+			if (history.messages[childId]) {
+				history.messages[childId].parentId = parentId ?? null;
+				if (parentId && history.messages[parentId]) {
+					const p = history.messages[parentId];
+					if (!Array.isArray(p.childrenIds)) p.childrenIds = [];
+					if (!p.childrenIds.includes(childId)) {
+						p.childrenIds.push(childId);
+					}
+				}
+			}
+		}
+		// If currentId points to the deleted message, move currentId to last child or parent
+		if (history.currentId === targetId) {
+			if (children.length > 0) {
+				history.currentId = children[children.length - 1];
+			} else {
+				history.currentId = parentId ?? null;
+			}
+		}
+		// Finally, remove the target message
+		delete history.messages[targetId];
+		await saveChatHandler($chatId, history);
+	};
+
 	const chatEventHandler = async (event, cb) => {
 		console.log(event);
 
@@ -378,6 +466,10 @@ onDestroy(() => {
 						message.statusHistory.push(data);
 					} else {
 						message.statusHistory = [data];
+					}
+					// If the backend indicates the response is done via status, mark the message as done
+					if (data?.done === true) {
+						message.done = true;
 					}
 				} else if (type === 'chat:completion') {
 					chatCompletionEventHandler(data, message, event.chat_id);
@@ -471,6 +563,13 @@ onDestroy(() => {
 					eventConfirmationMessage = data.message;
 					eventConfirmationInputPlaceholder = data.placeholder;
 					eventConfirmationInputValue = data?.value ?? '';
+				} else if (type === 'chat:message:delete') {
+					// NOTE: private-ai added the `chat:message:delete` message type
+					// Delete a specific message by ID and optionally re-parent its children
+					const targetId = data?.id ?? null;
+					if (targetId) {
+						await deleteMessageById(targetId);
+					}
 				} else if (type === 'metadata') {
 					message.metadata = data;
 				} else {
@@ -1530,6 +1629,8 @@ onDestroy(() => {
 
 		// Create user message
 		let userMessageId = uuidv4();
+		const directive = parseDirectiveEnvelope(userPrompt);
+		const isAssistantOnlyDirective = Boolean(directive?.assistant_only === true);
 		let userMessage = {
 			id: userMessageId,
 			parentId: messages.length !== 0 ? messages.at(-1).id : null,
@@ -1538,7 +1639,8 @@ onDestroy(() => {
 			content: userPrompt,
 			files: _files.length > 0 ? _files : undefined,
 			timestamp: Math.floor(Date.now() / 1000), // Unix epoch
-			models: selectedModels
+			models: selectedModels,
+			...(isAssistantOnlyDirective ? { hidden: true } : {})
 		};
 
 		// Add message to history and Set currentId to messageId
@@ -1557,6 +1659,11 @@ onDestroy(() => {
 		saveSessionSelectedModels();
 
 		await sendMessage(history, userMessageId, { newChat: true });
+
+		// If this was an assistant-only directive, remove the user message immediately on the client
+		if (isAssistantOnlyDirective) {
+			await deleteMessageById(userMessageId);
+		}
 	};
 
 	const sendMessage = async (
@@ -2240,7 +2347,7 @@ onDestroy(() => {
 <div
 	class="h-screen max-h-[100dvh] transition-width duration-200 ease-in-out {$showSidebar
 		? '  md:max-w-[calc(100%-260px)]'
-		: ' '} w-full max-w-full flex flex-col"
+		: ' '} w-full max-w-full flex flex-col relative"
 	id="chat-container"
 >
 	{#if !loading}
@@ -2261,6 +2368,14 @@ onDestroy(() => {
 
 			<PaneGroup direction="horizontal" class="w-full h-full">
 				<Pane defaultSize={50} class="h-full flex relative max-w-full flex-col">
+					<ChatOverlay
+						show={overlayShow}
+						title={overlayTitle}
+						component={overlayComponent}
+						componentProps={overlayProps}
+						on:close={() => { overlayShow = false; }}
+					/>
+
 					<Navbar
 						bind:this={navbarElement}
 						chat={{
@@ -2487,11 +2602,11 @@ onDestroy(() => {
 					{eventTarget}
 				/>
 
-    <PrivateAiModelToolbar
+    <PrivateAiSidekick
 					bind:this={privateAiPaneComponent}
 					bind:pane={privateAiPane}
      on:close={() => {
-						showPrivateAiModelToolbar.set(false);
+						showPrivateAiSidekick.set(false);
 					}}
 					/>
 			</PaneGroup>

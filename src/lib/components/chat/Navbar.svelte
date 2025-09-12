@@ -14,8 +14,8 @@
 		showSidebar,
 		temporaryChatEnabled,
 		user,
-		showPrivateAiModelToolbar,
-		canShowPrivateAiModelToolbar,
+		showPrivateAiSidekick,
+		canShowPrivateAiSidekick,
 		privateAiSelectedModelAvatarUrl
 	} from '$lib/stores';
 
@@ -202,12 +202,12 @@
 						</Tooltip>
 					{/if}
 
-					{#if $canShowPrivateAiModelToolbar}
+					{#if $canShowPrivateAiSidekick}
 					<Tooltip content={$i18n.t('Model Sidekick')}>
 						<button
 							class="flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
 							on:click={async () => {
-								await showPrivateAiModelToolbar.set(!$showPrivateAiModelToolbar);
+								await showPrivateAiSidekick.set(!$showPrivateAiSidekick);
 							}}
 							aria-label="Model Sidekick"
 						>

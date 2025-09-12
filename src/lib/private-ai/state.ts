@@ -1,60 +1,42 @@
-// Centralized persistence for Private AI toolbar UI state.
-// For now, this uses LocalStorage. Replace the implementations of
-// loadPrivateAiToolbarState/savePrivateAiToolbarState with REST calls when ready.
+// Centralized persistence for Private AI sidekick UI state.
 
-export type PrivateAiToolbarCommonState = {
-  // Which toolbar is this state for (e.g., 'private-ai-token-replacer')
-  toolbarId: string;
-};
+import {
+	getSidekickState,
+	type PrivateAiSidekickState,
+	putSidekickState
+} from '$lib/apis/private-ai/sidekicks';
 
-export type TokenReplacerState = PrivateAiToolbarCommonState & {
-  selectedTokenizedDocId?: string;
-};
+// Load sidekick UI state for a given chat+sidekick from the backend
+export async function loadPrivateAiSidekickState(
+	chatId: string | null | undefined,
+	modelId: string | null | undefined
+): Promise<PrivateAiSidekickState | null> {
+	if (!chatId || !modelId) return null;
+	try {
+		// Expecting backend GET /sidekicks/state?chatId=...&modelId=...
+		const res = await getSidekickState(chatId, modelId);
 
-// Union of possible toolbar states; extend as more toolbars are added
-export type PrivateAiToolbarState = TokenReplacerState;
+		if (res) {
+			return res.stateData;
+		}
+	} catch {
+		// Silently ignore to avoid breaking UI if backend not available
+	}
 
-const STORAGE_KEY = 'private-ai:toolbar-state:v1';
-
-function safeRead(): Record<string, Record<string, PrivateAiToolbarState>> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed;
-    return {};
-  } catch {
-    return {};
-  }
+	return null;
 }
 
-function safeWrite(data: Record<string, Record<string, PrivateAiToolbarState>>): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // ignore write errors (e.g., storage disabled)
-  }
-}
-
-// Key space: state[chatId][toolbarId] -> toolbarState
-export async function loadPrivateAiToolbarState(
-  chatId: string | null | undefined,
-  toolbarId: string | null | undefined
-): Promise<PrivateAiToolbarState | null> {
-  if (!chatId || !toolbarId) return null;
-  const store = safeRead();
-  return store?.[chatId]?.[toolbarId] ?? null;
-}
-
-export async function savePrivateAiToolbarState(
-  chatId: string | null | undefined,
-  toolbarId: string | null | undefined,
-  state: PrivateAiToolbarState
+// Save sidekick UI state for a given chat+sidekick to the backend
+export async function savePrivateAiSidekickState(
+	chatId: string | null | undefined,
+	modelId: string | null | undefined,
+	state: PrivateAiSidekickState
 ): Promise<void> {
-  if (!chatId || !toolbarId) return;
-  const store = safeRead();
-  const byChat = store[chatId] ?? {};
-  byChat[toolbarId] = state;
-  store[chatId] = byChat;
-  safeWrite(store);
+	if (!chatId || !modelId) return;
+	try {
+		// Expecting backend PUT /sidekicks/state with JSON body
+		await putSidekickState(chatId, modelId, state);
+	} catch {
+		// Ignore persistence errors; UI should continue functioning
+	}
 }

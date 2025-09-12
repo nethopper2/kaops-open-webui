@@ -6,7 +6,7 @@ import type { Socket } from 'socket.io-client';
 import type { ComponentType } from 'svelte';
 
 import emojiShortCodes from '$lib/emoji-shortcodes.json';
-import { canSupportToolbar, loadPrivateAiToolbarComponent } from '$lib/private-ai/toolbars';
+import { canSupportSidekick, loadPrivateAiSidekickComponent } from '$lib/private-ai/toolbars';
 import { appHooks } from '$lib/utils/hooks';
 
 // Backend
@@ -81,26 +81,26 @@ export const showShortcuts = writable(false);
 export const showArchivedChats = writable(false);
 export const showChangelog = writable(false);
 
-// Used to show a toolbar when the selected model supports it.
-export const showPrivateAiModelToolbar = writable(false);
+// Used to show a sidekick when the selected model supports it.
+export const showPrivateAiSidekick = writable(false);
 
 export const showControls = writable(false);
 export const showOverview = writable(false);
 export const showArtifacts = writable(false);
 export const showCallOverlay = writable(false);
 
-// Ensure mutual exclusivity between Controls and Private AI Toolbar globally
+// Ensure mutual exclusivity between Controls and Private AI Model sidekick globally
 // This centralizes the logic so only one of these can be true at a time
 let __enforcingExclusivePanels = false;
 showControls.subscribe((v) => {
 	if (__enforcingExclusivePanels) return;
 	if (v) {
 		__enforcingExclusivePanels = true;
-		showPrivateAiModelToolbar.set(false);
+		showPrivateAiSidekick.set(false);
 		__enforcingExclusivePanels = false;
 	}
 });
-showPrivateAiModelToolbar.subscribe((v) => {
+showPrivateAiSidekick.subscribe((v) => {
 	if (__enforcingExclusivePanels) return;
 	if (v) {
 		__enforcingExclusivePanels = true;
@@ -111,27 +111,27 @@ showPrivateAiModelToolbar.subscribe((v) => {
 
 // Single source of truth for which right-side pane is active in the PaneGroup
 export const activeRightPane = derived(
-	[showControls, showPrivateAiModelToolbar],
+	[showControls, showPrivateAiSidekick],
 	([controls, privateAi]) => (controls ? 'controls' : privateAi ? 'private' : null) as 'controls' | 'private' | null
 );
 
 
-// Selected single model id used for Private AI toolbars
+// Selected single model id used for Private AI sidekicks
 export const currentSelectedModelId: Writable<string | null> = writable<string | null>(null);
 
-// Component to render for the selected model's toolbar (loaded asynchronously)
-export const privateAiModelToolbarComponent: Writable<ComponentType | null> = writable<ComponentType | null>(null);
+// Component to render for the selected model's sidekick (loaded asynchronously)
+export const privateAiSidekickComponent: Writable<ComponentType | null> = writable<ComponentType | null>(null);
 currentSelectedModelId.subscribe(async (id) => {
 	try {
-		const comp = await loadPrivateAiToolbarComponent(id);
-		privateAiModelToolbarComponent.set(comp);
+		const comp = await loadPrivateAiSidekickComponent(id);
+		privateAiSidekickComponent.set(comp);
 	} catch {
-		privateAiModelToolbarComponent.set(null);
+		privateAiSidekickComponent.set(null);
 	}
 });
 
-// Derived: whether Private AI Model Sidekick can be used with the selected model
-export const canShowPrivateAiModelToolbar = derived(currentSelectedModelId, (id) => canSupportToolbar(id));
+// Derived: whether Private AI Model sidekick can be used with the selected model
+export const canShowPrivateAiSidekick = derived(currentSelectedModelId, (id) => canSupportSidekick(id));
 
 // Derived: avatar URL for the selected model (matches ModelSelector avatar)
 export const privateAiSelectedModelAvatarUrl = derived(
@@ -153,7 +153,7 @@ currentSelectedModelId.subscribe((modelId) => {
 	__prevHookModelId = modelId;
 	try {
 		// Compute canShow synchronously using pure helper to avoid reactive timing issues
-		const canShow = canSupportToolbar(modelId);
+		const canShow = canSupportSidekick(modelId);
 		appHooks.callHook('model.changed', {
 			prevModelId,
 			modelId,
