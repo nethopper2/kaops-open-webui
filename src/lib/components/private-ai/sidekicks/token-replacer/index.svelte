@@ -1,7 +1,6 @@
 <script lang="ts">
   import { getContext } from 'svelte';
   import InitialView from '$lib/components/private-ai/sidekicks/token-replacer/views/InitialView.svelte';
-  import ActionsView from '$lib/components/private-ai/sidekicks/token-replacer/views/ActionsView.svelte';
   import EditValuesView from '$lib/components/private-ai/sidekicks/token-replacer/views/EditValuesView.svelte';
   import { isChatStarted } from '$lib/stores';
   import { currentTokenReplacerSubView, selectedTokenizedDocPath } from './stores';
@@ -30,9 +29,7 @@
 
 <div class="flex flex-col w-full h-full">
   {#if $started}
-    {#if $currentTokenReplacerSubView === 'actions'}
-      <ActionsView />
-    {:else if $currentTokenReplacerSubView === 'editValues'}
+    {#if $currentTokenReplacerSubView === 'editValues'}
       <EditValuesView />
     {:else}
       <InitialView {modelId} />

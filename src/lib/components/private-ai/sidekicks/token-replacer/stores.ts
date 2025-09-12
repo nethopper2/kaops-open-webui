@@ -29,8 +29,8 @@ export const selectedTokenizedDoc = derived(
 );
 
 // Manage which sub-view is shown within the token-replacer sidekick
-export type TokenReplacerSubView = 'initial' | 'actions' | 'editValues';
-export const currentTokenReplacerSubView: Writable<TokenReplacerSubView> = writable('actions');
+export type TokenReplacerSubView = 'initial' | 'editValues';
+export const currentTokenReplacerSubView: Writable<TokenReplacerSubView> = writable('editValues');
 
 export async function ensureFilesFetched(): Promise<void> {
 	if (get(filesFetched) || get(filesLoading)) return;
@@ -69,7 +69,7 @@ chatId.subscribe((newIdRaw) => {
 		if (newId === '') {
 			currentTokenReplacerSubView.set('initial');
 		} else {
-			currentTokenReplacerSubView.set('actions');
+			currentTokenReplacerSubView.set('editValues');
 		}
 		return;
 	}
@@ -88,14 +88,14 @@ chatId.subscribe((newIdRaw) => {
 
 	// Starting a brand-new chat ('' -> someId): preserve the current selection; show actions
 	if (prev === '' && newId !== '') {
-		currentTokenReplacerSubView.set('actions');
+		currentTokenReplacerSubView.set('editValues');
 		return;
 	}
 
-	// Switching between existing chats (idA -> idB): clear per-chat state; show actions
+	// Switching between existing chats (idA -> idB): clear per-chat state; show edit values
 	if (prev !== '' && newId !== '' && newId !== prev) {
 		resetTokenReplacerStores();
-		currentTokenReplacerSubView.set('actions');
+		currentTokenReplacerSubView.set('editValues');
 		return;
 	}
 });

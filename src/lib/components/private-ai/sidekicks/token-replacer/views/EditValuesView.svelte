@@ -1,7 +1,7 @@
 <script lang="ts">
 import { getContext, onDestroy, onMount } from 'svelte';
 import { toast } from 'svelte-sonner';
-import { currentTokenReplacerSubView, selectedTokenizedDoc, selectedTokenizedDocPath } from '../stores';
+import { ensureFilesFetched, selectedTokenizedDoc, selectedTokenizedDocPath } from '../stores';
 import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
 import { appHooks } from '$lib/utils/hooks';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
@@ -61,6 +61,7 @@ let headerEl: HTMLDivElement | null = null;
 let headerHeight = 0;
 let headerRO: ResizeObserver | null = null;
 let headerResizeHandler: (() => void) | null = null;
+
 function updateHeaderHeight() {
 	headerHeight = headerEl?.offsetHeight ?? 0;
 }
@@ -82,9 +83,8 @@ $: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs fo
 async function loadTokensAndValues(): Promise<{ tokens: Token[]; values: ReplacementValues }> {
 	const cId = $chatId as string | null;
 	const mId = $currentSelectedModelId as string | null;
-	const dPath = $selectedTokenizedDocPath as string | null;
-	if (!cId || !mId || !dPath) {
-		throw new Error('Missing context: chat, model, or document path');
+	if (!cId || !mId) {
+		throw new Error('Missing context: chat or model');
 	}
 	const res = await getTokenReplacementValues(cId, mId);
 	const data = (res as any)?.data ?? res;
@@ -107,6 +107,30 @@ async function submitReplacementValues(payload: { token: string; value: string }
 		value: String(p.value ?? '')
 	}));
 	await putTokenReplacementValues(cId, mId, valuesToSend);
+}
+
+// Trigger generation of the replacement document via app hook
+async function handleGenerate() {
+	const cId = $chatId as string | null;
+	const mId = $currentSelectedModelId as string | null;
+	const dPath = $selectedTokenizedDocPath as string | null;
+	if (!cId || !mId || !dPath) {
+		toast.error($i18n.t('Missing context: chat, model, or document path'));
+		return;
+	}
+	let dismiss: (() => void) | undefined;
+	try {
+		// TODO: call the REST api via a new function in `src/lib/apis/private-ai/sidekicks/token-replacer/index.ts`
+		dismiss = toast.success($i18n.t('TODO: Generation requested'));
+	} catch (e) {
+		console.error(e);
+		toast.error($i18n.t('Failed to start generation'));
+	} finally {
+		try {
+			dismiss && dismiss();
+		} catch {
+		}
+	}
 }
 
 // Derived filtered tokens with an optional "needs value" filter
@@ -223,12 +247,18 @@ async function handleSubmit() {
 }
 
 onMount(async () => {
+	// Ensure the list of tokenized files is loaded so the selected document summary can resolve on refresh
+	try {
+		await ensureFilesFetched();
+	} catch {
+	}
 	// Measure header height and watch for changes
 	updateHeaderHeight();
 	try {
 		headerRO = new ResizeObserver(() => updateHeaderHeight());
 		if (headerEl) headerRO.observe(headerEl);
-	} catch {}
+	} catch {
+	}
 	headerResizeHandler = () => updateHeaderHeight();
 	window.addEventListener('resize', headerResizeHandler);
 
@@ -262,7 +292,10 @@ onDestroy(() => {
 		saveTimeout = null;
 	}
 	// Cleanup header observers/listeners
-	try { headerRO?.disconnect(); } catch {}
+	try {
+		headerRO?.disconnect();
+	} catch {
+	}
 	headerRO = null;
 	if (headerResizeHandler) {
 		window.removeEventListener('resize', headerResizeHandler);
@@ -275,22 +308,18 @@ onDestroy(() => {
 
 <div class="flex flex-col w-full items-stretch justify-start">
 	<!-- Header -->
- <div
+	<div
 		bind:this={headerEl}
 		class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20">
-		<div class="text-base font-medium text-gray-800 dark:text-gray-100">{$i18n.t('Edit Replacement Values')}</div>
-		<button
-			class="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-750 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700"
-			on:click={() => currentTokenReplacerSubView.set('actions')}
-		>
-			{$i18n.t('Back to actions')}
-		</button>
+		<div class="text-base font-medium text-gray-800 dark:text-gray-100">
+			{$i18n.t('Edit Replacement Values')}
+		</div>
 	</div>
 
 	<!-- Content area container (page scroll) -->
 	<div>
 		<!-- Selected document summary (non-sticky) -->
-		<div class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+		<div class="p-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
 			<SelectedDocumentSummary on:preview={openPreviewPanel} />
 		</div>
 
@@ -299,17 +328,21 @@ onDestroy(() => {
 			class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 sticky bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10 shadow"
 			style={`top: ${headerHeight}px`}>
 			<div class="flex items-center justify-between gap-3 mb-1">
-				<label class="block text-xs font-medium text-gray-700 dark:text-gray-300" for="token-search">
-					{$i18n.t('Search tokens')}
-				</label>
 				<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
 					<input
 						type="checkbox"
 						class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
 						bind:checked={isOnlyNeedingValues}
 					/>
-					<span>{$i18n.t('Only show tokens needing a value')}</span>
+					<span>{$i18n.t('Hide completed')}</span>
 				</label>
+				<button
+					class="px-2 py-1 rounded bg-gray-700 text-xs text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
+					disabled={isLoading || isSubmitting || tokens.length === 0}
+					on:click={handleGenerate}
+				>
+					{$i18n.t('Generate Document')}
+				</button>
 			</div>
 			<input
 				id="token-search"
@@ -325,7 +358,8 @@ onDestroy(() => {
 		<!-- Content area -->
 		<div class="px-4 py-2 pb-24 space-y-3">
 			{#if isLoading}
-				<div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300" aria-live="polite"><Spinner/>{$i18n.t('Loading tokens...')}</div>
+				<div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300" aria-live="polite">
+					<Spinner />{$i18n.t('Loading tokens...')}</div>
 			{:else if loadError}
 				<div class="text-sm text-red-600 dark:text-red-400" role="alert">{loadError}</div>
 			{:else}
@@ -346,38 +380,41 @@ onDestroy(() => {
 									{token}
 								</div>
 								<div class="lg:col-span-2">
-         {#key token}
-									<div class="flex flex-col gap-1">
-										<input
-											id={getInputId(token)}
-											class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
-											type="text"
-											placeholder={$i18n.t('Replacement value')}
-											aria-label={$i18n.t('Replacement value')}
-											aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
-											value={values[token] ?? ''}
-											on:input={handleInput(token)}
-											autocomplete="off"
-										/>
-										<div class="flex items-center gap-2">
-											<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
-												<input
-													type="checkbox"
-													class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-													checked={(values[token] ?? '') === ''}
-													on:change={handleIgnoreToggle(token)}
-												/>
-												<span>{$i18n.t('Ignore')}</span>
-											</label>
-											{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
-												<div id={`${getInputId(token)}-draft`}
-													 class="text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-													<span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
-													<span class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
-												</div>
-											{/if}
+									{#key token}
+										<div class="flex flex-col gap-1">
+											<input
+												id={getInputId(token)}
+												class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
+												type="text"
+												placeholder={$i18n.t('Replacement value')}
+												aria-label={$i18n.t('Replacement value')}
+												aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
+												value={values[token] ?? ''}
+												on:input={handleInput(token)}
+												autocomplete="off"
+											/>
+											<div class="flex items-center gap-2">
+												<label
+													class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
+													<input
+														type="checkbox"
+														class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+														checked={(values[token] ?? '') === ''}
+														on:change={handleIgnoreToggle(token)}
+													/>
+													<span>{$i18n.t('Ignore')}</span>
+												</label>
+												{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
+													<div id={`${getInputId(token)}-draft`}
+															 class="text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+														<span
+															class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
+														<span
+															class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
+													</div>
+												{/if}
+											</div>
 										</div>
-									</div>
 									{/key}
 								</div>
 							</div>
@@ -403,13 +440,15 @@ onDestroy(() => {
 					{$i18n.t('Provide replacement values and submit when ready.')}
 				{/if}
 			</div>
-			<button
-				class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-blue-500 dark:hover:bg-blue-600 text-nowrap"
-				disabled={isLoading || isSubmitting || tokens.length === 0}
-				on:click={() => (showConfirm = true)}
-			>
-				{$i18n.t('Submit')}
-			</button>
+			<div class="flex items-center gap-2">
+				<button
+					class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-blue-500 dark:hover:bg-blue-600 text-nowrap"
+					disabled={isLoading || isSubmitting || tokens.length === 0}
+					on:click={() => (showConfirm = true)}
+				>
+					{$i18n.t('Submit')}
+				</button>
+			</div>
 		</div>
 		{#if submitError}
 			<div class="mt-2 text-xs text-red-600 dark:text-red-400" role="alert">{submitError}</div>
