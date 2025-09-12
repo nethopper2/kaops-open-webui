@@ -130,6 +130,16 @@ function handleInput(token: string) {
 	};
 }
 
+function handleIgnoreToggle(token: string) {
+	return (e: Event) => {
+		const target = e.currentTarget as HTMLInputElement;
+		if (target.checked) {
+			// Clearing the value marks it as ignored. We still submit an empty string.
+			updateValue(token, '');
+		}
+	};
+}
+
 function getInputId(token: string): string {
 	return `input-${token.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase().slice(0, 64)}`;
 }
@@ -336,7 +346,8 @@ onDestroy(() => {
 									{token}
 								</div>
 								<div class="lg:col-span-2">
-									{#key token}
+         {#key token}
+									<div class="flex flex-col gap-1">
 										<input
 											id={getInputId(token)}
 											class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
@@ -348,15 +359,25 @@ onDestroy(() => {
 											on:input={handleInput(token)}
 											autocomplete="off"
 										/>
-										{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
-											<div id={`${getInputId(token)}-draft`}
-													 class="mt-1 text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-												<span
-													class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
-												<span
-													class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
-											</div>
-										{/if}
+										<div class="flex items-center gap-2">
+											<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
+												<input
+													type="checkbox"
+													class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+													checked={(values[token] ?? '') === ''}
+													on:change={handleIgnoreToggle(token)}
+												/>
+												<span>{$i18n.t('Ignore')}</span>
+											</label>
+											{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
+												<div id={`${getInputId(token)}-draft`}
+													 class="text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+													<span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
+													<span class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
+												</div>
+											{/if}
+										</div>
+									</div>
 									{/key}
 								</div>
 							</div>
