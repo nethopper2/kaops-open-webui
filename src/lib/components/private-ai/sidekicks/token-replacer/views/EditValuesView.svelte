@@ -75,6 +75,7 @@ $: providedCount = tokens.reduce((acc, t) => {
 }, 0);
 $: emptyCount = tokens.reduce((acc, t) => (((values[t] ?? '').trim().length === 0) ? acc + 1 : acc), 0);
 $: draftCount = tokens.reduce((acc, t) => ((values[t] ?? '').trim() !== (savedValues[t] ?? '').trim() ? acc + 1 : acc), 0);
+$: progressPercent = totalTokens > 0 ? Math.round((providedCount / totalTokens) * 100) : 0;
 
 // Build confirmation message (markdown supported by ConfirmDialog)
 $: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs for the selected document.')}<br><br>` +
@@ -315,20 +316,32 @@ onDestroy(() => {
 	<!-- Header -->
 	<div
 		bind:this={headerEl}
-		class="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20">
-		<div class="hidden sm:flex items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
-			<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 border border-green-300/70 dark:border-green-700/60 text-green-800 dark:text-green-300">
-				{$i18n.t('Complete')}: {providedCount}
-			</span>
-			<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
-				{$i18n.t('Incomplete')}: {emptyCount}
-			</span>
-			<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
-				{$i18n.t('Total')}: {totalTokens}
-			</span>
-			<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
-				{$i18n.t('Drafts')}: {draftCount}
-			</span>
+		class="px-4 py-2 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20">
+		<div class="flex items-center justify-between">
+			<div class="hidden sm:flex items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 border border-green-300/70 dark:border-green-700/60 text-green-800 dark:text-green-300">
+					{$i18n.t('Complete')}: {providedCount}
+				</span>
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+					{$i18n.t('Incomplete')}: {emptyCount}
+				</span>
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
+					{$i18n.t('Total')}: {totalTokens}
+				</span>
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+					{$i18n.t('Drafts')}: {draftCount}
+				</span>
+			</div>
+		</div>
+		<div class="mt-1 w-full h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden" role="progressbar"
+				 aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent}
+				 aria-label={$i18n.t('Completion progress')}>
+			<div class="h-full bg-green-500 dark:bg-green-400 transition-[width] duration-300"
+					 style={`width: ${progressPercent}%`}></div>
 		</div>
 	</div>
 
@@ -371,16 +384,20 @@ onDestroy(() => {
 			/>
 			<!-- Small-screen stats under search -->
 			<div class="mt-1 sm:hidden flex flex-wrap items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
-				<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 border border-green-300/70 dark:border-green-700/60 text-green-800 dark:text-green-300">
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 border border-green-300/70 dark:border-green-700/60 text-green-800 dark:text-green-300">
 					{$i18n.t('Complete')}: {providedCount}
 				</span>
-				<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
 					{$i18n.t('Incomplete')}: {emptyCount}
 				</span>
-				<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
 					{$i18n.t('Total')}: {totalTokens}
 				</span>
-				<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
 					{$i18n.t('Drafts')}: {draftCount}
 				</span>
 			</div>
