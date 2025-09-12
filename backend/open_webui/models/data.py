@@ -43,6 +43,14 @@ from open_webui.env import (
     ATLASSIAN_CLIENT_SECRET,
     ATLASSIAN_REDIRECT_URL,
 
+    MINERAL_CLIENT_ID,
+    MINERAL_CLIENT_SECRET,
+    MINERAL_REDIRECT_URI,
+
+    MINERAL_BASE_URL,
+    MINERAL_AUTHORIZE_URL,
+    MINERAL_TOKEN_URL,
+
     GCS_BUCKET_NAME,
     GCS_SERVICE_ACCOUNT_BASE64
 )
@@ -244,6 +252,16 @@ class DataSourcesTable:
             "action": "atlassian",
             "layer": "confluence",
             "config_status": bool(ATLASSIAN_API_GATEWAY and ATLASSIAN_AUTHORIZE_URL and ATLASSIAN_TOKEN_URL and ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET and ATLASSIAN_REDIRECT_URL)
+        },
+        {
+            "name": "Mineral Handbooks",
+            "context": "Sync Mineral Handbooks Pages",
+            "permission": "read:handbooks, read:profile",
+            "sync_status": "unsynced",
+            "icon": "Mineral",
+            "action": "mineral",
+            "layer": "handbooks",
+            "config_status": bool(MINERAL_AUTHORIZE_URL and MINERAL_BASE_URL and MINERAL_CLIENT_ID and MINERAL_REDIRECT_URI and MINERAL_TOKEN_URL and MINERAL_CLIENT_SECRET)
         }
     ]
 
@@ -259,8 +277,8 @@ class DataSourcesTable:
             if default_source["name"] in existing_source_names:
                 continue
 
-            if default_source["config_status"] is not True:
-                continue
+            # if default_source["config_status"] is not True:
+            #     continue
                 
             # Create unique ID for this user's data source
             unique_id = f"{user_id}_{uuid.uuid4()}"

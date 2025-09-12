@@ -552,6 +552,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
 
             # For existing and new users, trigger user file data sync from the SSO provider if enabled
             if ENABLE_SSO_DATA_SYNC:
+                log.info(f"Initiating data sync for user {user_id} from {sso_provider} provider")
                 # Create default data sources for the new user
                 DataSources.create_default_data_sources_for_user(user_id)
                 # Add background tasks to sync user file data from the SSO provider
@@ -632,6 +633,8 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         user_permissions = get_permissions(
             user.id, request.app.state.config.USER_PERMISSIONS
         )
+
+        DataSources.create_default_data_sources_for_user(user.id)
 
         return {
             "token": token,

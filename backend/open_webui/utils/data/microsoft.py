@@ -64,8 +64,8 @@ def load_existing_gcs_files(service_account_base64, gcs_bucket_name):
     
     try:
         print("Loading existing files from GCS for duplicate checking...")
-        gcs_files = list_gcs_files(service_account_base64, gcs_bucket_name)
         user_prefix = f"userResources/{USER_ID}/Microsoft/"
+        gcs_files = list_gcs_files(service_account_base64, gcs_bucket_name, prefix=user_prefix)
         existing_gcs_files = {
             gcs_file['name'] for gcs_file in gcs_files 
             if gcs_file['name'].startswith(user_prefix)
@@ -939,12 +939,11 @@ async def sync_onedrive_to_gcs(auth_token, service_account_base64, GCS_BUCKET_NA
         print(f"Found {len(all_files)} files in OneDrive")
         
         # List all GCS files
-        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME)
+        user_prefix = f"{USER_ID}/OneDrive/"
+        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME, prefix=user_prefix)
         gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
         onedrive_file_paths = {file['fullPath'] for file in all_files}
         
-        # Delete orphaned GCS files that belong to this user
-        user_prefix = f"OneDrive/"
         for gcs_name, gcs_file in gcs_file_map.items():
             # Only consider files that belong to this user's OneDrive folder
             if gcs_name.startswith(user_prefix) and gcs_name not in onedrive_file_paths:
@@ -1098,12 +1097,12 @@ async def sync_sharepoint_to_gcs(auth_token, service_account_base64, GCS_BUCKET_
         print(f"Found {len(all_files)} files across all SharePoint sites")
         
         # List all GCS files
-        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME)
+        user_prefix = f"{USER_ID}/SharePoint/"
+        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME, prefix=user_prefix)
         gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
         sharepoint_file_paths = {file['fullPath'] for file in all_files}
         
         # Delete orphaned GCS files that belong to this user's SharePoint
-        user_prefix = f"{USER_ID}/SharePoint/"
         for gcs_name, gcs_file in gcs_file_map.items():
             # Only consider files that belong to this user's SharePoint folder
             if gcs_name.startswith(user_prefix) and gcs_name not in sharepoint_file_paths:

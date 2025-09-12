@@ -478,7 +478,7 @@ MICROSOFT_INTROSPECT_URL = os.environ.get(
 
 ATLASSIAN_CLIENT_ID = os.environ.get("ATLASSIAN_CLIENT_ID", None)
 ATLASSIAN_CLIENT_SECRET = os.environ.get("ATLASSIAN_CLIENT_SECRET", None)
-ATLASSIAN_REDIRECT_URL = os.environ.get("ATLASSIAN_REDIRECT_URL", None)
+ATLASSIAN_REDIRECT_URL = os.environ.get("ATLASSIAN_REDIRECT_URI", None)
 
 ATLASSIAN_AUTH_SERVER =  os.environ.get("ATLASSIAN_AUTH_SERVER", "https://auth.atlassian.com")
 ATLASSIAN_API_GATEWAY = os.environ.get("ATLASSIAN_API_GATEWAY", "https://api.atlassian.com")
@@ -486,6 +486,15 @@ ATLASSIAN_TOKEN_URL = os.environ.get("ATLASSIAN_TOKEN_URL", f"{ATLASSIAN_AUTH_SE
 ATLASSIAN_AUTHORIZE_URL = os.environ.get("ATLASSIAN_AUTHORIZE_URL", f"{ATLASSIAN_AUTH_SERVER}/authorize")
 ATLASSIAN_ACCESSIBLE_RESOURCES_URL = os.environ.get("ATLASSIAN_ACCESSIBLE_RESOURCES_URL", f"{ATLASSIAN_API_GATEWAY}/oauth/token/accessible-resources")
 
+# Mineral HR OAuth Configuration
+MINERAL_CLIENT_ID = os.getenv("MINERAL_CLIENT_ID", None)
+MINERAL_CLIENT_SECRET = os.getenv("MINERAL_CLIENT_SECRET", None)
+MINERAL_REDIRECT_URI = os.getenv("MINERAL_REDIRECT_URI", None)
+
+# Mineral API Configuration  
+MINERAL_BASE_URL = os.getenv("MINERAL_BASE_URL", "https://developers.trustmineral.com")
+MINERAL_AUTHORIZE_URL = os.getenv("MINERAL_AUTHORIZE_URL",f"{MINERAL_BASE_URL}/v2/oauth/authorize")
+MINERAL_TOKEN_URL = os.getenv("MINERAL_TOKEN_URL",f"{MINERAL_BASE_URL}/v2/oauth/token")
 
 
 BYPASS_MODEL_ACCESS_CONTROL = (

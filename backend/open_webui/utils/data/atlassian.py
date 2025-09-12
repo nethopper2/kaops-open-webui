@@ -485,10 +485,6 @@ async def sync_atlassian_to_gcs(auth_token, service_account_base64, layer=None):
         
         log.info(f"Found {len(all_atlassian_items)} items across all accessible Atlassian sites.")
         
-        # List all GCS files for this user's Atlassian prefix
-        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME)
-        gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
-        atlassian_item_paths = {item['fullPath'] for item in all_atlassian_items}
 
         # Delete orphaned GCS files - layer-specific cleanup
         if layer and layer in LAYER_CONFIG:
@@ -498,6 +494,11 @@ async def sync_atlassian_to_gcs(auth_token, service_account_base64, layer=None):
         else:
             # Clean up all Atlassian files
             user_prefix = f"userResources/{USER_ID}/Atlassian/"
+
+        # List all GCS files for this user's Atlassian prefix
+        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME, prefix=user_prefix)
+        gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
+        atlassian_item_paths = {item['fullPath'] for item in all_atlassian_items}
         
         for gcs_name, gcs_file in gcs_file_map.items():
             if gcs_name.startswith(user_prefix) and gcs_name not in atlassian_item_paths:
