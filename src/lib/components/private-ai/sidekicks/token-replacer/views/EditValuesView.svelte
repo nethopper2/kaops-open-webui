@@ -55,6 +55,7 @@ let values: ReplacementValues = {};
 let savedValues: ReplacementValues = {};
 let searchQuery = '';
 let showConfirm = false;
+let showGenerateConfirm = false;
 
 // Sticky helpers for measuring header height
 let headerEl: HTMLDivElement | null = null;
@@ -137,6 +138,26 @@ async function handleGenerate() {
 		} catch {
 		}
 	}
+}
+
+function onGenerateClick() {
+	if (draftCount > 0) {
+		showGenerateConfirm = true;
+	} else {
+		void handleGenerate();
+	}
+}
+
+async function confirmSaveThenGenerate() {
+	await handleSubmit();
+	// Only proceed to generate if submission didn't error out
+	if (!submitError) {
+		await handleGenerate();
+	}
+}
+
+function proceedGenerateWithoutSaving() {
+	void handleGenerate();
 }
 
 // Derived filtered tokens with an optional "needs value" filter
@@ -368,7 +389,7 @@ onDestroy(() => {
 				<button
 					class="px-2 py-1 rounded bg-gray-700 text-xs text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
 					disabled={isLoading || isSubmitting || tokens.length === 0}
-					on:click={handleGenerate}
+					on:click={onGenerateClick}
 				>
 					{$i18n.t('Generate Document')}
 				</button>
@@ -512,4 +533,14 @@ onDestroy(() => {
 	cancelLabel={$i18n.t('Cancel')}
 	confirmLabel={$i18n.t('Submit All')}
 	onConfirm={handleSubmit}
+/>
+
+<ConfirmDialog
+	bind:show={showGenerateConfirm}
+	title={$i18n.t('Unsaved drafts detected')}
+	message={`${$i18n.t('You have')} <b>${draftCount}</b> ${$i18n.t('unsaved draft value(s).')}<br><br>${$i18n.t('Would you like to save them before generating the document?')}`}
+	cancelLabel={$i18n.t('No, Generate')}
+	confirmLabel={$i18n.t('Save and Generate')}
+	on:confirm={confirmSaveThenGenerate}
+	on:cancel={proceedGenerateWithoutSaving}
 />
