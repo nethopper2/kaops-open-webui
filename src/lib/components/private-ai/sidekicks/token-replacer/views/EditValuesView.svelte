@@ -18,6 +18,7 @@ import {
 	saveTokenReplacerDraft,
 	type TokenReplacerDraft
 } from '../drafts';
+import Spinner from '$lib/components/common/Spinner.svelte';
 
 const i18n = getContext('i18n');
 
@@ -314,7 +315,7 @@ onDestroy(() => {
 		<!-- Content area -->
 		<div class="px-4 py-2 pb-24 space-y-3">
 			{#if isLoading}
-				<div class="text-sm text-gray-600 dark:text-gray-300" aria-live="polite">{$i18n.t('Loading tokens...')}</div>
+				<div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300" aria-live="polite"><Spinner/>{$i18n.t('Loading tokens...')}</div>
 			{:else if loadError}
 				<div class="text-sm text-red-600 dark:text-red-400" role="alert">{loadError}</div>
 			{:else}
