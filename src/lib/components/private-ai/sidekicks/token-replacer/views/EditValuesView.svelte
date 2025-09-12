@@ -491,7 +491,7 @@ onDestroy(() => {
 			<div class="flex items-center gap-2">
 				<button
 					class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-blue-500 dark:hover:bg-blue-600 text-nowrap"
-					disabled={isLoading || isSubmitting || tokens.length === 0}
+					disabled={isLoading || isSubmitting || tokens.length === 0 || draftCount === 0}
 					on:click={() => (showConfirm = true)}
 				>
 					{$i18n.t('Submit')}
