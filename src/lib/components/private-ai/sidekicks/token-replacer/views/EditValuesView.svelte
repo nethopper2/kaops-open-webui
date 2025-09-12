@@ -55,6 +55,15 @@ let savedValues: ReplacementValues = {};
 let searchQuery = '';
 let showConfirm = false;
 
+// Sticky helpers for measuring header height
+let headerEl: HTMLDivElement | null = null;
+let headerHeight = 0;
+let headerRO: ResizeObserver | null = null;
+let headerResizeHandler: (() => void) | null = null;
+function updateHeaderHeight() {
+	headerHeight = headerEl?.offsetHeight ?? 0;
+}
+
 // Derived counts for confirmation
 $: totalTokens = tokens.length;
 $: providedCount = tokens.reduce((acc, t) => (values[t]?.trim()?.length ? acc + 1 : acc), 0);
@@ -203,6 +212,15 @@ async function handleSubmit() {
 }
 
 onMount(async () => {
+	// Measure header height and watch for changes
+	updateHeaderHeight();
+	try {
+		headerRO = new ResizeObserver(() => updateHeaderHeight());
+		if (headerEl) headerRO.observe(headerEl);
+	} catch {}
+	headerResizeHandler = () => updateHeaderHeight();
+	window.addEventListener('resize', headerResizeHandler);
+
 	isLoading = true;
 	loadError = null;
 	try {
@@ -232,15 +250,23 @@ onDestroy(() => {
 		clearTimeout(saveTimeout);
 		saveTimeout = null;
 	}
+	// Cleanup header observers/listeners
+	try { headerRO?.disconnect(); } catch {}
+	headerRO = null;
+	if (headerResizeHandler) {
+		window.removeEventListener('resize', headerResizeHandler);
+		headerResizeHandler = null;
+	}
 	// Persist the latest state when the component is destroyed (e.g., panel closes)
 	void persistDraftNow();
 });
 </script>
 
-<div class="flex flex-col w-full h-full items-stretch justify-start">
+<div class="flex flex-col w-full items-stretch justify-start">
 	<!-- Header -->
-	<div
-		class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10">
+ <div
+		bind:this={headerEl}
+		class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20">
 		<div class="text-base font-medium text-gray-800 dark:text-gray-100">{$i18n.t('Edit Replacement Values')}</div>
 		<button
 			class="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-750 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700"
@@ -250,8 +276,8 @@ onDestroy(() => {
 		</button>
 	</div>
 
-	<!-- Scrollable content area (excludes header and submit bar) -->
-	<div class="flex-1 overflow-y-auto">
+	<!-- Content area container (page scroll) -->
+	<div>
 		<!-- Selected document summary (non-sticky) -->
 		<div class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
 			<SelectedDocumentSummary on:preview={openPreviewPanel} />
@@ -259,7 +285,8 @@ onDestroy(() => {
 
 		<!-- Search and filtering (sticky within scroll container) -->
 		<div
-			class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10">
+			class="p-2 py-2 border-b border-gray-200 dark:border-gray-800 sticky bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10 shadow"
+			style={`top: ${headerHeight}px`}>
 			<div class="flex items-center justify-between gap-3 mb-1">
 				<label class="block text-xs font-medium text-gray-700 dark:text-gray-300" for="token-search">
 					{$i18n.t('Search tokens')}
@@ -341,7 +368,7 @@ onDestroy(() => {
 
 	<!-- Submit bar (sticky bottom) -->
 	<div
-		class="px-4 py-3 border-t border-gray-200 dark:border-gray-800 sticky bottom-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10">
+		class="px-4 py-3 border-t border-gray-200 dark:border-gray-800 sticky bottom-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20">
 		<div class="flex items-center justify-between gap-3">
 			<div class="text-xs text-gray-600 dark:text-gray-400">
 				{#if isSubmitting}
