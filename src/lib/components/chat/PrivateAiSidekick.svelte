@@ -184,7 +184,7 @@ onDestroy(() => {
 					const opening = behavior.isOpening();
 					// Ignore collapse events while we are in the process of opening to a visible size
           if (opening) return;
-          // Only hide after the pane has actually expanded at least once; ignore initial mount collapse
+          // Only hide after the pane has actually expanded at least once; ignore the initial mount collapse
           if (hasExpanded) {
             showPrivateAiSidekick.set(false);
           }

@@ -418,7 +418,7 @@ onMount(async () => {
 	try {
 		const previewClosedHandler = () => {
 			isPreviewOpen = false;
-			isTokenOverlayOpen = false
+			isTokenOverlayOpen = false;
 		};
 		appHooks.hook('private-ai.token-replacer.preview.closed', previewClosedHandler);
 		removePreviewClosedHook = () => {
@@ -497,7 +497,7 @@ onDestroy(() => {
 	<!-- Header -->
 	<div
 		bind:this={headerEl}
-		class="px-4 py-2 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20">
+		class="px-4 py-2 sticky top-0 bg-white dark:bg-gray-900 z-20">
 		<div class="flex items-center justify-between">
 			<div class="hidden sm:flex items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
 				<span
@@ -535,63 +535,13 @@ onDestroy(() => {
 
 		<!-- Overlay scope wrapper: covers from below SelectedDocumentSummary -->
 		<div class="relative">
-
 			<!-- Search and filtering (sticky within scroll container) -->
-			<div
-				class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 sticky bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-10 shadow"
-				style={`top: ${headerHeight}px`}>
-				<div class="flex items-center justify-between gap-2 mb-1">
-					<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
-						<input
-							type="checkbox"
-							class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-							bind:checked={isOnlyNeedingValues}
-						/>
-						<span>{$i18n.t('Hide completed')}</span>
-					</label>
-					<button
-						class="px-2 py-1 rounded bg-gray-700 text-xs text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
-						disabled={isLoading || isSubmitting || tokens.length === 0}
-						on:click={onGenerateClick}
-					>
-						{$i18n.t('Generate Document')}
-					</button>
-				</div>
-				<input
-					id="token-search"
-					class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-					type="text"
-					bind:value={searchQuery}
-					placeholder={$i18n.t('Type to filter tokens...')}
-					autocomplete="off"
-					spellcheck={false}
-				/>
-				<!-- Small-screen stats under search -->
-				<div class="mt-1 sm:hidden flex flex-wrap items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
-				<span
-					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 border border-green-300/70 dark:border-green-700/60 text-green-800 dark:text-green-300">
-					{$i18n.t('Complete')}: {providedCount}
-				</span>
-					<span
-						class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
-					{$i18n.t('Incomplete')}: {emptyCount}
-				</span>
-					<span
-						class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
-					{$i18n.t('Total')}: {totalTokens}
-				</span>
-					<span
-						class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
-					{$i18n.t('Drafts')}: {draftCount}
-				</span>
-				</div>
-			</div>
 
 			<!-- Content area -->
 			{#if isTokenOverlayOpen && overlayToken}
 				<!-- Token occurrences overlay (scoped within EditValuesView search+content area) -->
 				<div
-					class="sticky z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-l border-r border-gray-200 dark:border-gray-800 overflow-y-auto"
+					class="sticky z-30 bg-gray-50 dark:bg-gray-900 border-l border-r border-gray-200 dark:border-gray-800 overflow-y-auto"
 					style={`top: ${headerHeight}px; height: calc(100vh - ${headerHeight}px); min-height: calc(100vh - ${headerHeight}px);`}>
 					<div class="p-3 sm:p-4">
 						<div class="flex items-start justify-between gap-3 mb-3">
@@ -599,11 +549,11 @@ onDestroy(() => {
 								<div class="text-xs text-gray-500 dark:text-gray-400">{$i18n.t('Token')}</div>
 								<div
 									class="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words whitespace-pre-wrap">{overlayToken}</div>
-								<div class="text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Occurrences')}
-									: {overlayOccurrences.length}</div>
+								<div class="text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Occurrences')}:
+									{overlayOccurrences.length}</div>
 							</div>
 							<button type="button"
-											class="inline-flex items-center justify-center h-8 w-8 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
+											class="inline-flex items-center justify-center h-8 w-8 rounded text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
 											aria-label={$i18n.t('Close')} on:click={closeTokenOverlay}>
 								<span aria-hidden="true">✕</span>
 							</button>
@@ -645,6 +595,39 @@ onDestroy(() => {
 					</div>
 				</div>
 			{/if}
+
+			<div
+				class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 sticky bg-white dark:bg-gray-900 z-10 shadow"
+				style={`top: ${headerHeight}px`}>
+				<div class="flex items-center justify-between gap-2 mb-1">
+					<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
+						<input
+							type="checkbox"
+							class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+							bind:checked={isOnlyNeedingValues}
+						/>
+						<span>{$i18n.t('Hide completed')}</span>
+					</label>
+					<button
+						class="px-2 py-1 rounded bg-gray-700 text-xs text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
+						disabled={isLoading || isSubmitting || tokens.length === 0}
+						on:click={onGenerateClick}
+					>
+						{$i18n.t('Generate Document')}
+					</button>
+				</div>
+				<input
+					id="token-search"
+					class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+					type="text"
+					bind:value={searchQuery}
+					placeholder={$i18n.t('Type to filter tokens...')}
+					autocomplete="off"
+					spellcheck={false}
+				/>
+			</div>
+
+
 			<div class="relative px-4 py-2 pb-24 space-y-3">
 				{#if isLoading}
 					<div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300" aria-live="polite">
@@ -691,8 +674,8 @@ onDestroy(() => {
 															type="button"
 															class="inline-flex items-center justify-center self-start h-7 w-7 mt-0.5 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
 															on:click={() => openTokenOverlay(i, token)}
-															aria-label={$i18n.t('Open token occurrences')}
-															title={$i18n.t('Open token occurrences')}>
+															aria-label={$i18n.t('Open token details')}
+															title={$i18n.t('Open token details')}>
 															<Eye class="h-4 w-4" />
 														</button>
 													{/if}
