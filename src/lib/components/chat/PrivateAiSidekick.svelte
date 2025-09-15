@@ -89,8 +89,7 @@ const handleMediaQuery = async (e: MediaQueryList | MediaQueryListEvent) => {
 };
 
 onMount(() => {
-	// listen to resize 1024px
-	mediaQuery = window.matchMedia('(min-width: 1024px)');
+	mediaQuery = window.matchMedia('(min-width: 600px)');
 	const mqListener = (ev: MediaQueryListEvent) => handleMediaQuery(ev);
 	mediaQuery.addEventListener('change', mqListener);
 	handleMediaQuery(mediaQuery);
