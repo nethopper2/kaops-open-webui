@@ -45,10 +45,17 @@
 
   function clearSelection() {
     if (!previewContainer) return;
-    const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved');
+    const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved') as HTMLElement | null;
     if (prevSel) {
+      // Determine the token's persisted state if available
+      const savedState = (prevSel.dataset?.tokenState as 'draft' | 'saved' | undefined) ?? (prevSel.classList.contains('token-draft') ? 'draft' : 'saved');
+      // Remove selected state classes
       prevSel.classList.remove('token-selected-draft');
       prevSel.classList.remove('token-selected-saved');
+      // Normalize unselected classes: ensure only the correct one is present
+      prevSel.classList.remove('token-saved');
+      prevSel.classList.remove('token-draft');
+      prevSel.classList.add(savedState === 'draft' ? 'token-draft' : 'token-saved');
     }
   }
 
@@ -60,6 +67,11 @@
       const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
       const el = previewContainer.querySelector(`#${safeId}`) as HTMLElement | null;
       if (el) {
+        // Persist token state on the element so we can restore unselected class correctly later
+        el.dataset.tokenState = state;
+        // Remove any unselected classes before applying selected state
+        el.classList.remove('token-saved');
+        el.classList.remove('token-draft');
         el.classList.add(state === 'draft' ? 'token-selected-draft' : 'token-selected-saved');
         // Scroll into view centered within the scrollable container
         el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
@@ -137,6 +149,30 @@
       border-color: rgba(99,102,241,0.35);
     }
   }
+  /* Unselected token state styles */
+  :global(.preview-html .token.token-saved) {
+    background: #eefdf3; /* subtle green tint */
+    color: #14532d; /* green-900 */
+    border-color: rgba(16, 185, 129, 0.35); /* emerald-500/35 */
+  }
+  :global(.preview-html .token.token-draft) {
+    background: #fff7ed; /* orange-50 */
+    color: #7c2d12; /* orange-900 */
+    border-color: rgba(249, 115, 22, 0.35); /* orange-500/35 */
+  }
+  @media (prefers-color-scheme: dark) {
+    :global(.preview-html .token.token-saved) {
+      background: rgba(22, 101, 52, 0.2); /* green-700/20 */
+      color: #86efac; /* green-300 */
+      border-color: rgba(34, 197, 94, 0.35); /* green-500/35 */
+    }
+    :global(.preview-html .token.token-draft) {
+      background: rgba(124, 45, 18, 0.2); /* orange-800/20 */
+      color: #fdba74; /* orange-300 */
+      border-color: rgba(249, 115, 22, 0.35); /* orange-500/35 */
+    }
+  }
+
   /* Selected states (explicit CSS to avoid reliance on Tailwind @apply in component styles) */
   :global(.preview-html .token.token-selected-saved) {
     background: #dcfce7 !important; /* green-100 */

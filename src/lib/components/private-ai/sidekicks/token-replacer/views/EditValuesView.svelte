@@ -283,11 +283,11 @@ function handleInput(token: string, id?: string) {
 	};
 }
 
-function handleClearTokenToggle(token: string, id?: string) {
+function handleRemoveTokenToggle(token: string, id?: string) {
 	return (e: Event) => {
 		const target = e.currentTarget as HTMLInputElement;
 		if (target.checked) {
-			// Clearing the value marks it as cleared. We still submit an empty string.
+			// Clearing the value marks it as removed. We still submit an empty string.
 			updateValue(token, '');
 			if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
 				const v = ''.trim();
@@ -689,9 +689,9 @@ onDestroy(() => {
       									checked={(values[token] ?? '') === ''}
       									disabled={(values[token] ?? '') === ''}
       									title={(values[token] ?? '') === '' ? $i18n.t('Enter a value to uncheck') : undefined}
-      									on:change={handleClearTokenToggle(token, `nh-token-${i + 1}`)}
+      									on:change={handleRemoveTokenToggle(token, `nh-token-${i + 1}`)}
       								/>
-      								<span>{$i18n.t('Clear')}</span>
+      								<span>{$i18n.t('Remove')}</span>
 													</label>
 													{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
 														<div id={`${getInputId(token)}-draft`}
