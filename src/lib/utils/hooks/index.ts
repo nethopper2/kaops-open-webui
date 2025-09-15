@@ -12,7 +12,11 @@ export const appHooks = createHooks<{
 	// Request Chat to submit a new prompt
 	'chat.submit': (params: { prompt: string }) => void,
 	// Open/close/update a chat-level overlay that renders over the chat content area
-	'chat.overlay': (params: { action: 'open' | 'close' | 'update'; title?: string; component?: any; props?: Record<string, unknown> }) => void
+	'chat.overlay': (params: { action: 'open' | 'close' | 'update'; title?: string; component?: any; props?: Record<string, unknown> }) => void,
+	// Token Replacer: request preview to scroll to and highlight a token by id
+	'private-ai.token-replacer.preview.select-token': (params: { id: string; state: 'draft' | 'saved' }) => void,
+	// Token Replacer: preview component closed notification
+	'private-ai.token-replacer.preview.closed': () => void
 }>();
 
 

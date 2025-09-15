@@ -19,6 +19,7 @@ import {
 	type TokenReplacerDraft
 } from '../drafts';
 import Spinner from '$lib/components/common/Spinner.svelte';
+import Eye from '$lib/components/icons/Eye.svelte';
 
 const i18n = getContext('i18n');
 
@@ -31,7 +32,19 @@ function openPreviewPanel() {
 			component: TokenizedDocPreview,
 			props: { file, previewType: 'docx' }
 		});
+		isPreviewOpen = true;
 	}
+}
+
+function onPreviewTokenClick(idx: number, token: string) {
+	// Placeholder token ids: nh-token-1, nh-token-2, ...
+	const id = `nh-token-${idx + 1}`;
+	const v = (values[token] ?? '').trim();
+	const s = (savedValues[token] ?? '').trim();
+	const state: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+	appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state });
+	lastPreviewSelection = { id, state };
+	lastPreviewToken = token;
 }
 
 // Stubbed data types
@@ -56,6 +69,14 @@ let savedValues: ReplacementValues = {};
 let searchQuery = '';
 let showConfirm = false;
 let showGenerateConfirm = false;
+
+// Track if the TokenizedDocPreview overlay is open
+let isPreviewOpen = false;
+let removeOverlayHook: (() => void) | null = null;
+let removePreviewClosedHook: (() => void) | null = null;
+// Track the last previewed token selection to update highlight state on edits
+let lastPreviewSelection: { id: string; state: 'draft' | 'saved' } | null = null;
+let lastPreviewToken: string | null = null;
 
 // Sticky helpers for measuring header height
 let headerEl: HTMLDivElement | null = null;
@@ -174,19 +195,38 @@ function updateValue(token: string, value: string) {
 	persistDraftDebounced();
 }
 
-function handleInput(token: string) {
+function handleInput(token: string, id?: string) {
 	return (e: Event) => {
 		const target = e.currentTarget as HTMLInputElement;
 		updateValue(token, target.value);
+		// If this token is currently selected in preview, update highlight state when it flips.
+		if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
+			const v = (target.value ?? '').trim();
+			const s = (savedValues[token] ?? '').trim();
+			const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+			if (lastPreviewSelection.state !== newState) {
+				appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
+				lastPreviewSelection.state = newState;
+			}
+		}
 	};
 }
 
-function handleIgnoreToggle(token: string) {
+function handleClearTokenToggle(token: string, id?: string) {
 	return (e: Event) => {
 		const target = e.currentTarget as HTMLInputElement;
 		if (target.checked) {
-			// Clearing the value marks it as ignored. We still submit an empty string.
+			// Clearing the value marks it as cleared. We still submit an empty string.
 			updateValue(token, '');
+			if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
+				const v = ''.trim();
+				const s = (savedValues[token] ?? '').trim();
+				const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+				if (lastPreviewSelection.state !== newState) {
+					appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
+					lastPreviewSelection.state = newState;
+				}
+			}
 		}
 	};
 }
@@ -252,6 +292,14 @@ async function handleSubmit() {
 		savedValues = { ...values };
 		submitSuccess = true;
 		suppressDraftPersistence = true; // prevent re-saving this session unless user edits again
+		// If a token is currently selected in preview, ensure its highlight reflects saved state now
+		if (isPreviewOpen && lastPreviewSelection && lastPreviewToken) {
+			const newState: 'draft' | 'saved' = 'saved';
+			if (lastPreviewSelection.state !== newState) {
+				appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: lastPreviewSelection.id, state: newState });
+				lastPreviewSelection.state = newState;
+			}
+		}
 		// Clear the saved draft on successful submit so future sessions start fresh
 		const { cId, dId } = getContextIds();
 		if (cId && dId) {
@@ -273,64 +321,86 @@ async function handleSubmit() {
 	}
 }
 
-onMount(async () => {
-	// Ensure the list of tokenized files is loaded so the selected document summary can resolve on refresh
-	try {
-		await ensureFilesFetched();
-	} catch {
-	}
-	// Measure header height and watch for changes
-	updateHeaderHeight();
-	try {
-		headerRO = new ResizeObserver(() => updateHeaderHeight());
-		if (headerEl) headerRO.observe(headerEl);
-	} catch {
-	}
-	headerResizeHandler = () => updateHeaderHeight();
-	window.addEventListener('resize', headerResizeHandler);
-
-	isLoading = true;
-	loadError = null;
-	try {
-		const { tokens: tk, values: vals } = await loadTokensAndValues();
-		tokens = tk;
-		// Track server-saved values separately from editable values
-		savedValues = vals;
-		let merged = vals;
-		const { cId, dId } = getContextIds();
-		if (cId && dId) {
-			const draft = await loadTokenReplacerDraft(cId, dId);
-			if (draft?.values) {
-				merged = mergeDraftValues(vals, draft.values, tk);
-			}
+	onMount(async () => {
+		// Track overlay open/close to show preview buttons only when preview is open
+		try {
+			const overlayHandler = (params: { action: 'open' | 'close' | 'update'; title?: string; component?: any }) => {
+				if (params.action === 'open') {
+					isPreviewOpen = params.component === TokenizedDocPreview;
+				} else if (params.action === 'close') {
+					isPreviewOpen = false;
+				}
+			};
+			appHooks.hook('chat.overlay', overlayHandler);
+			removeOverlayHook = () => { try { appHooks.removeHook('chat.overlay', overlayHandler); } catch {} };
+		} catch {}
+		// Also respond to a direct preview-closed notification from the preview component
+		try {
+			const previewClosedHandler = () => { isPreviewOpen = false; };
+			appHooks.hook('private-ai.token-replacer.preview.closed', previewClosedHandler);
+			removePreviewClosedHook = () => { try { appHooks.removeHook('private-ai.token-replacer.preview.closed', previewClosedHandler); } catch {} };
+		} catch {}
+		// Ensure the list of tokenized files is loaded so the selected document summary can resolve on refresh
+		try {
+			await ensureFilesFetched();
+		} catch {
 		}
-		values = merged;
-	} catch (e) {
-		console.error(e);
-		loadError = $i18n.t('Failed to load tokens.');
-	} finally {
-		isLoading = false;
-	}
-});
+		// Measure header height and watch for changes
+		updateHeaderHeight();
+		try {
+			headerRO = new ResizeObserver(() => updateHeaderHeight());
+			if (headerEl) headerRO.observe(headerEl);
+		} catch {
+		}
+		headerResizeHandler = () => updateHeaderHeight();
+		window.addEventListener('resize', headerResizeHandler);
 
-onDestroy(() => {
-	if (saveTimeout) {
-		clearTimeout(saveTimeout);
-		saveTimeout = null;
-	}
-	// Cleanup header observers/listeners
-	try {
-		headerRO?.disconnect();
-	} catch {
-	}
-	headerRO = null;
-	if (headerResizeHandler) {
-		window.removeEventListener('resize', headerResizeHandler);
-		headerResizeHandler = null;
-	}
-	// Persist the latest state when the component is destroyed (e.g., panel closes)
-	void persistDraftNow();
-});
+		isLoading = true;
+		loadError = null;
+		try {
+			const { tokens: tk, values: vals } = await loadTokensAndValues();
+			tokens = tk;
+			// Track server-saved values separately from editable values
+			savedValues = vals;
+			let merged = vals;
+			const { cId, dId } = getContextIds();
+			if (cId && dId) {
+				const draft = await loadTokenReplacerDraft(cId, dId);
+				if (draft?.values) {
+					merged = mergeDraftValues(vals, draft.values, tk);
+				}
+			}
+			values = merged;
+		} catch (e) {
+			console.error(e);
+			loadError = $i18n.t('Failed to load tokens.');
+		} finally {
+			isLoading = false;
+		}
+	});
+
+	onDestroy(() => {
+		if (saveTimeout) {
+			clearTimeout(saveTimeout);
+			saveTimeout = null;
+		}
+		// Cleanup header observers/listeners
+		try {
+			headerRO?.disconnect();
+		} catch {
+		}
+		headerRO = null;
+		if (headerResizeHandler) {
+			window.removeEventListener('resize', headerResizeHandler);
+			headerResizeHandler = null;
+		}
+		// Remove overlay hook listener
+		try {
+			removeOverlayHook && removeOverlayHook();
+		} catch {}
+		// Persist the latest state when the component is destroyed (e.g., panel closes)
+		void persistDraftNow();
+	});
 </script>
 
 <div class="flex flex-col w-full items-stretch justify-start">
@@ -442,12 +512,24 @@ onDestroy(() => {
 					</div>
 				{:else}
 					<div class="space-y-4">
-						{#each filteredTokens as token}
+						{#each filteredTokens as token, i}
 							<div class="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:gap-4 items-start">
-								<div
-									class="lg:col-span-1 text-[11px] lg:text-xs font-semibold text-gray-800 dark:text-gray-200 break-words whitespace-pre-wrap select-text">
-									{token}
+ 							<div
+ 								class="lg:col-span-1 text-[11px] lg:text-xs font-semibold text-gray-800 dark:text-gray-200 break-words whitespace-pre-wrap select-text">
+         <div class="flex items-start gap-1">
+									{#if isPreviewOpen}
+										<button
+											type="button"
+											class="inline-flex items-center justify-center self-start h-7 w-7 mt-0.5 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
+											on:click={() => onPreviewTokenClick(i, token)}
+											aria-label={$i18n.t('Preview in document')}
+											title={$i18n.t('Preview in document')}>
+											<Eye class="h-4 w-4" />
+										</button>
+									{/if}
+									<span class="break-words whitespace-pre-wrap">{token}</span>
 								</div>
+ 							</div>
 								<div class="lg:col-span-2">
 									{#key token}
 										<div class="flex flex-col gap-1">
@@ -459,7 +541,7 @@ onDestroy(() => {
 												aria-label={$i18n.t('Replacement value')}
 												aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
 												value={values[token] ?? ''}
-												on:input={handleInput(token)}
+            on:input={handleInput(token, `nh-token-${i + 1}`)}
 												autocomplete="off"
 											/>
 											<div class="flex items-center gap-2">
@@ -469,9 +551,9 @@ onDestroy(() => {
 														type="checkbox"
 														class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
 														checked={(values[token] ?? '') === ''}
-														on:change={handleIgnoreToggle(token)}
+              on:change={handleClearTokenToggle(token, `nh-token-${i + 1}`)}
 													/>
-													<span>{$i18n.t('Ignore')}</span>
+													<span>{$i18n.t('Clear')}</span>
 												</label>
 												{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
 													<div id={`${getInputId(token)}-draft`}

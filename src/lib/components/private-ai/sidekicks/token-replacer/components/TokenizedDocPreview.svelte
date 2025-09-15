@@ -1,9 +1,10 @@
 <script lang="ts">
   import DOMPurify from 'dompurify';
-  import { getContext } from 'svelte';
+  import { getContext, onDestroy, onMount } from 'svelte';
   import { getFilePreview } from '$lib/apis/private-ai/sidekicks/token-replacer';
   import type { TokenFile } from '../stores';
 	import Spinner from '$lib/components/common/Spinner.svelte';
+  import { appHooks } from '$lib/utils/hooks';
 
   export let file: TokenFile | null = null;
   export let previewType: 'docx' | 'csv' = 'docx';
@@ -13,6 +14,7 @@
   let previewHtml: string = '';
   let previewLoading = false;
   let previewError = '';
+  let previewContainer: HTMLDivElement | null = null;
 
   async function load() {
     previewLoading = true;
@@ -37,6 +39,49 @@
   } else {
     previewHtml = '';
   }
+
+  let removeHook: (() => void) | null = null;
+
+  function clearSelection() {
+    if (!previewContainer) return;
+    const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved');
+    if (prevSel) {
+      prevSel.classList.remove('token-selected-draft');
+      prevSel.classList.remove('token-selected-saved');
+    }
+  }
+
+  function selectAndScroll(id: string, state: 'draft' | 'saved') {
+    if (!previewContainer) return;
+    clearSelection();
+    try {
+      // Use CSS.escape for safety when available
+      const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
+      const el = previewContainer.querySelector(`#${safeId}`) as HTMLElement | null;
+      if (el) {
+        el.classList.add(state === 'draft' ? 'token-selected-draft' : 'token-selected-saved');
+        // Scroll into view centered within the scrollable container
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      }
+    } catch {
+      // no-op
+    }
+  }
+
+  onMount(() => {
+    const h = (params: { id: string; state: 'draft' | 'saved' }) => {
+      selectAndScroll(params.id, params.state);
+    };
+    appHooks.hook('private-ai.token-replacer.preview.select-token', h);
+    removeHook = () => {
+      try { appHooks.removeHook('private-ai.token-replacer.preview.select-token', h); } catch {}
+    };
+  });
+
+  onDestroy(() => {
+    try { removeHook && removeHook(); } catch {}
+    try { appHooks.callHook('private-ai.token-replacer.preview.closed'); } catch {}
+  });
 </script>
 
 <div class="flex flex-col h-full">
@@ -58,7 +103,7 @@
       <div class="p-4 text-sm text-red-600 dark:text-red-400">{previewError}</div>
     {:else if previewHtml}
       <div class="p-4">
-        <div class="preview-html prose prose-sm max-w-none dark:prose-invert" style="min-height:80px; text-align: left;">
+        <div class="preview-html prose prose-sm max-w-none dark:prose-invert" bind:this={previewContainer} style="min-height:80px; text-align: left;">
           {@html DOMPurify.sanitize(previewHtml)}
         </div>
       </div>
@@ -73,17 +118,47 @@
   :global(.preview-html p) { margin: 0 0 1em 0; }
 	/* token class name is provided from server preview  */
   :global(.preview-html .token) {
-    background: #fffbe6;
-    color: #b26a00;
+    background: #eef2ff; /* indigo-50 */
+    color: #1f2937; /* gray-800 for stronger contrast */
     border-radius: 0.25em;
-    padding: 0.1em 0.3em;
-    font-family: monospace;
-    font-size: 0.9em;
+    padding: 0.15em 0.35em; /* a bit more padding for legibility */
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.95em; /* slightly larger */
+    font-weight: 600; /* improve readability */
+    border: 1px solid rgba(99,102,241,0.45); /* indigo-500/45 for more definition */
   }
   @media (prefers-color-scheme: dark) {
     :global(.preview-html .token) {
-      background: rgba(250, 204, 21, 0.15); /* amber-400/15 */
-      color: #fbbf24; /* amber-400 */
+      background: rgba(99, 102, 241, 0.15); /* indigo-500/15 */
+      color: #a5b4fc; /* indigo-300 */
+      border-color: rgba(99,102,241,0.35);
+    }
+  }
+  /* Selected states (explicit CSS to avoid reliance on Tailwind @apply in component styles) */
+  :global(.preview-html .token.token-selected-saved) {
+    background: #dcfce7 !important; /* green-100 */
+    color: #166534 !important; /* green-800 */
+    border: 2px solid rgba(134, 239, 172, 0.9) !important; /* stronger green-300 */
+    box-shadow: 0 0 0 2px rgba(134, 239, 172, 0.35) !important; /* subtle halo for readability */
+  }
+  :global(.preview-html .token.token-selected-draft) {
+    background: #fef3c7 !important; /* amber-100 */
+    color: #92400e !important; /* amber-800 */
+    border: 2px solid rgba(253, 230, 138, 0.9) !important; /* stronger amber-300 */
+    box-shadow: 0 0 0 2px rgba(253, 230, 138, 0.35) !important; /* subtle halo */
+  }
+  @media (prefers-color-scheme: dark) {
+    :global(.preview-html .token.token-selected-saved) {
+      background: rgba(20, 83, 45, 0.45) !important; /* green-900/45 for stronger contrast */
+      color: #86efac !important; /* green-300 */
+      border: 2px solid rgba(55, 86, 67, 0.85) !important; /* approx green-700 stronger */
+      box-shadow: 0 0 0 2px rgba(20, 83, 45, 0.4) !important;
+    }
+    :global(.preview-html .token.token-selected-draft) {
+      background: rgba(120, 53, 15, 0.45) !important; /* amber-900/45 */
+      color: #fcd34d !important; /* amber-300 */
+      border: 2px solid rgba(146, 64, 14, 0.85) !important; /* approx amber-700 stronger */
+      box-shadow: 0 0 0 2px rgba(120, 53, 15, 0.4) !important;
     }
   }
 </style>
