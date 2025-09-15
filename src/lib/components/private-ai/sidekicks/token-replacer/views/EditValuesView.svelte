@@ -683,13 +683,15 @@ onDestroy(() => {
 												<div class="flex items-center gap-2">
 													<label
 														class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
-														<input
-															type="checkbox"
-															class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-															checked={(values[token] ?? '') === ''}
-															on:change={handleClearTokenToggle(token, `nh-token-${i + 1}`)}
-														/>
-														<span>{$i18n.t('Clear')}</span>
+      								<input
+      									type="checkbox"
+      									class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+      									checked={(values[token] ?? '') === ''}
+      									disabled={(values[token] ?? '') === ''}
+      									title={(values[token] ?? '') === '' ? $i18n.t('Enter a value to uncheck') : undefined}
+      									on:change={handleClearTokenToggle(token, `nh-token-${i + 1}`)}
+      								/>
+      								<span>{$i18n.t('Clear')}</span>
 													</label>
 													{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
 														<div id={`${getInputId(token)}-draft`}
