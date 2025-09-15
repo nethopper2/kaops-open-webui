@@ -33,6 +33,18 @@ function openPreviewPanel() {
 			props: { file, previewType: 'docx' }
 		});
 		isPreviewOpen = true;
+		// After opening, inform the preview of which tokens currently have drafts
+		try {
+			const draftIds: string[] = [];
+			for (let i = 0; i < tokens.length; i++) {
+				const t = tokens[i];
+				const state = computeTokenState(t);
+				if (state === 'draft') draftIds.push(`nh-token-${i + 1}`);
+			}
+			if (draftIds.length > 0) {
+				appHooks.callHook('private-ai.token-replacer.preview.set-draft-ids', { ids: draftIds });
+			}
+		} catch {}
 	}
 }
 
@@ -363,16 +375,13 @@ async function handleSubmit() {
 		savedValues = { ...values };
 		submitSuccess = true;
 		suppressDraftPersistence = true; // prevent re-saving this session unless user edits again
-		// If a token is currently selected in preview, ensure its highlight reflects saved state now
-		if (isPreviewOpen && lastPreviewSelection && lastPreviewToken) {
-			const newState: 'draft' | 'saved' = 'saved';
-			if (lastPreviewSelection.state !== newState) {
-				appHooks.callHook('private-ai.token-replacer.preview.select-token', {
-					id: lastPreviewSelection.id,
-					state: newState
-				});
-				lastPreviewSelection.state = newState;
-			}
+		// If a token is currently selected in preview, reload preview and reselect/scroll to it when loaded
+		if (isPreviewOpen && lastPreviewSelection) {
+			appHooks.callHook('private-ai.token-replacer.preview.reload', {
+				id: lastPreviewSelection.id,
+				state: 'saved'
+			});
+			lastPreviewSelection.state = 'saved';
 		}
 		// Clear the saved draft on successful submit so future sessions start fresh
 		const { cId, dId } = getContextIds();

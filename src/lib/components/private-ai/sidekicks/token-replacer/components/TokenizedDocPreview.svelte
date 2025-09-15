@@ -16,6 +16,31 @@
   let previewLoading = false;
   let previewError = '';
   let previewContainer: HTMLDivElement | null = null;
+  // Pending draft IDs to mark once DOM is available
+  let pendingDraftIds: Set<string> = new Set();
+  // Pending scroll/selection to apply after (re)load
+  let pendingScroll: { id: string; state: 'draft' | 'saved' } | null = null;
+
+  function applyDraftMarkers() {
+    if (!previewContainer || pendingDraftIds.size === 0) return;
+    const toDelete: string[] = [];
+    pendingDraftIds.forEach((id) => {
+      try {
+        const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
+        const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
+        if (el) {
+          if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved')) {
+            el.classList.add('token-draft');
+            el.dataset.tokenState = 'draft';
+          }
+          toDelete.push(id);
+        }
+      } catch {
+        // ignore
+      }
+    });
+    toDelete.forEach((id) => pendingDraftIds.delete(id));
+  }
 
   async function load() {
     previewLoading = true;
@@ -41,6 +66,20 @@
     previewHtml = '';
   }
 
+  // After HTML updates, try to apply any pending draft markers and pending scroll
+  $: if (previewHtml) {
+    setTimeout(() => {
+      applyDraftMarkers();
+      if (pendingScroll) {
+        try {
+          selectAndScroll(pendingScroll.id, pendingScroll.state);
+        } finally {
+          pendingScroll = null;
+        }
+      }
+    }, 0);
+  }
+
   let removeHook: (() => void) | null = null;
 
   function clearSelection() {
@@ -52,10 +91,12 @@
       // Remove selected state classes
       prevSel.classList.remove('token-selected-draft');
       prevSel.classList.remove('token-selected-saved');
-      // Normalize unselected classes: ensure only the correct one is present
-      prevSel.classList.remove('token-saved');
-      prevSel.classList.remove('token-draft');
-      prevSel.classList.add(savedState === 'draft' ? 'token-draft' : 'token-saved');
+      // For unselected state: if draft, ensure token-draft is present; otherwise ensure it's removed (base .token remains)
+      if (savedState === 'draft') {
+        prevSel.classList.add('token-draft');
+      } else {
+        prevSel.classList.remove('token-draft');
+      }
     }
   }
 
@@ -69,8 +110,7 @@
       if (el) {
         // Persist token state on the element so we can restore unselected class correctly later
         el.dataset.tokenState = state;
-        // Remove any unselected classes before applying selected state
-        el.classList.remove('token-saved');
+        // Remove any unselected draft class before applying selected state
         el.classList.remove('token-draft');
         el.classList.add(state === 'draft' ? 'token-selected-draft' : 'token-selected-saved');
         // Scroll into view centered within the scrollable container
@@ -86,8 +126,28 @@
       selectAndScroll(params.id, params.state);
     };
     appHooks.hook('private-ai.token-replacer.preview.select-token', h);
+
+    const setDrafts = (params: { ids: string[] }) => {
+      try {
+        (params.ids || []).forEach((id) => pendingDraftIds.add(id));
+        applyDraftMarkers();
+      } catch {}
+    };
+    appHooks.hook('private-ai.token-replacer.preview.set-draft-ids', setDrafts);
+
+    const reloadPreview = (params: { id: string; state: 'draft' | 'saved' }) => {
+      try {
+        pendingScroll = { id: params.id, state: params.state };
+        // Always reload fresh from server
+        void load();
+      } catch {}
+    };
+    appHooks.hook('private-ai.token-replacer.preview.reload', reloadPreview);
+
     removeHook = () => {
       try { appHooks.removeHook('private-ai.token-replacer.preview.select-token', h); } catch {}
+      try { appHooks.removeHook('private-ai.token-replacer.preview.set-draft-ids', setDrafts); } catch {}
+      try { appHooks.removeHook('private-ai.token-replacer.preview.reload', reloadPreview); } catch {}
     };
 		appHooks.callHook('private-ai.token-replacer.preview.opened');
 		showSidebar.set(false);
@@ -150,22 +210,12 @@
     }
   }
   /* Unselected token state styles */
-  :global(.preview-html .token.token-saved) {
-    background: #eefdf3; /* subtle green tint */
-    color: #14532d; /* green-900 */
-    border-color: rgba(16, 185, 129, 0.35); /* emerald-500/35 */
-  }
   :global(.preview-html .token.token-draft) {
     background: #fff7ed; /* orange-50 */
     color: #7c2d12; /* orange-900 */
     border-color: rgba(249, 115, 22, 0.35); /* orange-500/35 */
   }
   @media (prefers-color-scheme: dark) {
-    :global(.preview-html .token.token-saved) {
-      background: rgba(22, 101, 52, 0.2); /* green-700/20 */
-      color: #86efac; /* green-300 */
-      border-color: rgba(34, 197, 94, 0.35); /* green-500/35 */
-    }
     :global(.preview-html .token.token-draft) {
       background: rgba(124, 45, 18, 0.2); /* orange-800/20 */
       color: #fdba74; /* orange-300 */
