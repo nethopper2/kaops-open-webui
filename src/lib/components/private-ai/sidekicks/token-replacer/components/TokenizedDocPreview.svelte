@@ -5,6 +5,7 @@
   import type { TokenFile } from '../stores';
 	import Spinner from '$lib/components/common/Spinner.svelte';
   import { appHooks } from '$lib/utils/hooks';
+	import { showSidebar } from '$lib/stores';
 
   export let file: TokenFile | null = null;
   export let previewType: 'docx' | 'csv' = 'docx';
@@ -76,6 +77,8 @@
     removeHook = () => {
       try { appHooks.removeHook('private-ai.token-replacer.preview.select-token', h); } catch {}
     };
+		appHooks.callHook('private-ai.token-replacer.preview.opened');
+		showSidebar.set(false);
   });
 
   onDestroy(() => {
