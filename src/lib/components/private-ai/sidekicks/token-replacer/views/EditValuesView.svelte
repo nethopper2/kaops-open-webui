@@ -389,8 +389,9 @@ function getInputId(token: string): string {
 
 function getContextIds() {
 	const cId = $chatId as string | null;
-	const dId = $selectedTokenizedDocPath as string | null;
-	return { cId, dId };
+	const mId = $currentSelectedModelId as string | null;
+	const tId = $selectedTokenizedDocPath as string | null;
+	return { cId, mId, tId };
 }
 
 function mergeDraftValues(base: ReplacementValues, draftVals: Record<string, string> | undefined, allowedTokens: string[]): ReplacementValues {
@@ -412,16 +413,16 @@ const DEBOUNCE_MS = 250;
 
 async function persistDraftNow() {
 	if (suppressDraftPersistence) return;
-	const { cId, dId } = getContextIds();
-	if (!cId || !dId) return;
+ const { cId, mId, tId } = getContextIds();
+	if (!cId || !mId || !tId) return;
 	// If no non-empty values, clear any existing draft instead of saving empties
 	const hasAny = tokens.some((t) => (values[t]?.trim()?.length ?? 0) > 0);
 	if (!hasAny) {
-		await clearTokenReplacerDraft(cId, dId);
+		await clearTokenReplacerDraft(cId, mId, tId);
 		return;
 	}
 	const draft: TokenReplacerDraft = { values, updatedAt: Date.now() };
-	await saveTokenReplacerDraft(cId, dId, draft);
+	await saveTokenReplacerDraft(cId, mId, tId, draft);
 }
 
 function persistDraftDebounced() {
@@ -453,9 +454,9 @@ async function handleSubmit() {
 			lastPreviewSelection.state = 'saved';
 		}
 		// Clear the saved draft on successful submit so future sessions start fresh
-		const { cId, dId } = getContextIds();
-		if (cId && dId) {
-			await clearTokenReplacerDraft(cId, dId);
+  const { cId, mId, tId } = getContextIds();
+		if (cId && mId && tId) {
+			await clearTokenReplacerDraft(cId, mId, tId);
 		}
 		toast.success($i18n.t('🎉 Replacement values submitted!'));
 	} catch (e) {
@@ -542,9 +543,9 @@ onMount(async () => {
 		savedValues = vals;
 		tokenOccurrences = occ ?? {};
 		let merged = vals;
-		const { cId, dId } = getContextIds();
-		if (cId && dId) {
-			const draft = await loadTokenReplacerDraft(cId, dId);
+  const { cId, mId, tId } = getContextIds();
+		if (cId && mId && tId) {
+			const draft = await loadTokenReplacerDraft(cId, mId, tId);
 			if (draft?.values) {
 				merged = mergeDraftValues(vals, draft.values, tk);
 			}
