@@ -20,6 +20,7 @@ import {
 } from '../drafts';
 import Spinner from '$lib/components/common/Spinner.svelte';
 import Eye from '$lib/components/icons/Eye.svelte';
+import Tooltip from '$lib/components/common/Tooltip.svelte';
 
 const i18n = getContext('i18n');
 
@@ -184,8 +185,52 @@ let headerHeight = 0;
 let headerRO: ResizeObserver | null = null;
 let headerResizeHandler: (() => void) | null = null;
 
+// Track the visibility of SelectedDocumentSummary so we can show a secondary Preview button
+let summaryEl: HTMLDivElement | null = null;
+let isSummaryVisible = true;
+let summaryRaf = 0;
+let summaryScrollHandler: (() => void) | null = null;
+let summaryIO: IntersectionObserver | null = null;
+
+function setupSummaryObserver() {
+	try {
+		summaryIO?.disconnect();
+	} catch {}
+	if (!summaryEl) return;
+	try {
+		summaryIO = new IntersectionObserver(
+			(entries) => {
+				const entry = entries[0];
+				isSummaryVisible = !!(entry?.isIntersecting && entry.intersectionRatio > 0);
+			},
+			{ root: null, rootMargin: `-${headerHeight}px 0px 0px 0px`, threshold: [0, 0.01] }
+		);
+		summaryIO.observe(summaryEl);
+	} catch {}
+}
+
 function updateHeaderHeight() {
 	headerHeight = headerEl?.offsetHeight ?? 0;
+	// Recompute summary visibility when the header size changes
+	scheduleSummaryVisibilityCheck();
+	// Re-init intersection observer to respect new headerHeight offset
+	setupSummaryObserver();
+}
+
+function computeSummaryVisibility() {
+	if (!summaryEl) {
+		isSummaryVisible = true;
+		return;
+	}
+	const rect = summaryEl.getBoundingClientRect();
+	// Consider it visible if any part of the summary is within the viewport area below the sticky header
+	const visible = rect.bottom > headerHeight && rect.top < window.innerHeight;
+	isSummaryVisible = visible;
+}
+
+function scheduleSummaryVisibilityCheck() {
+	try { cancelAnimationFrame(summaryRaf); } catch {}
+	summaryRaf = requestAnimationFrame(computeSummaryVisibility);
 }
 
 // Derived counts and stats
@@ -471,6 +516,17 @@ onMount(async () => {
 	headerResizeHandler = () => updateHeaderHeight();
 	window.addEventListener('resize', headerResizeHandler);
 
+	// Track visibility of the SelectedDocumentSummary as the page scrolls/resizes
+	summaryScrollHandler = () => scheduleSummaryVisibilityCheck();
+	try {
+		// passive listeners for performance
+		window.addEventListener('scroll', summaryScrollHandler as EventListener, { passive: true } as any);
+		window.addEventListener('resize', summaryScrollHandler as EventListener);
+	} catch {}
+	computeSummaryVisibility();
+	// Initialize IntersectionObserver once DOM is ready and the header is measured
+	setupSummaryObserver();
+
 	isLoading = true;
 	loadError = null;
 	try {
@@ -516,6 +572,17 @@ onDestroy(() => {
 		removeOverlayHook && removeOverlayHook();
 	} catch {
 	}
+	// Cleanup summary visibility listeners
+	try {
+		if (summaryScrollHandler) {
+			window.removeEventListener('scroll', summaryScrollHandler as EventListener);
+			window.removeEventListener('resize', summaryScrollHandler as EventListener);
+			summaryScrollHandler = null;
+		}
+		try { cancelAnimationFrame(summaryRaf); } catch {}
+		try { summaryIO?.disconnect(); } catch {}
+		summaryIO = null;
+	} catch {}
 	// Persist the latest state when the component is destroyed (e.g., panel closes)
 	void persistDraftNow();
 });
@@ -526,7 +593,7 @@ onDestroy(() => {
 	<div
 		bind:this={headerEl}
 		class="px-4 py-2 sticky top-0 bg-white dark:bg-gray-900 z-20">
-		<div class="flex items-center justify-between">
+ 	<div class="flex items-center justify-between">
 			<div class="hidden sm:flex items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
 				<span
 					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 border border-green-300/70 dark:border-green-700/60 text-green-800 dark:text-green-300">
@@ -545,6 +612,21 @@ onDestroy(() => {
 					{$i18n.t('Drafts')}: {draftCount}
 				</span>
 			</div>
+			{#if !isSummaryVisible}
+				<div class="ml-auto">
+					<Tooltip content={$i18n.t('Preview Document')} placement="left">
+						<button
+							type="button"
+							class="inline-flex items-center justify-center h-6 w-6 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
+							on:click={openPreviewPanel}
+							aria-label={$i18n.t('Preview')}
+							title={$i18n.t('Preview')}
+						>
+							<Eye class="h-4 w-4" />
+						</button>
+					</Tooltip>
+				</div>
+			{/if}
 		</div>
 		<div class="mt-1 w-full h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden" role="progressbar"
 				 aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent}
@@ -557,7 +639,7 @@ onDestroy(() => {
 	<!-- Content area container (page scroll) -->
 	<div class="relative">
 		<!-- Selected document summary (non-sticky) -->
-		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900" bind:this={summaryEl}>
 			<SelectedDocumentSummary on:preview={openPreviewPanel} />
 		</div>
 
