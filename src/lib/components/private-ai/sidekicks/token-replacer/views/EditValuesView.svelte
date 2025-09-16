@@ -329,14 +329,18 @@ function proceedGenerateWithoutSaving() {
 }
 
 // Derived filtered tokens with filter modes
-type TokenFilter = 'all' | 'needing' | 'with';
+type TokenFilter = 'all' | 'needing' | 'with' | 'drafts';
 let tokenFilter: TokenFilter = 'needing';
 $: query = searchQuery.trim().toLowerCase();
 $: filteredTokens = tokens
 	.filter((t) => {
 		const hasSaved = typeof savedValues[t] === 'string' && savedValues[t].trim().length > 0;
+		const v = (values[t] ?? '').trim();
+		const s = (savedValues[t] ?? '').trim();
+		const isDraft = v !== s;
 		if (tokenFilter === 'needing') return !hasSaved;
 		if (tokenFilter === 'with') return hasSaved;
+		if (tokenFilter === 'drafts') return isDraft;
 		return true;
 	})
 	.filter((t) => (query ? t.toLowerCase().includes(query) : true));
@@ -729,9 +733,10 @@ onDestroy(() => {
 							bind:value={tokenFilter}
 							aria-label={$i18n.t('Token filter')}
 						>
-							<option value="all">{$i18n.t('All tokens')}</option>
+       <option value="all">{$i18n.t('All tokens')}</option>
 							<option value="needing">{$i18n.t('Tokens needing a value')}</option>
 							<option value="with">{$i18n.t('Tokens with values')}</option>
+							<option value="drafts">{$i18n.t('Drafts')}</option>
 						</select>
 					</div>
 					<button
@@ -763,10 +768,12 @@ onDestroy(() => {
 				{:else}
 					{#if filteredTokens.length === 0}
 						<div class="text-sm text-gray-600 dark:text-gray-300">
-							{#if tokenFilter === 'needing'}
+       {#if tokenFilter === 'needing'}
 								{$i18n.t('No tokens need a value for the current search.')}
 							{:else if tokenFilter === 'with'}
 								{$i18n.t('No tokens have a value for the current search.')}
+							{:else if tokenFilter === 'drafts'}
+								{$i18n.t('No tokens have drafts for the current search.')}
 							{:else}
 								{$i18n.t('No tokens match your search.')}
 							{/if}
