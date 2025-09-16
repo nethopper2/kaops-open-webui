@@ -21,6 +21,7 @@ import {
 import Spinner from '$lib/components/common/Spinner.svelte';
 import Eye from '$lib/components/icons/Eye.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
+import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte';
 
 const i18n = getContext('i18n');
 
@@ -327,12 +328,17 @@ function proceedGenerateWithoutSaving() {
 	void handleGenerate();
 }
 
-// Derived filtered tokens with an optional "needs value" filter
-let isOnlyNeedingValues = true;
+// Derived filtered tokens with filter modes
+type TokenFilter = 'all' | 'needing' | 'with';
+let tokenFilter: TokenFilter = 'needing';
 $: query = searchQuery.trim().toLowerCase();
 $: filteredTokens = tokens
-	// Only hide rows that already have a value SAVED on the server.
-	.filter((t) => (isOnlyNeedingValues ? !(typeof savedValues[t] === 'string' && savedValues[t].trim().length > 0) : true))
+	.filter((t) => {
+		const hasSaved = typeof savedValues[t] === 'string' && savedValues[t].trim().length > 0;
+		if (tokenFilter === 'needing') return !hasSaved;
+		if (tokenFilter === 'with') return hasSaved;
+		return true;
+	})
 	.filter((t) => (query ? t.toLowerCase().includes(query) : true));
 
 function updateValue(token: string, value: string) {
@@ -634,7 +640,7 @@ onDestroy(() => {
 			<div class="h-full bg-green-500 dark:bg-green-400 transition-[width] duration-300"
 					 style={`width: ${progressPercent}%`}></div>
 			<!-- Centered progress label -->
-			<span class="pointer-events-none absolute inset-0 flex items-center justify-center text-[8px] leading-none text-gray-700 dark:text-gray-200 select-none">
+			<span class="pointer-events-none absolute inset-0 pl-6 flex items-center text-[8px] leading-none text-gray-700 dark:text-gray-200 select-none">
 				{progressPercent}% {$i18n.t('Complete')}
 			</span>
 		</div>
@@ -715,14 +721,18 @@ onDestroy(() => {
 				class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 sticky bg-white dark:bg-gray-900 z-10 shadow"
 				style={`top: ${headerHeight}px`}>
 				<div class="flex items-center justify-between gap-2 mb-1">
-					<label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
-						<input
-							type="checkbox"
-							class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-							bind:checked={isOnlyNeedingValues}
-						/>
-						<span>{$i18n.t('Hide completed')}</span>
-					</label>
+ 				<div class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+						<AdjustmentsHorizontal class="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+						<select
+							class="px-2 pr-6 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100"
+							bind:value={tokenFilter}
+							aria-label={$i18n.t('Token filter')}
+						>
+							<option value="all">{$i18n.t('All tokens')}</option>
+							<option value="needing">{$i18n.t('Tokens needing a value')}</option>
+							<option value="with">{$i18n.t('Tokens with values')}</option>
+						</select>
+					</div>
 					<button
 						class="px-2 py-1 rounded bg-gray-700 text-xs text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
 						disabled={isLoading || isSubmitting || tokens.length === 0}
@@ -752,8 +762,10 @@ onDestroy(() => {
 				{:else}
 					{#if filteredTokens.length === 0}
 						<div class="text-sm text-gray-600 dark:text-gray-300">
-							{#if isOnlyNeedingValues}
+							{#if tokenFilter === 'needing'}
 								{$i18n.t('No tokens need a value for the current search.')}
+							{:else if tokenFilter === 'with'}
+								{$i18n.t('No tokens have a value for the current search.')}
 							{:else}
 								{$i18n.t('No tokens match your search.')}
 							{/if}
