@@ -628,11 +628,15 @@ onDestroy(() => {
 				</div>
 			{/if}
 		</div>
-		<div class="mt-1 w-full h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden" role="progressbar"
+		<div class="relative mt-1 w-full h-2.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden" role="progressbar"
 				 aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent}
 				 aria-label={$i18n.t('Completion progress')}>
 			<div class="h-full bg-green-500 dark:bg-green-400 transition-[width] duration-300"
 					 style={`width: ${progressPercent}%`}></div>
+			<!-- Centered progress label -->
+			<span class="pointer-events-none absolute inset-0 flex items-center justify-center text-[8px] leading-none text-gray-700 dark:text-gray-200 select-none">
+				{progressPercent}% {$i18n.t('Complete')}
+			</span>
 		</div>
 	</div>
 
