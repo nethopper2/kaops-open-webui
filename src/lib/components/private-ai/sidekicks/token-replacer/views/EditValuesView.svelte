@@ -39,7 +39,15 @@ function openPreviewPanel() {
 			for (let i = 0; i < tokens.length; i++) {
 				const t = tokens[i];
 				const state = computeTokenState(t);
-				if (state === 'draft') draftIds.push(`nh-token-${i + 1}`);
+				if (state === 'draft') {
+					const ids = tokenOccurrences[t] ?? [];
+					if (ids.length > 0) {
+						draftIds.push(...ids);
+					} else {
+						// Fallback to legacy sequential id
+						draftIds.push(`nh-token-${i + 1}`);
+					}
+				}
 			}
 			if (draftIds.length > 0) {
 				appHooks.callHook('private-ai.token-replacer.preview.set-draft-ids', { ids: draftIds });
@@ -48,9 +56,15 @@ function openPreviewPanel() {
 	}
 }
 
+function getFirstOccurrenceId(token: string, idx: number): string {
+	const ids = tokenOccurrences[token];
+	if (Array.isArray(ids) && ids.length > 0) return ids[0];
+	// Fallback to legacy sequential id when occurrences are missing
+	return `nh-token-${idx + 1}`;
+}
+
 function onPreviewTokenClick(idx: number, token: string) {
-	// Placeholder token ids: nh-token-1, nh-token-2, ...
-	const id = `nh-token-${idx + 1}`;
+	const id = getFirstOccurrenceId(token, idx);
 	const v = (values[token] ?? '').trim();
 	const s = (savedValues[token] ?? '').trim();
 	const state: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
@@ -78,6 +92,8 @@ let tokens: Token[] = [];
 let values: ReplacementValues = {};
 // savedValues = last known server-saved values from GET or after successful PUT
 let savedValues: ReplacementValues = {};
+// Map of token -> occurrence IDs (in document order) for preview navigation
+let tokenOccurrences: Record<string, string[]> = {};
 let searchQuery = '';
 let showConfirm = false;
 let showGenerateConfirm = false;
@@ -136,8 +152,9 @@ function selectOverlayOccurrence(idx: number) {
 function openTokenOverlay(i: number, token: string) {
 	overlayToken = token;
 	overlayTokenIndex = i;
-	// Placeholder: single occurrence id matching existing preview id convention
-	overlayOccurrences = [`nh-token-${i + 1}`];
+	// Use provided occurrence IDs if available; otherwise fallback to legacy id
+	const ids = tokenOccurrences[token];
+	overlayOccurrences = Array.isArray(ids) && ids.length > 0 ? ids : [`nh-token-${i + 1}`];
 	isTokenOverlayOpen = true;
 	// On open, highlight the first occurrence in the preview if open
 	if (isPreviewOpen) {
@@ -191,7 +208,7 @@ $: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs fo
 	`${$i18n.t('Do you want to continue?')}`;
 
 // Load tokens and values from API
-async function loadTokensAndValues(): Promise<{ tokens: Token[]; values: ReplacementValues }> {
+async function loadTokensAndValues(): Promise<{ tokens: Token[]; values: ReplacementValues; occurrences: Record<string, string[]> }> {
 	const cId = $chatId as string | null;
 	const mId = $currentSelectedModelId as string | null;
 	if (!cId || !mId) {
@@ -201,7 +218,8 @@ async function loadTokensAndValues(): Promise<{ tokens: Token[]; values: Replace
 	const data = (res as any)?.data ?? res;
 	const tokensFromApi: string[] = data?.tokens ?? [];
 	const valuesFromApi: Record<string, string> = data?.values ?? {};
-	return { tokens: tokensFromApi, values: valuesFromApi };
+	const occFromApi: Record<string, string[]> = data?.occurrences ?? {};
+	return { tokens: tokensFromApi, values: valuesFromApi, occurrences: occFromApi };
 }
 
 // Submit replacement values to API
@@ -456,10 +474,11 @@ onMount(async () => {
 	isLoading = true;
 	loadError = null;
 	try {
-		const { tokens: tk, values: vals } = await loadTokensAndValues();
+		const { tokens: tk, values: vals, occurrences: occ } = await loadTokensAndValues();
 		tokens = tk;
 		// Track server-saved values separately from editable values
 		savedValues = vals;
+		tokenOccurrences = occ ?? {};
 		let merged = vals;
 		const { cId, dId } = getContextIds();
 		if (cId && dId) {
@@ -558,8 +577,6 @@ onDestroy(() => {
 								<div class="text-xs text-gray-500 dark:text-gray-400">{$i18n.t('Token')}</div>
 								<div
 									class="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words whitespace-pre-wrap">{overlayToken}</div>
-								<div class="text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Occurrences')}:
-									{overlayOccurrences.length}</div>
 							</div>
 							<button type="button"
 											class="inline-flex items-center justify-center h-8 w-8 rounded text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
@@ -567,6 +584,20 @@ onDestroy(() => {
 								<span aria-hidden="true">✕</span>
 							</button>
 						</div>
+
+						<!-- Synced input -->
+						<div class="space-y-2 mb-3">
+							<label for="overlay-input"
+										 class="block text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Replacement value')}</label>
+							<input id="overlay-input"
+										 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
+										 type="text" placeholder={$i18n.t('Replacement value')}
+										 value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
+										 on:input={onOverlayInput} autocomplete="off" />
+						</div>
+
+						<div class="text-xs text-gray-600 dark:text-gray-300 mb-2">{$i18n.t('Occurrences')}:
+									{overlayOccurrences.length}</div>
 
 						<!-- Navigation -->
 						<div class="flex flex-wrap items-center gap-2 mb-3">
@@ -589,17 +620,6 @@ onDestroy(() => {
 									</button>
 								{/each}
 							</div>
-						</div>
-
-						<!-- Synced input -->
-						<div class="space-y-2">
-							<label for="overlay-input"
-										 class="block text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Replacement value')}</label>
-							<input id="overlay-input"
-										 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
-										 type="text" placeholder={$i18n.t('Replacement value')}
-										 value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
-										 on:input={onOverlayInput} autocomplete="off" />
 						</div>
 					</div>
 				</div>
@@ -675,7 +695,7 @@ onDestroy(() => {
 														aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
 														value={values[token] ?? ''}
 														on:focus={() => onPreviewTokenClick(i, token)}
-														on:input={handleInput(token, `nh-token-${i + 1}`)}
+              on:input={handleInput(token, getFirstOccurrenceId(token, i))}
 														autocomplete="off"
 													/>
 													{#if isPreviewOpen}
@@ -698,7 +718,7 @@ onDestroy(() => {
       									checked={(values[token] ?? '') === ''}
       									disabled={(values[token] ?? '') === ''}
       									title={(values[token] ?? '') === '' ? $i18n.t('Enter a value to uncheck') : undefined}
-      									on:change={handleRemoveTokenToggle(token, `nh-token-${i + 1}`)}
+               on:change={handleRemoveTokenToggle(token, getFirstOccurrenceId(token, i))}
       								/>
       								<span>{$i18n.t('Remove')}</span>
 													</label>
