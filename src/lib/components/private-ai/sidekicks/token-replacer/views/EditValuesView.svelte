@@ -20,12 +20,10 @@ import {
 } from '../drafts';
 import Spinner from '$lib/components/common/Spinner.svelte';
 import Eye from '$lib/components/icons/Eye.svelte';
-import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte';
 import DOMPurify from 'dompurify';
 import ListBullet from '$lib/components/icons/ListBullet.svelte';
-import XMark from '$lib/components/icons/XMark.svelte';
 import Minus from '$lib/components/icons/Minus.svelte';
 
 const i18n = getContext('i18n');
@@ -59,7 +57,8 @@ function openPreviewPanel() {
 			if (draftIds.length > 0) {
 				appHooks.callHook('private-ai.token-replacer.preview.set-draft-ids', { ids: draftIds });
 			}
-		} catch {}
+		} catch {
+		}
 	}
 }
 
@@ -201,7 +200,8 @@ let summaryIO: IntersectionObserver | null = null;
 function setupSummaryObserver() {
 	try {
 		summaryIO?.disconnect();
-	} catch {}
+	} catch {
+	}
 	if (!summaryEl) return;
 	try {
 		summaryIO = new IntersectionObserver(
@@ -212,7 +212,8 @@ function setupSummaryObserver() {
 			{ root: null, rootMargin: `-${headerHeight}px 0px 0px 0px`, threshold: [0, 0.01] }
 		);
 		summaryIO.observe(summaryEl);
-	} catch {}
+	} catch {
+	}
 }
 
 function updateHeaderHeight() {
@@ -235,7 +236,10 @@ function computeSummaryVisibility() {
 }
 
 function scheduleSummaryVisibilityCheck() {
-	try { cancelAnimationFrame(summaryRaf); } catch {}
+	try {
+		cancelAnimationFrame(summaryRaf);
+	} catch {
+	}
 	summaryRaf = requestAnimationFrame(computeSummaryVisibility);
 }
 
@@ -260,7 +264,11 @@ $: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs fo
 	`${$i18n.t('Do you want to continue?')}`;
 
 // Load tokens and values from API
-async function loadTokensAndValues(): Promise<{ tokens: Token[]; values: ReplacementValues; occurrences: Record<string, string[]> }> {
+async function loadTokensAndValues(): Promise<{
+	tokens: Token[];
+	values: ReplacementValues;
+	occurrences: Record<string, string[]>
+}> {
 	const cId = $chatId as string | null;
 	const mId = $currentSelectedModelId as string | null;
 	if (!cId || !mId) {
@@ -339,7 +347,7 @@ type TokenFilter = 'all' | 'needing' | 'with' | 'drafts';
 let tokenFilter: TokenFilter = 'needing';
 $: query = searchQuery.trim().toLowerCase();
 $: filteredTokens = tokens
-	.map((t) => DOMPurify.sanitize(t, {USE_PROFILES: {html: false}}))
+	.map((t) => DOMPurify.sanitize(t, { USE_PROFILES: { html: false } }))
 	.filter((t) => {
 		const hasSaved = typeof savedValues[t] === 'string' && savedValues[t].trim().length > 0;
 		const v = (values[t] ?? '').trim();
@@ -424,7 +432,7 @@ const DEBOUNCE_MS = 250;
 
 async function persistDraftNow() {
 	if (suppressDraftPersistence) return;
- const { cId, mId, tId } = getContextIds();
+	const { cId, mId, tId } = getContextIds();
 	if (!cId || !mId || !tId) return;
 	// If no non-empty values, clear any existing draft instead of saving empties
 	const hasAny = tokens.some((t) => (values[t]?.trim()?.length ?? 0) > 0);
@@ -465,7 +473,7 @@ async function handleSubmit() {
 			lastPreviewSelection.state = 'saved';
 		}
 		// Clear the saved draft on successful submit so future sessions start fresh
-  const { cId, mId, tId } = getContextIds();
+		const { cId, mId, tId } = getContextIds();
 		if (cId && mId && tId) {
 			await clearTokenReplacerDraft(cId, mId, tId);
 		}
@@ -534,7 +542,8 @@ onMount(async () => {
 		// passive listeners for performance
 		window.addEventListener('scroll', summaryScrollHandler as EventListener, { passive: true } as any);
 		window.addEventListener('resize', summaryScrollHandler as EventListener);
-	} catch {}
+	} catch {
+	}
 	computeSummaryVisibility();
 	// Initialize IntersectionObserver once DOM is ready and the header is measured
 	setupSummaryObserver();
@@ -548,7 +557,7 @@ onMount(async () => {
 		savedValues = vals;
 		tokenOccurrences = occ ?? {};
 		let merged = vals;
-  const { cId, mId, tId } = getContextIds();
+		const { cId, mId, tId } = getContextIds();
 		if (cId && mId && tId) {
 			const draft = await loadTokenReplacerDraft(cId, mId, tId);
 			if (draft?.values) {
@@ -591,10 +600,17 @@ onDestroy(() => {
 			window.removeEventListener('resize', summaryScrollHandler as EventListener);
 			summaryScrollHandler = null;
 		}
-		try { cancelAnimationFrame(summaryRaf); } catch {}
-		try { summaryIO?.disconnect(); } catch {}
+		try {
+			cancelAnimationFrame(summaryRaf);
+		} catch {
+		}
+		try {
+			summaryIO?.disconnect();
+		} catch {
+		}
 		summaryIO = null;
-	} catch {}
+	} catch {
+	}
 	// Persist the latest state when the component is destroyed (e.g., panel closes)
 	void persistDraftNow();
 });
@@ -605,7 +621,7 @@ onDestroy(() => {
 	<div
 		bind:this={headerEl}
 		class="px-4 py-2 sticky top-0 bg-white dark:bg-gray-900 z-20">
- 	<div class="flex items-center justify-between">
+		<div class="flex items-center justify-between">
 			<div class="hidden sm:flex items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
 				<span
 					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 border border-green-300/70 dark:border-green-700/60 text-green-800 dark:text-green-300">
@@ -646,7 +662,8 @@ onDestroy(() => {
 			<div class="h-full bg-green-500 dark:bg-green-400 transition-[width] duration-300"
 					 style={`width: ${progressPercent}%`}></div>
 			<!-- Centered progress label -->
-			<span class="pointer-events-none absolute inset-0 pl-6 flex items-center text-[8px] leading-none text-gray-700 dark:text-gray-200 select-none">
+			<span
+				class="pointer-events-none absolute inset-0 pl-6 flex items-center text-[8px] leading-none text-gray-700 dark:text-gray-200 select-none">
 				{progressPercent}% {$i18n.t('Complete')}
 			</span>
 		</div>
@@ -655,7 +672,8 @@ onDestroy(() => {
 	<!-- Content area container (page scroll) -->
 	<div class="relative">
 		<!-- Selected document summary (non-sticky) -->
-		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900" bind:this={summaryEl}>
+		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
+				 bind:this={summaryEl}>
 			<SelectedDocumentSummary on:preview={openPreviewPanel} />
 		</div>
 
@@ -670,12 +688,10 @@ onDestroy(() => {
 					class="sticky z-30 bg-gray-50 dark:bg-gray-900 border-l border-r border-gray-200 dark:border-gray-800 overflow-y-auto"
 					style={`top: ${headerHeight}px; height: calc(100vh - ${headerHeight}px); min-height: calc(100vh - ${headerHeight}px);`}>
 					<div class="p-3 sm:p-4">
-						<div class=" text-lg font-medium self-center font-primary">{$i18n.t('Token Occurrences')}</div>
 						<div class="flex items-start justify-between gap-3 mb-3">
-							<div class="space-y-1">
-								<div class="text-xs text-gray-500 dark:text-gray-400">{$i18n.t('Token')}</div>
-								<div
-									class="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words whitespace-pre-wrap">{overlayToken}</div>
+							<div class="text-lg font-medium self-center font-primary">
+								{$i18n.t('Token Occurrences')}
+								<span class="text-xs font-normal">({overlayOccurrences.length})</span>
 							</div>
 							<button type="button"
 											class="inline-flex flex-shrink-0 items-center justify-center h-8 w-8 rounded text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
@@ -683,20 +699,22 @@ onDestroy(() => {
 								<span aria-hidden="true">✕</span>
 							</button>
 						</div>
+						<div class="flex items-start justify-between gap-3 mb-3">
+							<div class="space-y-1">
+								<Tooltip content={overlayToken} placement="top" className="inline-flex max-w-full">
+									<span class="token-text">{overlayToken}</span>
+								</Tooltip>
+							</div>
+						</div>
 
 						<!-- Synced input -->
 						<div class="space-y-2 mb-3">
-							<label for="overlay-input"
-										 class="block text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Replacement value')}</label>
 							<input id="overlay-input"
-    						 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
-										 type="text" placeholder={$i18n.t('Delete from document')}
+										 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
+										 type="text" placeholder={$i18n.t('Replacement value')}
 										 value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
 										 on:input={onOverlayInput} autocomplete="off" />
 						</div>
-
-						<div class="text-xs text-gray-600 dark:text-gray-300 mb-2">{$i18n.t('Occurrences')}:
-									{overlayOccurrences.length}</div>
 
 						<!-- Navigation -->
 						<div class="flex flex-wrap items-center gap-2 mb-3">
@@ -728,14 +746,14 @@ onDestroy(() => {
 				class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 sticky bg-white dark:bg-gray-900 z-10 shadow"
 				style={`top: ${headerHeight}px`}>
 				<div class="flex items-center justify-between gap-2 mb-1">
- 				<div class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+					<div class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
 						<AdjustmentsHorizontal className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
 						<select
 							class="px-2 pr-6 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100"
 							bind:value={tokenFilter}
 							aria-label={$i18n.t('Token filter')}
 						>
-       <option value="all">{$i18n.t('All tokens')}</option>
+							<option value="all">{$i18n.t('All tokens')}</option>
 							<option value="needing">{$i18n.t('Tokens needing a value')}</option>
 							<option value="with">{$i18n.t('Tokens with values')}</option>
 							<option value="drafts">{$i18n.t('Drafts')}</option>
@@ -770,7 +788,7 @@ onDestroy(() => {
 				{:else}
 					{#if filteredTokens.length === 0}
 						<div class="text-sm text-gray-600 dark:text-gray-300">
-       {#if tokenFilter === 'needing'}
+							{#if tokenFilter === 'needing'}
 								{$i18n.t('No tokens need a value for the current search.')}
 							{:else if tokenFilter === 'with'}
 								{$i18n.t('No tokens have a value for the current search.')}
@@ -784,64 +802,66 @@ onDestroy(() => {
 						<div class="space-y-4">
 							{#each filteredTokens as token, i}
 								<div class="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:gap-4 items-start">
- 								<div
- 									class="lg:col-span-1 text-[11px] text-gray-800 dark:text-gray-200 select-text">
- 									<div class="flex items-start gap-1">
- 										<Tooltip content={token} placement="top" className="inline-flex max-w-full">
- 											<span class="token-text">{token}</span>
- 										</Tooltip>
- 									</div>
- 								</div>
+									<div
+										class="lg:col-span-1 text-[11px] text-gray-800 dark:text-gray-200 select-text">
+										<!-- 									<div class="flex items-start gap-1">-->
+										<Tooltip content={token} placement="top" className="inline-flex max-w-full">
+											<span class="token-text">{token}</span>
+										</Tooltip>
+										<!-- 									</div>-->
+									</div>
 									<div class="lg:col-span-2">
 										{#key token}
 											<div class="flex flex-col gap-1">
-            <div class="flex items-center gap-2">
-									<div class="relative w-full">
-										<input
-											id={getInputId(token)}
-     						class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
-											type="text"
-											placeholder={$i18n.t('Delete from document')}
-											aria-label={$i18n.t('Replacement value')}
-											aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
-											value={values[token] ?? ''}
-											on:focus={() => onPreviewTokenClick(i, token)}
-											on:input={handleInput(token, getFirstOccurrenceId(token, i))}
-											autocomplete="off"
-										/>
-										{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
-     						<div id={`${getInputId(token)}-draft`}
-     							class="pointer-events-none absolute -top-2 -right-2 text-[10px] inline-flex items-center gap-1 text-blue-700 dark:text-blue-300">
-     							<span class="inline-block px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 shadow-sm">{$i18n.t('Draft')}</span>
-     							<span class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
-     						</div>
-										{/if}
-									</div>
-									{#if (values[token] ?? '') !== ''}
-										<Tooltip content={$i18n.t('Remove from document')} placement="top">
-											<button
-												class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
-												type="button"
-												on:click={() => handleRemoveTokenClick(token, getFirstOccurrenceId(token, i))}
-												aria-label={$i18n.t('Remove from document')}
-												title={$i18n.t('Remove from document')}>
-												<Minus className="h-4 w-4" />
-											</button>
-										</Tooltip>
-									{/if}
- 								{#if isPreviewOpen && (tokenOccurrences[token]?.length ?? 0) > 1}
- 									<Tooltip content={$i18n.t('List all occurrences')} placement="top">
- 										<button
- 											type="button"
- 											class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
- 											on:click={() => openTokenOverlay(i, token)}
- 											aria-label={$i18n.t('List all occurrences')}
- 											title={$i18n.t('List all occurrences')}>
- 											<ListBullet className="h-4 w-4" />
- 										</button>
- 									</Tooltip>
- 								{/if}
-								</div>
+												<div class="flex items-center gap-2">
+													<div class="relative w-full">
+														<input
+															id={getInputId(token)}
+															class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
+															type="text"
+															placeholder={$i18n.t('Delete from document')}
+															aria-label={$i18n.t('Replacement value')}
+															aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
+															value={values[token] ?? ''}
+															on:focus={() => onPreviewTokenClick(i, token)}
+															on:input={handleInput(token, getFirstOccurrenceId(token, i))}
+															autocomplete="off"
+														/>
+														{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
+															<div id={`${getInputId(token)}-draft`}
+																	 class="pointer-events-none absolute -top-2 -right-2 text-[10px] inline-flex items-center gap-1 text-blue-700 dark:text-blue-300">
+																<span
+																	class="inline-block px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 shadow-sm">{$i18n.t('Draft')}</span>
+																<span
+																	class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
+															</div>
+														{/if}
+													</div>
+													{#if (values[token] ?? '') !== ''}
+														<Tooltip content={$i18n.t('Remove from document')} placement="top">
+															<button
+																class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
+																type="button"
+																on:click={() => handleRemoveTokenClick(token, getFirstOccurrenceId(token, i))}
+																aria-label={$i18n.t('Remove from document')}
+																title={$i18n.t('Remove from document')}>
+																<Minus className="h-4 w-4" />
+															</button>
+														</Tooltip>
+													{/if}
+													{#if isPreviewOpen && (tokenOccurrences[token]?.length ?? 0) > 1}
+														<Tooltip content={$i18n.t('List all occurrences')} placement="top">
+															<button
+																type="button"
+																class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
+																on:click={() => openTokenOverlay(i, token)}
+																aria-label={$i18n.t('List all occurrences')}
+																title={$i18n.t('List all occurrences')}>
+																<ListBullet className="h-4 w-4" />
+															</button>
+														</Tooltip>
+													{/if}
+												</div>
 											</div>
 										{/key}
 									</div>
@@ -907,12 +927,12 @@ onDestroy(() => {
 
 
 <style>
-	.token-text {
-		display: -webkit-box;
-		-webkit-line-clamp: 3;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
+  .token-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
 </style>
