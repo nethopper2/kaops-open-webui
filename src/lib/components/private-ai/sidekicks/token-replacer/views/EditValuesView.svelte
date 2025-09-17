@@ -612,7 +612,7 @@ onDestroy(() => {
 					{$i18n.t('Complete')}: {providedCount}
 				</span>
 				<span
-					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-300/70 dark:border-blue-700/60 text-blue-800 dark:text-blue-300">
 					{$i18n.t('Drafts')}: {draftCount}
 				</span>
 				<span
@@ -689,7 +689,7 @@ onDestroy(() => {
 							<label for="overlay-input"
 										 class="block text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Replacement value')}</label>
 							<input id="overlay-input"
-										 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
+    						 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
 										 type="text" placeholder={$i18n.t('Delete from document')}
 										 value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
 										 on:input={onOverlayInput} autocomplete="off" />
@@ -799,7 +799,7 @@ onDestroy(() => {
 									<div class="relative w-full">
 										<input
 											id={getInputId(token)}
-											class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
+     						class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
 											type="text"
 											placeholder={$i18n.t('Delete from document')}
 											aria-label={$i18n.t('Replacement value')}
@@ -810,11 +810,11 @@ onDestroy(() => {
 											autocomplete="off"
 										/>
 										{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
-											<div id={`${getInputId(token)}-draft`}
-												class="pointer-events-none absolute -top-2 -right-2 text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-												<span class="inline-block px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 shadow-sm">{$i18n.t('Draft')}</span>
-												<span class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
-											</div>
+     						<div id={`${getInputId(token)}-draft`}
+     							class="pointer-events-none absolute -top-2 -right-2 text-[10px] inline-flex items-center gap-1 text-blue-700 dark:text-blue-300">
+     							<span class="inline-block px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 shadow-sm">{$i18n.t('Draft')}</span>
+     							<span class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
+     						</div>
 										{/if}
 									</div>
 									{#if (values[token] ?? '') !== ''}

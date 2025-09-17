@@ -212,15 +212,15 @@
   }
   /* Unselected token state styles */
   :global(.preview-html .token.token-draft) {
-    background: #fff7ed; /* orange-50 */
-    color: #7c2d12; /* orange-900 */
-    border-color: rgba(249, 115, 22, 0.35); /* orange-500/35 */
+    background: #dbeafe; /* blue-100 */
+    color: #1e40af; /* blue-800 */
+    border-color: rgba(59, 130, 246, 0.35); /* blue-500/35 */
   }
   @media (prefers-color-scheme: dark) {
     :global(.preview-html .token.token-draft) {
-      background: rgba(124, 45, 18, 0.2); /* orange-800/20 */
-      color: #fdba74; /* orange-300 */
-      border-color: rgba(249, 115, 22, 0.35); /* orange-500/35 */
+      background: rgba(30, 64, 175, 0.25); /* blue-800/25 */
+      color: #93c5fd; /* blue-300 */
+      border-color: rgba(59, 130, 246, 0.35); /* blue-500/35 */
     }
   }
 
@@ -232,10 +232,11 @@
     box-shadow: 0 0 0 2px rgba(134, 239, 172, 0.35) !important; /* subtle halo for readability */
   }
   :global(.preview-html .token.token-selected-draft) {
-    background: #fef3c7 !important; /* amber-100 */
-    color: #92400e !important; /* amber-800 */
-    border: 2px solid rgba(253, 230, 138, 0.9) !important; /* stronger amber-300 */
-    box-shadow: 0 0 0 2px rgba(253, 230, 138, 0.35) !important; /* subtle halo */
+    background: #dbeafe !important; /* blue-100 */
+    color: #1e3a8a !important; /* blue-900 for higher contrast */
+    font-weight: 700 !important; /* increase emphasis for readability */
+    border: 2px solid rgba(147, 197, 253, 0.9) !important; /* stronger blue-300 */
+    box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.35) !important; /* subtle halo */
   }
   @media (prefers-color-scheme: dark) {
     :global(.preview-html .token.token-selected-saved) {
@@ -245,10 +246,11 @@
       box-shadow: 0 0 0 2px rgba(20, 83, 45, 0.4) !important;
     }
     :global(.preview-html .token.token-selected-draft) {
-      background: rgba(120, 53, 15, 0.45) !important; /* amber-900/45 */
-      color: #fcd34d !important; /* amber-300 */
-      border: 2px solid rgba(146, 64, 14, 0.85) !important; /* approx amber-700 stronger */
-      box-shadow: 0 0 0 2px rgba(120, 53, 15, 0.4) !important;
+      background: rgba(30, 58, 138, 0.45) !important; /* blue-900/45 */
+      color: #dbeafe !important; /* blue-100 for higher contrast on dark */
+      font-weight: 700 !important; /* increase emphasis for readability */
+      border: 2px solid rgba(29, 78, 216, 0.85) !important; /* approx blue-700 stronger */
+      box-shadow: 0 0 0 2px rgba(30, 58, 138, 0.4) !important;
     }
   }
 </style>
