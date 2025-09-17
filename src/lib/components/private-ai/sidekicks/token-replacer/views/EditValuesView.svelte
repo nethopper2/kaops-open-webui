@@ -243,6 +243,7 @@ $: providedCount = tokens.reduce((acc, t) => {
 	const s = (savedValues[t] ?? '').trim();
 	return v.length > 0 && v === s ? acc + 1 : acc;
 }, 0);
+$: savedCount = tokens.reduce((acc, t) => (((savedValues[t] ?? '').trim().length > 0) ? acc + 1 : acc), 0);
 $: emptyCount = tokens.reduce((acc, t) => (((values[t] ?? '').trim().length === 0) ? acc + 1 : acc), 0);
 $: draftCount = tokens.reduce((acc, t) => ((values[t] ?? '').trim() !== (savedValues[t] ?? '').trim() ? acc + 1 : acc), 0);
 $: progressPercent = totalTokens > 0 ? Math.round((providedCount / totalTokens) * 100) : 0;
@@ -738,7 +739,7 @@ onDestroy(() => {
 					</div>
 					<button
 						class="px-2 py-1 rounded bg-gray-700 text-xs text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
-						disabled={isLoading || isSubmitting || tokens.length === 0}
+						disabled={isLoading || isSubmitting || tokens.length === 0 || savedCount === 0}
 						on:click={onGenerateClick}
 					>
 						{$i18n.t('Generate Document')}
