@@ -687,59 +687,66 @@ onDestroy(() => {
 				<div
 					class="sticky z-30 bg-gray-50 dark:bg-gray-900 border-l border-r border-gray-200 dark:border-gray-800 overflow-y-auto"
 					style={`top: ${headerHeight}px; height: calc(100vh - ${headerHeight}px); min-height: calc(100vh - ${headerHeight}px);`}>
-					<div class="p-3 sm:p-4">
-						<div class="flex items-start justify-between gap-3 mb-3">
-							<div class="text-lg font-medium self-center font-primary">
-								{$i18n.t('Token Occurrences')}
-								<span class="text-xs font-normal">({overlayOccurrences.length})</span>
+					<!-- Sticky overlay header: title, token label, input, and navigation (Prev/Next) -->
+					<div class="sticky top-0 z-20 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+						<div class="p-3 sm:p-4 pb-2 sm:pb-3">
+							<div class="flex items-start justify-between gap-3 mb-3">
+								<div class="text-lg font-medium self-center font-primary">
+									{$i18n.t('Token Occurrences')}
+									<span class="text-xs font-normal">({overlayOccurrences.length})</span>
+								</div>
+								<button type="button"
+										class="inline-flex flex-shrink-0 items-center justify-center h-8 w-8 rounded text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
+										aria-label={$i18n.t('Close')} on:click={closeTokenOverlay}>
+									<span aria-hidden="true">✕</span>
+								</button>
 							</div>
-							<button type="button"
-											class="inline-flex flex-shrink-0 items-center justify-center h-8 w-8 rounded text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
-											aria-label={$i18n.t('Close')} on:click={closeTokenOverlay}>
-								<span aria-hidden="true">✕</span>
-							</button>
-						</div>
-						<div class="flex items-start justify-between gap-3 mb-3">
-							<div class="space-y-1">
-								<Tooltip content={overlayToken} placement="top" className="inline-flex max-w-full">
-									<span class="token-text">{overlayToken}</span>
-								</Tooltip>
+							<div class="flex items-start justify-between gap-3 mb-3">
+								<div class="space-y-1">
+									<Tooltip content={overlayToken} placement="top" className="inline-flex max-w-full">
+										<span class="token-text">{overlayToken}</span>
+									</Tooltip>
+								</div>
 							</div>
-						</div>
-
-						<!-- Synced input -->
-						<div class="space-y-2 mb-3">
-							<input id="overlay-input"
+							
+							<!-- Synced input -->
+							<div class="space-y-2 mb-3">
+								<input id="overlay-input"
 										 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
 										 type="text" placeholder={$i18n.t('Replacement value')}
 										 value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
 										 on:input={onOverlayInput} autocomplete="off" />
-						</div>
-
-						<!-- Navigation -->
-						<div class="flex flex-wrap items-center gap-2 mb-3">
-							<button type="button"
-											class="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
-											on:click={gotoPrevOccurrence} disabled={overlayOccurrences.length <= 1}>
-								{$i18n.t('Prev')}
-							</button>
-							<button type="button"
-											class="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
-											on:click={gotoNextOccurrence} disabled={overlayOccurrences.length <= 1}>
-								{$i18n.t('Next')}
-							</button>
-							<div class="flex flex-wrap items-center gap-1">
-								{#each overlayOccurrences as occId, idx}
-									<button type="button"
-													class={`px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-													on:click={() => selectOverlayOccurrence(idx)}>
-										{idx + 1}
-									</button>
-								{/each}
 							</div>
+							
+ 						<!-- Navigation (sticky header: only Prev/Next) -->
+ 						<div class="flex flex-wrap items-center gap-2 mb-1">
+ 							<button type="button"
+ 									class="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
+ 									on:click={gotoPrevOccurrence} disabled={overlayOccurrences.length <= 1}>
+ 								{$i18n.t('Prev')}
+ 							</button>
+ 							<button type="button"
+ 									class="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
+ 									on:click={gotoNextOccurrence} disabled={overlayOccurrences.length <= 1}>
+ 								{$i18n.t('Next')}
+ 							</button>
+ 						</div>
 						</div>
 					</div>
-				</div>
+					
+					<!-- Non-sticky content (occurrence previews/list) -->
+					<div class="p-3 sm:p-4">
+						<div class="flex flex-wrap items-center gap-1">
+							{#each overlayOccurrences as occId, idx}
+								<button type="button"
+										class={`px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+										on:click={() => selectOverlayOccurrence(idx)}>
+									{idx + 1}
+								</button>
+							{/each}
+						</div>
+					</div>
+					</div>
 			{/if}
 
 			<div
