@@ -677,7 +677,7 @@ onDestroy(() => {
 									class="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words whitespace-pre-wrap">{overlayToken}</div>
 							</div>
 							<button type="button"
-											class="inline-flex items-center justify-center h-8 w-8 rounded text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
+											class="inline-flex flex-shrink-0 items-center justify-center h-8 w-8 rounded text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
 											aria-label={$i18n.t('Close')} on:click={closeTokenOverlay}>
 								<span aria-hidden="true">✕</span>
 							</button>
@@ -810,7 +810,7 @@ onDestroy(() => {
  								{#if (values[token] ?? '') !== ''}
  									<Tooltip content={$i18n.t('Remove from document')} placement="top">
  										<button
- 											class={`${iconBtnBase} ${iconBtnNeutral}`}
+ 											class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
  											type="button"
  											on:click={() => handleRemoveTokenClick(token, getFirstOccurrenceId(token, i))}
  											aria-label={$i18n.t('Remove from document')}
@@ -822,7 +822,7 @@ onDestroy(() => {
  								{#if isPreviewOpen}
  									<button
  										type="button"
- 										class={`${iconBtnBase} ${iconBtnNeutral}`}
+ 										class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
  										on:click={() => openTokenOverlay(i, token)}
  										aria-label={$i18n.t('Open token details')}
  										title={$i18n.t('Open token details')}>
