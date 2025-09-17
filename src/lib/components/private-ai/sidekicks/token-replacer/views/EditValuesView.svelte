@@ -24,6 +24,9 @@ import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte';
 import DOMPurify from 'dompurify';
+import ListBullet from '$lib/components/icons/ListBullet.svelte';
+import XMark from '$lib/components/icons/XMark.svelte';
+import Minus from '$lib/components/icons/Minus.svelte';
 
 const i18n = getContext('i18n');
 
@@ -609,12 +612,12 @@ onDestroy(() => {
 					{$i18n.t('Complete')}: {providedCount}
 				</span>
 				<span
-					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-300 dark:bg-amber-600/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
-					{$i18n.t('Incomplete')}: {emptyCount}
-				</span>
-				<span
 					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
 					{$i18n.t('Drafts')}: {draftCount}
+				</span>
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-300 dark:bg-amber-600/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+					{$i18n.t('Incomplete')}: {emptyCount}
 				</span>
 				<span
 					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
@@ -667,6 +670,7 @@ onDestroy(() => {
 					class="sticky z-30 bg-gray-50 dark:bg-gray-900 border-l border-r border-gray-200 dark:border-gray-800 overflow-y-auto"
 					style={`top: ${headerHeight}px; height: calc(100vh - ${headerHeight}px); min-height: calc(100vh - ${headerHeight}px);`}>
 					<div class="p-3 sm:p-4">
+						<div class=" text-lg font-medium self-center font-primary">{$i18n.t('Token Occurrences')}</div>
 						<div class="flex items-start justify-between gap-3 mb-3">
 							<div class="space-y-1">
 								<div class="text-xs text-gray-500 dark:text-gray-400">{$i18n.t('Token')}</div>
@@ -686,7 +690,7 @@ onDestroy(() => {
 										 class="block text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Replacement value')}</label>
 							<input id="overlay-input"
 										 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
-										 type="text" placeholder={$i18n.t('Replacement value')}
+										 type="text" placeholder={$i18n.t('Delete from document')}
 										 value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
 										 on:input={onOverlayInput} autocomplete="off" />
 						</div>
@@ -797,7 +801,7 @@ onDestroy(() => {
 											id={getInputId(token)}
 											class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
 											type="text"
-											placeholder={$i18n.t('Replacement value')}
+											placeholder={$i18n.t('Delete from document')}
 											aria-label={$i18n.t('Replacement value')}
 											aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
 											value={values[token] ?? ''}
@@ -821,19 +825,19 @@ onDestroy(() => {
 												on:click={() => handleRemoveTokenClick(token, getFirstOccurrenceId(token, i))}
 												aria-label={$i18n.t('Remove from document')}
 												title={$i18n.t('Remove from document')}>
-												<EyeSlash class="h-4 w-4" />
+												<Minus className="h-4 w-4" />
 											</button>
 										</Tooltip>
 									{/if}
  								{#if isPreviewOpen && (tokenOccurrences[token]?.length ?? 0) > 1}
- 									<Tooltip content={$i18n.t('Multiple token occurrence details')} placement="top">
+ 									<Tooltip content={$i18n.t('List all occurrences')} placement="top">
  										<button
  											type="button"
  											class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
  											on:click={() => openTokenOverlay(i, token)}
- 											aria-label={$i18n.t('Multiple token occurrence details')}
- 											title={$i18n.t('Multiple token occurrence details')}>
- 											<Eye class="h-4 w-4" />
+ 											aria-label={$i18n.t('List all occurrences')}
+ 											title={$i18n.t('List all occurrences')}>
+ 											<ListBullet className="h-4 w-4" />
  										</button>
  									</Tooltip>
  								{/if}
@@ -909,6 +913,6 @@ onDestroy(() => {
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 		white-space: pre-wrap;
-		word-break: break-all;
+		word-break: break-word;
 	}
 </style>
