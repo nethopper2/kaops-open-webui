@@ -615,12 +615,12 @@ onDestroy(() => {
 					{$i18n.t('Incomplete')}: {emptyCount}
 				</span>
 				<span
-					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
-					{$i18n.t('Total')}: {totalTokens}
-				</span>
-				<span
 					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
 					{$i18n.t('Drafts')}: {draftCount}
+				</span>
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800/50 border border-gray-300/70 dark:border-gray-700/60 text-gray-800 dark:text-gray-200">
+					{$i18n.t('Total')}: {totalTokens}
 				</span>
 			</div>
 			{#if !isSummaryVisible}
@@ -782,12 +782,14 @@ onDestroy(() => {
 						<div class="space-y-4">
 							{#each filteredTokens as token, i}
 								<div class="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:gap-4 items-start">
-									<div
-										class="lg:col-span-1 text-[11px] lg:text-xs font-semibold text-gray-800 dark:text-gray-200 break-words whitespace-pre-wrap select-text">
-										<div class="flex items-start gap-1">
-											<span class="break-words whitespace-pre-wrap">{token}</span>
-										</div>
-									</div>
+ 								<div
+ 									class="lg:col-span-1 text-[11px] text-gray-800 dark:text-gray-200 select-text">
+ 									<div class="flex items-start gap-1">
+ 										<Tooltip content={token} placement="top" className="inline-flex max-w-full">
+ 											<span class="token-text">{token}</span>
+ 										</Tooltip>
+ 									</div>
+ 								</div>
 									<div class="lg:col-span-2">
 										{#key token}
 											<div class="flex flex-col gap-1">
@@ -900,3 +902,15 @@ onDestroy(() => {
 	on:confirm={confirmSaveThenGenerate}
 	on:cancel={proceedGenerateWithoutSaving}
 />
+
+
+<style>
+	.token-text {
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		white-space: pre-wrap;
+		word-break: break-all;
+	}
+</style>
