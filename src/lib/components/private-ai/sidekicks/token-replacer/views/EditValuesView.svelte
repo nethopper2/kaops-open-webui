@@ -1,5 +1,5 @@
 <script lang="ts">
-import { getContext, onDestroy, onMount } from 'svelte';
+import { getContext, onDestroy, onMount, tick } from 'svelte';
 import { toast } from 'svelte-sonner';
 import { ensureFilesFetched, selectedTokenizedDoc, selectedTokenizedDocPath } from '../stores';
 import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
@@ -119,6 +119,44 @@ let overlayTokenIndex = -1; // index in filteredTokens when opened
 let overlayOccurrences: string[] = [];
 let overlayCurrentIdx = 0;
 
+// Ref to the overlay container to measure and auto-pin into sticky position
+let overlayContainerEl: HTMLDivElement | null = null;
+
+function getScrollableParent(el: HTMLElement | null): HTMLElement | Window {
+	if (!el) return window;
+	let parent: HTMLElement | null = el.parentElement;
+	while (parent) {
+		const style = getComputedStyle(parent);
+		const overflowY = style.overflowY;
+		const canScroll = (overflowY === 'auto' || overflowY === 'scroll') && parent.scrollHeight > parent.clientHeight;
+		if (canScroll && parent !== el) {
+			return parent;
+		}
+		parent = parent.parentElement;
+	}
+	return window;
+}
+
+async function pinOverlayIntoSticky() {
+	await tick();
+	if (!overlayContainerEl) return;
+	try {
+		const rect = overlayContainerEl.getBoundingClientRect();
+		const targetTop = Math.max(0, headerHeight);
+		const delta = rect.top - targetTop;
+		if (delta > 1) {
+			const scrollParent = getScrollableParent(overlayContainerEl);
+			if (scrollParent === window) {
+				window.scrollBy({ top: delta, behavior: 'auto' });
+			} else {
+				(scrollParent as HTMLElement).scrollBy({ top: delta, behavior: 'auto' as ScrollBehavior });
+			}
+		}
+	} catch {
+		// no-op
+	}
+}
+
 $: overlayState = overlayToken ? computeTokenState(overlayToken) : 'saved';
 
 function onOverlayFocus() {
@@ -166,6 +204,8 @@ function openTokenOverlay(i: number, token: string) {
 	if (isPreviewOpen) {
 		selectOverlayOccurrence(0);
 	}
+	// Ensure the overlay immediately pins under the sticky header so its internal scroller can reach the end
+	void pinOverlayIntoSticky();
 }
 
 function closeTokenOverlay() {
@@ -189,6 +229,12 @@ let headerEl: HTMLDivElement | null = null;
 let headerHeight = 0;
 let headerRO: ResizeObserver | null = null;
 let headerResizeHandler: (() => void) | null = null;
+
+// Sticky submit bar (bottom) height helper to ensure overlay scroll can reach the end
+let submitBarEl: HTMLDivElement | null = null;
+let submitBarHeight = 0;
+let submitRO: ResizeObserver | null = null;
+let submitResizeHandler: (() => void) | null = null;
 
 // Track the visibility of SelectedDocumentSummary so we can show a secondary Preview button
 let summaryEl: HTMLDivElement | null = null;
@@ -222,6 +268,10 @@ function updateHeaderHeight() {
 	scheduleSummaryVisibilityCheck();
 	// Re-init intersection observer to respect new headerHeight offset
 	setupSummaryObserver();
+}
+
+function updateSubmitBarHeight() {
+	submitBarHeight = submitBarEl?.offsetHeight ?? 0;
 }
 
 function computeSummaryVisibility() {
@@ -536,6 +586,16 @@ onMount(async () => {
 	headerResizeHandler = () => updateHeaderHeight();
 	window.addEventListener('resize', headerResizeHandler);
 
+	// Measure submit bar height and watch for changes
+	updateSubmitBarHeight();
+	try {
+		submitRO = new ResizeObserver(() => updateSubmitBarHeight());
+		if (submitBarEl) submitRO.observe(submitBarEl);
+	} catch {
+	}
+	submitResizeHandler = () => updateSubmitBarHeight();
+	window.addEventListener('resize', submitResizeHandler);
+
 	// Track visibility of the SelectedDocumentSummary as the page scrolls/resizes
 	summaryScrollHandler = () => scheduleSummaryVisibilityCheck();
 	try {
@@ -587,6 +647,16 @@ onDestroy(() => {
 	if (headerResizeHandler) {
 		window.removeEventListener('resize', headerResizeHandler);
 		headerResizeHandler = null;
+	}
+	// Cleanup submit bar observers/listeners
+	try {
+		submitRO?.disconnect();
+	} catch {
+	}
+	submitRO = null;
+	if (submitResizeHandler) {
+		window.removeEventListener('resize', submitResizeHandler);
+		submitResizeHandler = null;
 	}
 	// Remove overlay hook listener
 	try {
@@ -683,10 +753,11 @@ onDestroy(() => {
 
 			<!-- Content area -->
 			{#if isTokenOverlayOpen && overlayToken}
-				<!-- Token occurrences overlay (scoped within EditValuesView search+content area) -->
+ 			<!-- Token occurrences overlay (scoped within EditValuesView search+content area) -->
 				<div
 					class="sticky z-30 bg-gray-50 dark:bg-gray-900 border-l border-r border-gray-200 dark:border-gray-800 overflow-y-auto"
-					style={`top: ${headerHeight}px; height: calc(100vh - ${headerHeight}px); min-height: calc(100vh - ${headerHeight}px);`}>
+					style={`top: ${headerHeight}px; height: calc(100vh - ${headerHeight}px); min-height: calc(100vh - ${headerHeight}px); padding-bottom: ${submitBarHeight}px;`}
+					bind:this={overlayContainerEl}>
 					<!-- Sticky overlay header: title, token label, input, and navigation (Prev/Next) -->
 					<div class="sticky top-0 z-20 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
 						<div class="p-3 sm:p-4 pb-2 sm:pb-3">
@@ -883,7 +954,7 @@ onDestroy(() => {
 
 	<!-- Submit bar (sticky bottom) -->
 	<div
-		class="px-4 py-3 border-t border-gray-200 dark:border-gray-800 sticky bottom-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20">
+		class="px-4 py-3 border-t border-gray-200 dark:border-gray-800 sticky bottom-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20" bind:this={submitBarEl}>
 		<div class="flex items-center justify-between gap-3">
 			<div class="text-xs text-gray-600 dark:text-gray-400">
 				{#if isSubmitting}
