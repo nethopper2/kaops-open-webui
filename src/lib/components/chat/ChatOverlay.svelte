@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+	import { showPrivateAiSidekick } from '$lib/stores';
 
   type AnyProps = Record<string, unknown>;
 
@@ -43,7 +44,7 @@
 <svelte:window on:keydown={onKeydown} />
 
 {#if show}
-  {#if !isLargeScreen}
+  {#if !isLargeScreen && !showPrivateAiSidekick}
     <!-- Full-screen semi-transparent blocker to cover left nav and main content on small screens only -->
     <div class="fixed inset-0 z-[99998] bg-black/30 dark:bg-black/50" on:click={handleClose} aria-hidden="true"></div>
   {/if}
