@@ -189,6 +189,7 @@
 </div>
 
 <style>
+	/* TODO: Set up a css file for all the token-replacer related styles and ensure @apply can be used  */
   .preview-html { font-size: 0.75em; }
   :global(.preview-html p) { margin: 0 0 1em 0; }
 	/* token class name is provided from server preview  */

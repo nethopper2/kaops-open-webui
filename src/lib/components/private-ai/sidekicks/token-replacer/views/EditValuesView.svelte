@@ -611,7 +611,7 @@ onDestroy(() => {
 					{$i18n.t('Complete')}: {providedCount}
 				</span>
 				<span
-					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
+					class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-300 dark:bg-amber-600/30 border border-amber-300/70 dark:border-amber-700/60 text-amber-800 dark:text-amber-300">
 					{$i18n.t('Incomplete')}: {emptyCount}
 				</span>
 				<span
