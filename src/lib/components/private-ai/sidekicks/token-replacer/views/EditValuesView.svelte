@@ -23,6 +23,7 @@ import Eye from '$lib/components/icons/Eye.svelte';
 import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte';
+import DOMPurify from 'dompurify';
 
 const i18n = getContext('i18n');
 
@@ -334,6 +335,7 @@ type TokenFilter = 'all' | 'needing' | 'with' | 'drafts';
 let tokenFilter: TokenFilter = 'needing';
 $: query = searchQuery.trim().toLowerCase();
 $: filteredTokens = tokens
+	.map((t) => DOMPurify.sanitize(t, {USE_PROFILES: {html: false}}))
 	.filter((t) => {
 		const hasSaved = typeof savedValues[t] === 'string' && savedValues[t].trim().length > 0;
 		const v = (values[t] ?? '').trim();
@@ -441,7 +443,7 @@ async function handleSubmit() {
 	submitError = null;
 	submitSuccess = false;
 	isSubmitting = true;
-	const dismiss = toast.info($i18n.t('Submitting replacement values...'));
+
 	try {
 		// Build payload from ALL tokens, not only filtered ones
 		const payload = tokens.map((t) => ({ token: t, value: values[t] ?? '' }));
@@ -470,12 +472,6 @@ async function handleSubmit() {
 		toast.error(submitError);
 	} finally {
 		isSubmitting = false;
-		if (dismiss && typeof dismiss === 'function') {
-			try {
-				dismiss();
-			} catch {
-			}
-		}
 	}
 }
 
