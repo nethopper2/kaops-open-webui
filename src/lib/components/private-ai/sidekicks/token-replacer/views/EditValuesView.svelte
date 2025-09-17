@@ -795,50 +795,48 @@ onDestroy(() => {
 										{#key token}
 											<div class="flex flex-col gap-1">
             <div class="flex items-center gap-2">
-									<input
-										id={getInputId(token)}
-										class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
-										type="text"
-										placeholder={$i18n.t('Replacement value')}
-										aria-label={$i18n.t('Replacement value')}
-										aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
-										value={values[token] ?? ''}
-										on:focus={() => onPreviewTokenClick(i, token)}
-              on:input={handleInput(token, getFirstOccurrenceId(token, i))}
-										autocomplete="off"
-									/>
- 								{#if (values[token] ?? '') !== ''}
- 									<Tooltip content={$i18n.t('Remove from document')} placement="top">
- 										<button
- 											class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
- 											type="button"
- 											on:click={() => handleRemoveTokenClick(token, getFirstOccurrenceId(token, i))}
- 											aria-label={$i18n.t('Remove from document')}
- 											title={$i18n.t('Remove from document')}>
- 											<EyeSlash class="h-4 w-4" />
- 										</button>
- 									</Tooltip>
- 								{/if}
- 								{#if isPreviewOpen}
- 									<button
- 										type="button"
- 										class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
- 										on:click={() => openTokenOverlay(i, token)}
- 										aria-label={$i18n.t('Open token details')}
- 										title={$i18n.t('Open token details')}>
- 										<Eye class="h-4 w-4" />
- 									</button>
- 								{/if}
-								</div>
-								<div class="flex items-center gap-2">
-									{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
-										<div id={`${getInputId(token)}-draft`}
-												 class="text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-											<span
-												class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
-												<span
-													class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
-										</div>
+									<div class="relative w-full">
+										<input
+											id={getInputId(token)}
+											class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
+											type="text"
+											placeholder={$i18n.t('Replacement value')}
+											aria-label={$i18n.t('Replacement value')}
+											aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
+											value={values[token] ?? ''}
+											on:focus={() => onPreviewTokenClick(i, token)}
+											on:input={handleInput(token, getFirstOccurrenceId(token, i))}
+											autocomplete="off"
+										/>
+										{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
+											<div id={`${getInputId(token)}-draft`}
+												class="pointer-events-none absolute -top-2 -right-2 text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+												<span class="inline-block px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 shadow-sm">{$i18n.t('Draft')}</span>
+												<span class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
+											</div>
+										{/if}
+									</div>
+									{#if (values[token] ?? '') !== ''}
+										<Tooltip content={$i18n.t('Remove from document')} placement="top">
+											<button
+												class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
+												type="button"
+												on:click={() => handleRemoveTokenClick(token, getFirstOccurrenceId(token, i))}
+												aria-label={$i18n.t('Remove from document')}
+												title={$i18n.t('Remove from document')}>
+												<EyeSlash class="h-4 w-4" />
+											</button>
+										</Tooltip>
+									{/if}
+									{#if isPreviewOpen}
+										<button
+											type="button"
+											class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
+											on:click={() => openTokenOverlay(i, token)}
+											aria-label={$i18n.t('Open token details')}
+											title={$i18n.t('Open token details')}>
+											<Eye class="h-4 w-4" />
+										</button>
 									{/if}
 								</div>
 											</div>
