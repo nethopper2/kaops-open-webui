@@ -824,16 +824,18 @@ onDestroy(() => {
 											</button>
 										</Tooltip>
 									{/if}
-									{#if isPreviewOpen}
-										<button
-											type="button"
-											class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
-											on:click={() => openTokenOverlay(i, token)}
-											aria-label={$i18n.t('Open token details')}
-											title={$i18n.t('Open token details')}>
-											<Eye class="h-4 w-4" />
-										</button>
-									{/if}
+ 								{#if isPreviewOpen && (tokenOccurrences[token]?.length ?? 0) > 1}
+ 									<Tooltip content={$i18n.t('Multiple token occurrence details')} placement="top">
+ 										<button
+ 											type="button"
+ 											class={`${iconBtnBase} ${iconBtnNeutral} flex-shrink-0`}
+ 											on:click={() => openTokenOverlay(i, token)}
+ 											aria-label={$i18n.t('Multiple token occurrence details')}
+ 											title={$i18n.t('Multiple token occurrence details')}>
+ 											<Eye class="h-4 w-4" />
+ 										</button>
+ 									</Tooltip>
+ 								{/if}
 								</div>
 											</div>
 										{/key}
