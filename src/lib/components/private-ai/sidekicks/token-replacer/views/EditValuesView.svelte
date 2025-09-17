@@ -20,6 +20,7 @@ import {
 } from '../drafts';
 import Spinner from '$lib/components/common/Spinner.svelte';
 import Eye from '$lib/components/icons/Eye.svelte';
+import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte';
 
@@ -368,23 +369,23 @@ function handleInput(token: string, id?: string) {
 	};
 }
 
-function handleRemoveTokenToggle(token: string, id?: string) {
-	return (e: Event) => {
-		const target = e.currentTarget as HTMLInputElement;
-		if (target.checked) {
-			// Clearing the value marks it as removed. We still submit an empty string.
-			updateValue(token, '');
-			if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
-				const v = ''.trim();
-				const s = (savedValues[token] ?? '').trim();
-				const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
-				if (lastPreviewSelection.state !== newState) {
-					appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
-					lastPreviewSelection.state = newState;
-				}
-			}
+
+const iconBtnBase = 'inline-flex items-center justify-center h-7 w-7 mt-0.5 rounded border';
+const iconBtnNeutral = 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800';
+const iconBtnActive = 'border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+
+function handleRemoveTokenClick(token: string, id?: string) {
+	// Clicking the remove button clears the value (marks as removed)
+	updateValue(token, '');
+	if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
+		const v = ''.trim();
+		const s = (savedValues[token] ?? '').trim();
+		const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+		if (lastPreviewSelection.state !== newState) {
+			appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
+			lastPreviewSelection.state = newState;
 		}
-	};
+	}
 }
 
 function getInputId(token: string): string {
@@ -727,7 +728,7 @@ onDestroy(() => {
 				style={`top: ${headerHeight}px`}>
 				<div class="flex items-center justify-between gap-2 mb-1">
  				<div class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
-						<AdjustmentsHorizontal class="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+						<AdjustmentsHorizontal className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
 						<select
 							class="px-2 pr-6 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100"
 							bind:value={tokenFilter}
@@ -793,53 +794,53 @@ onDestroy(() => {
 									<div class="lg:col-span-2">
 										{#key token}
 											<div class="flex flex-col gap-1">
-												<div class="flex items-start gap-2">
-													<input
-														id={getInputId(token)}
-														class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
-														type="text"
-														placeholder={$i18n.t('Replacement value')}
-														aria-label={$i18n.t('Replacement value')}
-														aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
-														value={values[token] ?? ''}
-														on:focus={() => onPreviewTokenClick(i, token)}
+            <div class="flex items-center gap-2">
+									<input
+										id={getInputId(token)}
+										class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-amber-400 border-amber-400 dark:ring-amber-500 dark:border-amber-500' : ''}`}
+										type="text"
+										placeholder={$i18n.t('Replacement value')}
+										aria-label={$i18n.t('Replacement value')}
+										aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
+										value={values[token] ?? ''}
+										on:focus={() => onPreviewTokenClick(i, token)}
               on:input={handleInput(token, getFirstOccurrenceId(token, i))}
-														autocomplete="off"
-													/>
-													{#if isPreviewOpen}
-														<button
-															type="button"
-															class="inline-flex items-center justify-center self-start h-7 w-7 mt-0.5 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
-															on:click={() => openTokenOverlay(i, token)}
-															aria-label={$i18n.t('Open token details')}
-															title={$i18n.t('Open token details')}>
-															<Eye class="h-4 w-4" />
-														</button>
-													{/if}
-												</div>
-												<div class="flex items-center gap-2">
-													<label
-														class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 select-none">
-      								<input
-      									type="checkbox"
-      									class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-      									checked={(values[token] ?? '') === ''}
-      									disabled={(values[token] ?? '') === ''}
-      									title={(values[token] ?? '') === '' ? $i18n.t('Enter a value to uncheck') : undefined}
-               on:change={handleRemoveTokenToggle(token, getFirstOccurrenceId(token, i))}
-      								/>
-      								<span>{$i18n.t('Remove')}</span>
-													</label>
-													{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
-														<div id={`${getInputId(token)}-draft`}
-																 class="text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-													<span
-														class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
-															<span
-																class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
-														</div>
-													{/if}
-												</div>
+										autocomplete="off"
+									/>
+ 								{#if (values[token] ?? '') !== ''}
+ 									<Tooltip content={$i18n.t('Remove from document')} placement="top">
+ 										<button
+ 											class={`${iconBtnBase} ${iconBtnNeutral}`}
+ 											type="button"
+ 											on:click={() => handleRemoveTokenClick(token, getFirstOccurrenceId(token, i))}
+ 											aria-label={$i18n.t('Remove from document')}
+ 											title={$i18n.t('Remove from document')}>
+ 											<EyeSlash class="h-4 w-4" />
+ 										</button>
+ 									</Tooltip>
+ 								{/if}
+ 								{#if isPreviewOpen}
+ 									<button
+ 										type="button"
+ 										class={`${iconBtnBase} ${iconBtnNeutral}`}
+ 										on:click={() => openTokenOverlay(i, token)}
+ 										aria-label={$i18n.t('Open token details')}
+ 										title={$i18n.t('Open token details')}>
+ 										<Eye class="h-4 w-4" />
+ 									</button>
+ 								{/if}
+								</div>
+								<div class="flex items-center gap-2">
+									{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
+										<div id={`${getInputId(token)}-draft`}
+												 class="text-[10px] inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+											<span
+												class="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">{$i18n.t('Draft')}</span>
+												<span
+													class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
+										</div>
+									{/if}
+								</div>
 											</div>
 										{/key}
 									</div>
