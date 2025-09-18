@@ -773,12 +773,13 @@ onDestroy(() => {
 			{#if !isSummaryVisible}
 				<div class="ml-auto">
 					<Tooltip content={$i18n.t('Preview Document')} placement="left">
-						<button
+      <button
 							type="button"
-							class="inline-flex items-center justify-center h-6 w-6 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
+							class="inline-flex items-center justify-center h-6 w-6 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
 							on:click={openPreviewPanel}
 							aria-label={$i18n.t('Preview')}
 							title={$i18n.t('Preview')}
+							disabled={isPreviewOpen}
 						>
 							<Eye class="h-4 w-4" />
 						</button>
@@ -804,7 +805,7 @@ onDestroy(() => {
 		<!-- Selected document summary (non-sticky) -->
 		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
 				 bind:this={summaryEl}>
-			<SelectedDocumentSummary on:preview={openPreviewPanel} />
+   <SelectedDocumentSummary on:preview={openPreviewPanel} disabled={isPreviewOpen} />
 		</div>
 
 		<!-- Overlay scope wrapper: covers from below SelectedDocumentSummary -->
