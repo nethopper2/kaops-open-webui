@@ -73,9 +73,11 @@
         const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
         if (el) {
           if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+            clearStateTint(el);
             el.classList.add('token-draft');
-            el.dataset.tokenState = 'draft';
           }
+          // Persist state regardless of selection so unselecting restores correctly
+          el.dataset.tokenState = 'draft';
           toDelete.push(id);
         }
       } catch {
@@ -95,9 +97,11 @@
         const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
         if (el) {
           if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+            clearStateTint(el);
             el.classList.add('token-saved');
-            el.dataset.tokenState = 'saved';
           }
+          // Persist state regardless of selection so unselecting restores correctly
+          el.dataset.tokenState = 'saved';
           toDelete.push(id);
         }
       } catch {}
@@ -114,10 +118,12 @@
         const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
         const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
         if (el) {
-          // No class for 'none' in +Values; rely on base .token styling. Persist state only.
+          // For none state, ensure any previous draft/saved tints are removed when unselected.
           if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
-            el.dataset.tokenState = 'none';
+            clearStateTint(el);
           }
+          // Persist state regardless of selection so unselecting restores correctly
+          el.dataset.tokenState = 'none';
           toDelete.push(id);
         }
       } catch {}
