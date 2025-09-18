@@ -25,7 +25,9 @@ export const appHooks = createHooks<{
 	// Token Replacer: provide replacement values per token occurrence id
 	'private-ai.token-replacer.preview.set-values': (params: { byId: Record<string, { draft?: string; saved?: string }> }) => void,
 	// Token Replacer: request preview to reload its HTML, then reselect/scroll to a token
-	'private-ai.token-replacer.preview.reload': (params: { id: string; state: 'draft' | 'saved' }) => void
+	'private-ai.token-replacer.preview.reload': (params: { id: string; state: 'draft' | 'saved' }) => void,
+	// Token Replacer: preview finished rendering (initial load or reload)
+	'private-ai.token-replacer.preview.reloaded': () => void
 }>();
 
 

@@ -135,6 +135,7 @@ let showGenerateConfirm = false;
 let isPreviewOpen = false;
 let removeOverlayHook: (() => void) | null = null;
 let removePreviewClosedHook: (() => void) | null = null;
+let removePreviewReloadedHook: (() => void) | null = null;
 // Track the last previewed token selection to update highlight state on edits
 let lastPreviewSelection: { id: string; state: 'draft' | 'saved' } | null = null;
 let lastPreviewToken: string | null = null;
@@ -611,6 +612,20 @@ onMount(async () => {
 		};
 	} catch {
 	}
+	// Listen for preview reload to re-sync status classes and replacement values
+	try {
+		const previewReloadedHandler = () => {
+			try {
+				emitStatusIds();
+				emitValuesById();
+			} catch {}
+		};
+		appHooks.hook('private-ai.token-replacer.preview.reloaded', previewReloadedHandler);
+		removePreviewReloadedHook = () => {
+			try { appHooks.removeHook('private-ai.token-replacer.preview.reloaded', previewReloadedHandler); } catch {}
+		};
+	} catch {}
+
 	// Ensure the list of tokenized files is loaded so the selected document summary can resolve on refresh
 	try {
 		await ensureFilesFetched();
@@ -701,6 +716,11 @@ onDestroy(() => {
 	// Remove overlay hook listener
 	try {
 		removeOverlayHook && removeOverlayHook();
+	} catch {
+	}
+	// Remove preview reloaded hook listener
+	try {
+		removePreviewReloadedHook && removePreviewReloadedHook();
 	} catch {
 	}
 	// Cleanup summary visibility listeners

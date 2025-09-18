@@ -217,6 +217,7 @@
         }
       }
       applyModeStyles();
+      try { appHooks.callHook('private-ai.token-replacer.preview.reloaded'); } catch {}
     }, 0);
   }
 
