@@ -444,7 +444,7 @@ onDestroy(() => {
     padding: 0.15em 0.35em; /* legible */
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 0.95em; /* slightly larger */
-    font-weight: 600; /* improve readability */
+    /*font-weight: 600; !* improve readability *!*/
     border: 1px solid rgba(107, 114, 128, 0.25); /* gray-500/25 */
   }
 
@@ -457,7 +457,7 @@ onDestroy(() => {
   /* Original mode base look: Unselected uses Incomplete styling (same as token-none) */
   :global(.preview-html.mode-original .token) {
     background: rgba(234, 179, 8, 0.20); /* yellow-500/20 */
-    color: #854d0e; /* amber-800 */
+    color: #111827 !important; /* gray-900 for readability */
     border-color: rgba(234, 179, 8, 0.35);
   }
 
@@ -472,19 +472,19 @@ onDestroy(() => {
   /* +Values mode base and unselected state tints */
   :global(.preview-html.mode-values .token) {
     background: rgba(234, 179, 8, 0.20); /* warning: yellow-500/20 */
-    color: #854d0e; /* yellow-800 */
+    color: #111827 !important; /* gray-900 for readability */
     border-color: rgba(234, 179, 8, 0.35);
   }
 
   :global(.preview-html .token.token-saved) {
     background: rgba(34, 197, 94, 0.20); /* success: green-500/20 */
-    color: #166534; /* green-800 */
+    color: #111827 !important; /* gray-900 for readability */
     border-color: rgba(34, 197, 94, 0.35);
   }
 
   :global(.preview-html .token.token-draft) {
     background: rgba(59, 130, 246, 0.20); /* info: blue-500/20 */
-    color: #1d4ed8; /* blue-700 */
+    color: #111827 !important; /* gray-900 for readability */
     border-color: rgba(59, 130, 246, 0.35);
   }
 
@@ -497,13 +497,13 @@ onDestroy(() => {
 
     :global(.preview-html .token.token-saved) {
       background: rgba(22, 101, 52, 0.45); /* green-800/45 */
-      color: #86efac; /* green-300 */
+      color: #86efac !important; /* green-300 */
       border-color: rgba(22, 163, 74, 0.50);
     }
 
     :global(.preview-html .token.token-draft) {
       background: rgba(29, 78, 216, 0.45); /* blue-700/45 */
-      color: #bfdbfe; /* blue-200 */
+      color: #bfdbfe !important; /* blue-200 */
       border-color: rgba(59, 130, 246, 0.45);
     }
   }
@@ -511,14 +511,14 @@ onDestroy(() => {
   /* Selected states */
   :global(.preview-html .token.token-selected-saved) {
     background: #dcfce7 !important; /* green-100 */
-    color: #166534 !important; /* green-800 */
+    color: #111827 !important; /* gray-900 for readability */
     border: 2px solid rgba(134, 239, 172, 0.9) !important; /* stronger green-300 */
     box-shadow: 0 0 0 2px rgba(134, 239, 172, 0.35) !important; /* subtle halo for readability */
   }
 
   :global(.preview-html .token.token-selected-draft) {
     background: rgba(59, 130, 246, 0.20) !important; /* blue-500/20 similar to badge */
-    color: #1e3a8a !important; /* blue-900 for contrast */
+    color: #111827 !important; /* gray-900 for readability */
     font-weight: 700 !important;
     border: 2px solid rgba(59, 130, 246, 0.9) !important; /* blue-500 strong */
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35) !important;
@@ -526,7 +526,7 @@ onDestroy(() => {
 
   :global(.preview-html .token.token-selected) {
     background: #fef9c3 !important; /* yellow-100 */
-    color: #854d0e !important; /* amber-800 */
+    color: #111827 !important; /* gray-900 for readability */
     border: 2px solid rgba(250, 204, 21, 0.9) !important; /* yellow-400 */
     box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.35) !important; /* subtle halo */
     font-weight: 700 !important;
@@ -534,7 +534,7 @@ onDestroy(() => {
 
   :global(.preview-html .token.token-selected-original) {
     background: #fef9c3 !important; /* align with lighter warning */
-    color: #854d0e !important; /* amber-800 */
+    color: #111827 !important; /* gray-900 for readability */
     border: 2px solid rgba(250, 204, 21, 0.9) !important;
     box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.35) !important;
     font-weight: 700 !important;
@@ -564,10 +564,18 @@ onDestroy(() => {
     }
 
     :global(.preview-html .token.token-selected-original) {
-      background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
-      color: #fde68a !important; /* yellow-200 */
-      border: 2px solid rgba(245, 158, 11, 0.85) !important;
-      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4) !important;
+    background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
+    color: #fde68a !important; /* yellow-200 */
+    border: 2px solid rgba(245, 158, 11, 0.85) !important;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4) !important;
     }
   }
+
+  /* Force readable token text in light mode across all nested content and states (+Values and Original) */
+  :global(html:not(.dark) .preview-html .token),
+  :global(html:not(.dark) .preview-html .token * ) {
+    color: #111827 !important; /* gray-900 */
+  }
+
 </style>
+
