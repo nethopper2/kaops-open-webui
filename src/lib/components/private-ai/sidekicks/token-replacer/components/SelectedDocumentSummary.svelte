@@ -7,6 +7,8 @@
 
   const i18n = getContext('i18n');
 
+  export let disabled: boolean = false;
+
   // Strip query string and keep origin+pathname (+hash if present)
   function stripQuery(url: string | undefined | null): string {
     if (!url) return '';
@@ -38,9 +40,10 @@
     <!-- whole card is a clickable preview button. Tooltip on filename shows full path. -->
     <button
       type="button"
-      class="w-full text-left rounded-md bg-transparent dark:bg-transparent p-2 hover:bg-gray-100/60 dark:hover:bg-white/5 shadow-none hover:shadow-sm transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+      class="w-full text-left rounded-md bg-transparent dark:bg-transparent p-2 hover:bg-gray-100/60 dark:hover:bg-white/5 shadow-none hover:shadow-sm transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 disabled:opacity-60 disabled:cursor-not-allowed"
       aria-label={$i18n.t('Preview Document')}
       on:click={() => dispatch('preview')}
+      disabled={disabled}
     >
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">

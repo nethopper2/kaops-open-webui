@@ -38,28 +38,55 @@ function openPreviewPanel() {
 			props: { file, previewType: 'docx' }
 		});
 		isPreviewOpen = true;
-		// After opening, inform the preview of which tokens currently have drafts
-		try {
-			const draftIds: string[] = [];
-			for (let i = 0; i < tokens.length; i++) {
-				const t = tokens[i];
-				const state = computeTokenState(t);
-				if (state === 'draft') {
-					const ids = tokenOccurrences[t] ?? [];
-					if (ids.length > 0) {
-						draftIds.push(...ids);
-					} else {
-						// Fallback to legacy sequential id
-						draftIds.push(`nh-token-${i + 1}`);
-					}
-				}
-			}
-			if (draftIds.length > 0) {
-				appHooks.callHook('private-ai.token-replacer.preview.set-draft-ids', { ids: draftIds });
-			}
+		// After opening, inform the preview of which tokens currently have drafts/saved/none
+  try {
+			emitStatusIds();
+			emitValuesById();
 		} catch {
 		}
 	}
+}
+
+function emitStatusIds() {
+	try {
+		const draftIds: string[] = [];
+		const savedIds: string[] = [];
+		const noneIds: string[] = [];
+		for (let i = 0; i < tokens.length; i++) {
+			const t = tokens[i];
+			const v = (values[t] ?? '').trim();
+			const s = (savedValues[t] ?? '').trim();
+			const ids = (tokenOccurrences[t] ?? []).length > 0 ? tokenOccurrences[t] : [`nh-token-${i + 1}`];
+			if (!v && !s) {
+				noneIds.push(...ids);
+			} else if (v === s && s) {
+				savedIds.push(...ids);
+			} else if (v && v !== s) {
+				draftIds.push(...ids);
+			}
+		}
+		if (draftIds.length > 0) appHooks.callHook('private-ai.token-replacer.preview.set-draft-ids', { ids: draftIds });
+		appHooks.callHook('private-ai.token-replacer.preview.set-status-ids', { draftIds, savedIds, noneIds });
+	} catch {}
+}
+
+function emitValuesById() {
+	try {
+		const byId: Record<string, { draft?: string; saved?: string }> = {};
+		for (let i = 0; i < tokens.length; i++) {
+			const t = tokens[i];
+			const v = (values[t] ?? '').trim();
+			const s = (savedValues[t] ?? '').trim();
+			const ids = (tokenOccurrences[t] ?? []).length > 0 ? tokenOccurrences[t] : [`nh-token-${i + 1}`];
+			for (const id of ids) {
+				const entry: { draft?: string; saved?: string } = {};
+				if (s) entry.saved = s;
+				if (v && v !== s) entry.draft = v; else if (v && !s) entry.draft = v;
+				byId[id] = entry;
+			}
+		}
+		appHooks.callHook('private-ai.token-replacer.preview.set-values', { byId });
+	} catch {}
 }
 
 function getFirstOccurrenceId(token: string, idx: number): string {
@@ -108,6 +135,7 @@ let showGenerateConfirm = false;
 let isPreviewOpen = false;
 let removeOverlayHook: (() => void) | null = null;
 let removePreviewClosedHook: (() => void) | null = null;
+let removePreviewReloadedHook: (() => void) | null = null;
 // Track the last previewed token selection to update highlight state on edits
 let lastPreviewSelection: { id: string; state: 'draft' | 'saved' } | null = null;
 let lastPreviewToken: string | null = null;
@@ -174,6 +202,9 @@ function onOverlayInput(e: Event) {
 		appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 		lastPreviewSelection = { id, state: newState };
 		lastPreviewToken = overlayToken;
+		// Update unselected state coloring and replacement text
+		emitStatusIds();
+		emitValuesById();
 	}
 }
 
@@ -394,7 +425,7 @@ function proceedGenerateWithoutSaving() {
 
 // Derived filtered tokens with filter modes
 type TokenFilter = 'all' | 'needing' | 'with' | 'drafts';
-let tokenFilter: TokenFilter = 'needing';
+let tokenFilter: TokenFilter = 'all';
 $: query = searchQuery.trim().toLowerCase();
 $: filteredTokens = tokens
 	.map((t) => DOMPurify.sanitize(t, { USE_PROFILES: { html: false } }))
@@ -430,6 +461,11 @@ function handleInput(token: string, id?: string) {
 				lastPreviewSelection.state = newState;
 			}
 		}
+		// Always sync values and statuses to the preview when open so +Values text updates live
+		if (isPreviewOpen) {
+			emitStatusIds();
+			emitValuesById();
+		}
 	};
 }
 
@@ -449,6 +485,11 @@ function handleRemoveTokenClick(token: string, id?: string) {
 			appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 			lastPreviewSelection.state = newState;
 		}
+	}
+	// Also reflect cleared value in the preview's +Values mode immediately
+	if (isPreviewOpen) {
+		emitStatusIds();
+		emitValuesById();
 	}
 }
 
@@ -571,6 +612,20 @@ onMount(async () => {
 		};
 	} catch {
 	}
+	// Listen for preview reload to re-sync status classes and replacement values
+	try {
+		const previewReloadedHandler = () => {
+			try {
+				emitStatusIds();
+				emitValuesById();
+			} catch {}
+		};
+		appHooks.hook('private-ai.token-replacer.preview.reloaded', previewReloadedHandler);
+		removePreviewReloadedHook = () => {
+			try { appHooks.removeHook('private-ai.token-replacer.preview.reloaded', previewReloadedHandler); } catch {}
+		};
+	} catch {}
+
 	// Ensure the list of tokenized files is loaded so the selected document summary can resolve on refresh
 	try {
 		await ensureFilesFetched();
@@ -663,6 +718,11 @@ onDestroy(() => {
 		removeOverlayHook && removeOverlayHook();
 	} catch {
 	}
+	// Remove preview reloaded hook listener
+	try {
+		removePreviewReloadedHook && removePreviewReloadedHook();
+	} catch {
+	}
 	// Cleanup summary visibility listeners
 	try {
 		if (summaryScrollHandler) {
@@ -713,12 +773,13 @@ onDestroy(() => {
 			{#if !isSummaryVisible}
 				<div class="ml-auto">
 					<Tooltip content={$i18n.t('Preview Document')} placement="left">
-						<button
+      <button
 							type="button"
-							class="inline-flex items-center justify-center h-6 w-6 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
+							class="inline-flex items-center justify-center h-6 w-6 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
 							on:click={openPreviewPanel}
 							aria-label={$i18n.t('Preview')}
 							title={$i18n.t('Preview')}
+							disabled={isPreviewOpen}
 						>
 							<Eye class="h-4 w-4" />
 						</button>
@@ -744,7 +805,7 @@ onDestroy(() => {
 		<!-- Selected document summary (non-sticky) -->
 		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
 				 bind:this={summaryEl}>
-			<SelectedDocumentSummary on:preview={openPreviewPanel} />
+   <SelectedDocumentSummary on:preview={openPreviewPanel} disabled={isPreviewOpen} />
 		</div>
 
 		<!-- Overlay scope wrapper: covers from below SelectedDocumentSummary -->
