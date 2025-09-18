@@ -38,28 +38,55 @@ function openPreviewPanel() {
 			props: { file, previewType: 'docx' }
 		});
 		isPreviewOpen = true;
-		// After opening, inform the preview of which tokens currently have drafts
-		try {
-			const draftIds: string[] = [];
-			for (let i = 0; i < tokens.length; i++) {
-				const t = tokens[i];
-				const state = computeTokenState(t);
-				if (state === 'draft') {
-					const ids = tokenOccurrences[t] ?? [];
-					if (ids.length > 0) {
-						draftIds.push(...ids);
-					} else {
-						// Fallback to legacy sequential id
-						draftIds.push(`nh-token-${i + 1}`);
-					}
-				}
-			}
-			if (draftIds.length > 0) {
-				appHooks.callHook('private-ai.token-replacer.preview.set-draft-ids', { ids: draftIds });
-			}
+		// After opening, inform the preview of which tokens currently have drafts/saved/none
+  try {
+			emitStatusIds();
+			emitValuesById();
 		} catch {
 		}
 	}
+}
+
+function emitStatusIds() {
+	try {
+		const draftIds: string[] = [];
+		const savedIds: string[] = [];
+		const noneIds: string[] = [];
+		for (let i = 0; i < tokens.length; i++) {
+			const t = tokens[i];
+			const v = (values[t] ?? '').trim();
+			const s = (savedValues[t] ?? '').trim();
+			const ids = (tokenOccurrences[t] ?? []).length > 0 ? tokenOccurrences[t] : [`nh-token-${i + 1}`];
+			if (!v && !s) {
+				noneIds.push(...ids);
+			} else if (v === s && s) {
+				savedIds.push(...ids);
+			} else if (v && v !== s) {
+				draftIds.push(...ids);
+			}
+		}
+		if (draftIds.length > 0) appHooks.callHook('private-ai.token-replacer.preview.set-draft-ids', { ids: draftIds });
+		appHooks.callHook('private-ai.token-replacer.preview.set-status-ids', { draftIds, savedIds, noneIds });
+	} catch {}
+}
+
+function emitValuesById() {
+	try {
+		const byId: Record<string, { draft?: string; saved?: string }> = {};
+		for (let i = 0; i < tokens.length; i++) {
+			const t = tokens[i];
+			const v = (values[t] ?? '').trim();
+			const s = (savedValues[t] ?? '').trim();
+			const ids = (tokenOccurrences[t] ?? []).length > 0 ? tokenOccurrences[t] : [`nh-token-${i + 1}`];
+			for (const id of ids) {
+				const entry: { draft?: string; saved?: string } = {};
+				if (s) entry.saved = s;
+				if (v && v !== s) entry.draft = v; else if (v && !s) entry.draft = v;
+				byId[id] = entry;
+			}
+		}
+		appHooks.callHook('private-ai.token-replacer.preview.set-values', { byId });
+	} catch {}
 }
 
 function getFirstOccurrenceId(token: string, idx: number): string {
@@ -174,6 +201,9 @@ function onOverlayInput(e: Event) {
 		appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 		lastPreviewSelection = { id, state: newState };
 		lastPreviewToken = overlayToken;
+		// Update unselected state coloring and replacement text
+		emitStatusIds();
+		emitValuesById();
 	}
 }
 
@@ -430,6 +460,11 @@ function handleInput(token: string, id?: string) {
 				lastPreviewSelection.state = newState;
 			}
 		}
+		// Always sync values and statuses to the preview when open so +Values text updates live
+		if (isPreviewOpen) {
+			emitStatusIds();
+			emitValuesById();
+		}
 	};
 }
 
@@ -449,6 +484,11 @@ function handleRemoveTokenClick(token: string, id?: string) {
 			appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 			lastPreviewSelection.state = newState;
 		}
+	}
+	// Also reflect cleared value in the preview's +Values mode immediately
+	if (isPreviewOpen) {
+		emitStatusIds();
+		emitValuesById();
 	}
 }
 

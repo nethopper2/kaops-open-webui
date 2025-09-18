@@ -16,10 +16,14 @@ export const appHooks = createHooks<{
 	// Token Replacer: request preview to scroll to and highlight a token by id
 	'private-ai.token-replacer.preview.select-token': (params: { id: string; state: 'draft' | 'saved' }) => void,
 	// Token Replacer: preview component opened/closed notification
-	'private-ai.token-replacer.preview.closed': () => void
-	'private-ai.token-replacer.preview.opened': () => void
-	'private-ai.token-replacer.preview.set-draft-ids': (params: { ids: string[] }) => void
-	'private-ai.token-replacer.preview.set-saved-ids': (params: { ids: string[] }) => void
+	'private-ai.token-replacer.preview.closed': () => void,
+	'private-ai.token-replacer.preview.opened': () => void,
+	// Token Replacer: set specific ID groups for color/status tints
+	'private-ai.token-replacer.preview.set-draft-ids': (params: { ids: string[] }) => void,
+	'private-ai.token-replacer.preview.set-saved-ids': (params: { ids: string[] }) => void,
+	'private-ai.token-replacer.preview.set-status-ids': (params: { draftIds?: string[]; savedIds?: string[]; noneIds?: string[] }) => void,
+	// Token Replacer: provide replacement values per token occurrence id
+	'private-ai.token-replacer.preview.set-values': (params: { byId: Record<string, { draft?: string; saved?: string }> }) => void,
 	// Token Replacer: request preview to reload its HTML, then reselect/scroll to a token
 	'private-ai.token-replacer.preview.reload': (params: { id: string; state: 'draft' | 'saved' }) => void
 }>();
