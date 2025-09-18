@@ -89,8 +89,7 @@ const handleMediaQuery = async (e: MediaQueryList | MediaQueryListEvent) => {
 };
 
 onMount(() => {
-	// listen to resize 1024px
-	mediaQuery = window.matchMedia('(min-width: 1024px)');
+	mediaQuery = window.matchMedia('(min-width: 600px)');
 	const mqListener = (ev: MediaQueryListEvent) => handleMediaQuery(ev);
 	mediaQuery.addEventListener('change', mqListener);
 	handleMediaQuery(mediaQuery);
@@ -184,7 +183,7 @@ onDestroy(() => {
 					const opening = behavior.isOpening();
 					// Ignore collapse events while we are in the process of opening to a visible size
           if (opening) return;
-          // Only hide after the pane has actually expanded at least once; ignore initial mount collapse
+          // Only hide after the pane has actually expanded at least once; ignore the initial mount collapse
           if (hasExpanded) {
             showPrivateAiSidekick.set(false);
           }
@@ -197,7 +196,7 @@ onDestroy(() => {
 						<div
 							class="w-full bg-white dark:shadow-lg dark:bg-gray-850 border border-gray-100 dark:border-gray-850 z-40 pointer-events-auto overflow-y-auto scrollbar-hidden">
 							<div class="flex flex-col w-full h-full">
-								<div class="flex items-center justify-between dark:text-gray-100 mb-2 p-4">
+								<div class="flex items-center justify-between dark:text-gray-100 pt-4 px-4">
 									<div class="flex items-center gap-2">
 										<img src={$privateAiSelectedModelAvatarUrl} alt="" class="size-5 rounded-full object-cover"
 												 draggable="false" />

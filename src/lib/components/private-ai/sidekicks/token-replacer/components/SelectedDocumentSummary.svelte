@@ -11,7 +11,7 @@
   function stripQuery(url: string | undefined | null): string {
     if (!url) return '';
     try {
-      const u = new URL(url, window.location.origin);
+      const u = new URL(url);
       const base = `${u.origin}${u.pathname}`;
       return u.hash ? `${base}${u.hash}` : base;
     } catch {
@@ -33,8 +33,8 @@
 </script>
 
 {#if $selectedTokenizedDocPath !== '' && $selectedTokenizedDoc}
-  <div class="mb-4">
-    <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{$i18n.t('Selected document')}</div>
+  <div class="mb-2">
+<!--    <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{$i18n.t('Selected document')}</div>-->
     <!-- whole card is a clickable preview button. Tooltip on filename shows full path. -->
     <button
       type="button"
@@ -44,7 +44,7 @@
     >
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">
-          <Tooltip content={stripQuery($selectedTokenizedDoc.url)} placement="top">
+          <Tooltip content={stripQuery($selectedTokenizedDoc.fullPath)} placement="top">
             <div class="flex items-center gap-1 text-sm font-medium text-gray-800 dark:text-gray-200 line-clamp-1" aria-label={stripQuery($selectedTokenizedDoc.url)}>
 							<Document/>
               {middleTruncate($selectedTokenizedDoc.name ?? 'Untitled', 80)}
