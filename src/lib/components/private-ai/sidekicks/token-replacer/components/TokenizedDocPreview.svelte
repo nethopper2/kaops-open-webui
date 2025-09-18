@@ -71,7 +71,7 @@
         const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
         const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
         if (el) {
-          if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-none')) {
+          if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
             el.classList.add('token-draft');
             el.dataset.tokenState = 'draft';
           }
@@ -93,7 +93,7 @@
         const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
         const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
         if (el) {
-          if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-none')) {
+          if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
             el.classList.add('token-saved');
             el.dataset.tokenState = 'saved';
           }
@@ -113,8 +113,8 @@
         const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
         const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
         if (el) {
-          if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-none')) {
-            el.classList.add('token-none');
+          // No class for 'none' in +Values; rely on base .token styling. Persist state only.
+          if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
             el.dataset.tokenState = 'none';
           }
           toDelete.push(id);
@@ -166,15 +166,14 @@
         clearStateTint(el);
         const wasSavedSel = el.classList.contains('token-selected-saved');
         const wasDraftSel = el.classList.contains('token-selected-draft');
-        const wasNoneSel = el.classList.contains('token-selected-none');
+        const wasIncompleteSel = el.classList.contains('token-selected');
         el.classList.remove('token-selected-saved');
         el.classList.remove('token-selected-draft');
-        el.classList.remove('token-selected-none');
-        if (wasSavedSel || wasDraftSel || wasNoneSel) {
+        el.classList.remove('token-selected');
+        if (wasSavedSel || wasDraftSel || wasIncompleteSel) {
           el.classList.add('token-selected-original');
         } else {
-          // Unselected state uses Incomplete styling in both modes
-          el.classList.add('token-none');
+          // Unselected tokens use base 'token' styling in Original mode (incomplete palette via .mode-original .token)
         }
       });
     } else {
@@ -185,12 +184,15 @@
           el.classList.remove('token-selected-original');
           const st = (el.dataset?.tokenState as TokenState | undefined) ?? 'saved';
           if (st === 'draft') el.classList.add('token-selected-draft');
-          else if (st === 'none') el.classList.add('token-selected-none');
+          else if (st === 'none') el.classList.add('token-selected');
           else el.classList.add('token-selected-saved');
         }
-        if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-none')) {
+        if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
           clearStateTint(el);
-          el.classList.add('token-none');
+          const st = (el.dataset?.tokenState as TokenState | undefined);
+          if (st === 'draft') el.classList.add('token-draft');
+          else if (st === 'saved') el.classList.add('token-saved');
+          // if none or unknown, leave base .token which uses incomplete palette in values mode
         }
       });
     }
@@ -227,19 +229,26 @@
 
   function clearSelection() {
     if (!previewContainer) return;
-    const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved, .token.token-selected-none, .token.token-selected-original') as HTMLElement | null;
+    const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved, .token.token-selected, .token.token-selected-original') as HTMLElement | null;
     if (prevSel) {
       // Determine the token's persisted state if available
       const savedState: TokenState = (prevSel.dataset?.tokenState as TokenState | undefined)
-        ?? (prevSel.classList.contains('token-draft') ? 'draft' : prevSel.classList.contains('token-none') ? 'none' : prevSel.classList.contains('token-saved') ? 'saved' : 'saved');
+        ?? (prevSel.classList.contains('token-draft') ? 'draft' : prevSel.classList.contains('token-saved') ? 'saved' : 'none');
       // Remove selected state classes
       prevSel.classList.remove('token-selected-draft');
       prevSel.classList.remove('token-selected-saved');
-      prevSel.classList.remove('token-selected-none');
+      prevSel.classList.remove('token-selected');
       prevSel.classList.remove('token-selected-original');
-      // Unselected returns to Incomplete coloring in both modes
+      // Restore unselected state based on mode and tokenState
       clearStateTint(prevSel);
-      prevSel.classList.add('token-none');
+      if (previewMode === 'values') {
+        const st = (prevSel.dataset?.tokenState as TokenState | undefined) ?? savedState;
+        if (st === 'draft') prevSel.classList.add('token-draft');
+        else if (st === 'saved') prevSel.classList.add('token-saved');
+        // if none, leave base .token to get Incomplete styling in values mode
+      } else {
+        // Original mode uses base .token with incomplete palette via .mode-original .token
+      }
     }
   }
 
@@ -260,7 +269,7 @@
         if (previewMode === 'original') {
           el.classList.add('token-selected-original');
         } else {
-          if (isNone) el.classList.add('token-selected-none');
+          if (isNone) el.classList.add('token-selected');
           else el.classList.add(state === 'draft' ? 'token-selected-draft' : 'token-selected-saved');
         }
         // Scroll into view centered within the scrollable container
@@ -443,8 +452,8 @@
     }
   }
 
-  /* +Values mode unselected state tints */
-  :global(.preview-html .token.token-none) {
+  /* +Values mode base and unselected state tints */
+  :global(.preview-html.mode-values .token) {
     background: rgba(234, 179, 8, 0.20); /* warning: yellow-500/20 */
     color: #854d0e; /* yellow-800 */
     border-color: rgba(234, 179, 8, 0.35);
@@ -460,7 +469,7 @@
     border-color: rgba(59, 130, 246, 0.35);
   }
   @media (prefers-color-scheme: dark) {
-    :global(.preview-html .token.token-none) {
+    :global(.preview-html.mode-values .token) {
       background: rgba(202, 138, 4, 0.35); /* amber-600/35 */
       color: #fde68a; /* yellow-200 */
       border-color: rgba(245, 158, 11, 0.45);
@@ -491,7 +500,7 @@
     border: 2px solid rgba(59, 130, 246, 0.9) !important; /* blue-500 strong */
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35) !important;
   }
-  :global(.preview-html .token.token-selected-none) {
+  :global(.preview-html .token.token-selected) {
     background: #fef9c3 !important; /* yellow-100 */
     color: #854d0e !important; /* amber-800 */
     border: 2px solid rgba(250, 204, 21, 0.9) !important; /* yellow-400 */
@@ -519,7 +528,7 @@
       border: 2px solid rgba(59, 130, 246, 0.85) !important; /* blue-500 */
       box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.4) !important;
     }
-    :global(.preview-html .token.token-selected-none) {
+    :global(.preview-html .token.token-selected) {
       background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
       color: #fde68a !important; /* yellow-200 */
       border: 2px solid rgba(245, 158, 11, 0.85) !important; /* amber-500-600 */
