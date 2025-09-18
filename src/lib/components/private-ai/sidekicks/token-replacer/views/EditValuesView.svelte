@@ -761,7 +761,7 @@ onDestroy(() => {
 					<!-- Sticky overlay header: title, token label, input, and navigation (Prev/Next) -->
 					<div class="sticky top-0 z-20 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
 						<div class="p-3 sm:p-4 pb-2 sm:pb-3">
-							<div class="flex items-start justify-between gap-3 mb-3">
+							<div class="flex items-start justify-between gap-3">
 								<div class="text-lg font-medium self-center font-primary">
 									{$i18n.t('Token Occurrences')}
 									<span class="text-xs font-normal">({overlayOccurrences.length})</span>
@@ -775,7 +775,7 @@ onDestroy(() => {
 							<div class="flex items-start justify-between gap-3 mb-3">
 								<div class="space-y-1">
 									<Tooltip content={overlayToken} placement="top" className="inline-flex max-w-full">
-										<span class="token-text">{overlayToken}</span>
+										<span class="token-text text-xs">{overlayToken}</span>
 									</Tooltip>
 								</div>
 							</div>
