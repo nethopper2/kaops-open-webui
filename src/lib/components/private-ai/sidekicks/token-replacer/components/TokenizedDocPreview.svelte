@@ -399,7 +399,7 @@ onDestroy(() => {
 			<div class="flex items-center gap-2 shrink-0">
 				<span id="values-switch-label"
 							class="text-[11px] text-gray-700 dark:text-gray-300 select-none">+{$i18n.t('Values')}</span>
-				<Switch id="values-switch" ariaLabelledbyId="values-switch-label" bind:state={isValuesMode} tooltip={true} />
+				<Switch id="values-switch" ariaLabelledbyId="values-switch-label" bind:state={isValuesMode} tooltip={true} disabled={previewLoading} />
 			</div>
 		</div>
 	</div>
