@@ -34,7 +34,7 @@
 
 {#if $selectedTokenizedDocPath !== '' && $selectedTokenizedDoc}
   <div class="mb-2">
-    <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{$i18n.t('Selected document')}</div>
+<!--    <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{$i18n.t('Selected document')}</div>-->
     <!-- whole card is a clickable preview button. Tooltip on filename shows full path. -->
     <button
       type="button"
