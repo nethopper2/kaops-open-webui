@@ -43,8 +43,9 @@
       const draft = (rep?.draft ?? '').trim();
       const saved = (rep?.saved ?? '').trim();
       let text = '';
-      if (draft && saved && draft !== saved) text = `${draft} • ${saved}`;
-      else text = draft || saved || (el.dataset.originalText ?? '');
+      if (draft) text = draft;
+      else if (saved) text = saved;
+      else text = el.dataset.originalText ?? '';
       // Only update when different to avoid cursor jumps
       if ((el.textContent ?? '') !== text) {
         el.textContent = text;
