@@ -11,7 +11,7 @@
   function stripQuery(url: string | undefined | null): string {
     if (!url) return '';
     try {
-      const u = new URL(url, window.location.origin);
+      const u = new URL(url);
       const base = `${u.origin}${u.pathname}`;
       return u.hash ? `${base}${u.hash}` : base;
     } catch {
@@ -44,7 +44,7 @@
     >
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">
-          <Tooltip content={stripQuery($selectedTokenizedDoc.url)} placement="top">
+          <Tooltip content={stripQuery($selectedTokenizedDoc.fullPath)} placement="top">
             <div class="flex items-center gap-1 text-sm font-medium text-gray-800 dark:text-gray-200 line-clamp-1" aria-label={stripQuery($selectedTokenizedDoc.url)}>
 							<Document/>
               {middleTruncate($selectedTokenizedDoc.name ?? 'Untitled', 80)}
