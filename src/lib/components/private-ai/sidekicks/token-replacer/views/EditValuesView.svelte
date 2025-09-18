@@ -425,7 +425,7 @@ function proceedGenerateWithoutSaving() {
 
 // Derived filtered tokens with filter modes
 type TokenFilter = 'all' | 'needing' | 'with' | 'drafts';
-let tokenFilter: TokenFilter = 'needing';
+let tokenFilter: TokenFilter = 'all';
 $: query = searchQuery.trim().toLowerCase();
 $: filteredTokens = tokens
 	.map((t) => DOMPurify.sanitize(t, { USE_PROFILES: { html: false } }))
