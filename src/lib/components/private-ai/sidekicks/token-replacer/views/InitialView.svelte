@@ -93,8 +93,8 @@
             };
             const prompt = JSON.stringify(directive);
             appHooks.callHook('chat.submit', { prompt });
-            // Switch to the actions sub-view after the beginning
-            currentTokenReplacerSubView.set('actions');
+            // Switch to the edit values sub-view after the beginning
+            currentTokenReplacerSubView.set('editValues');
             // Persist sidekick UI state (selected document) for this chat+sidekick
             ;(async () => {
               try {
