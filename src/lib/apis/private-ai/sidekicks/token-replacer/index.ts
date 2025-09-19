@@ -100,3 +100,24 @@ export async function putTokenReplacementValues(
 		{ method: 'PUT', body: { tokens } }
 	);
 }
+
+// POST generate a document with current saved values
+export type GenerateDocumentResult = {
+	outputOriginalStyle?: { name: string; url: string } | null;
+	outputNormalized?: { name: string; url: string } | null;
+	tokensFound: string[];
+	tokensReplaced: string[];
+	tokensMissing: string[];
+	didReplace: boolean;
+	tokenPattern: string;
+	templateFilename?: string;
+};
+
+export async function generateTokenReplacerDocument(chatId: string, modelId: string) {
+	const raw = await apiFetch<any>(
+		`/tools/token-replacer/generate/chat/${encodeURIComponent(chatId)}/model/${encodeURIComponent(modelId)}`,
+		{ method: 'POST' }
+	);
+	const data = (raw as any)?.data ?? raw;
+	return data as GenerateDocumentResult;
+}

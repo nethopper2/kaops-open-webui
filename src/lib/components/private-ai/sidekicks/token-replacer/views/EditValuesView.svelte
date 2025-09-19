@@ -10,7 +10,9 @@ import { chatId, currentSelectedModelId } from '$lib/stores';
 import {
 	getTokenReplacementValues,
 	putTokenReplacementValues,
-	type TokenReplacementValue
+	generateTokenReplacerDocument,
+	type TokenReplacementValue,
+	type GenerateDocumentResult
 } from '$lib/apis/private-ai/sidekicks/token-replacer';
 import {
 	clearTokenReplacerDraft,
@@ -388,18 +390,33 @@ async function handleGenerate() {
 		toast.error($i18n.t('Missing context: chat, model, or document path'));
 		return;
 	}
-	let dismiss: (() => void) | undefined;
+	let loadingToastId: string | number | undefined;
 	try {
-		// TODO: call the REST api via a new function in `src/lib/apis/private-ai/sidekicks/token-replacer/index.ts`
-		dismiss = toast.success($i18n.t('TODO: Generation requested'));
+		loadingToastId = toast.loading($i18n.t('Generating document...'));
+		const result = (await generateTokenReplacerDocument(cId, mId)) as GenerateDocumentResult;
+		if (!result || result.didReplace === false) {
+			toast.error($i18n.t('No tokens were replaced.'));
+			return;
+		}
+		toast.success($i18n.t('Document generated successfully.'));
+		// Send an assistant-only directive message to the chat including the full result payload
+		const directive = {
+			_kind: 'openwebui.directive',
+			version: 1,
+			name: 'token_replacer.generate.result',
+			assistant_only: true,
+			payload: { result }
+		};
+		try {
+			await appHooks.callHook('chat.submit', { prompt: JSON.stringify(directive) });
+		} catch {
+			// ignore hook issues; generation already succeeded
+		}
 	} catch (e) {
 		console.error(e);
-		toast.error($i18n.t('Failed to start generation'));
+		toast.error($i18n.t('Failed to generate document.'));
 	} finally {
-		try {
-			dismiss && dismiss();
-		} catch {
-		}
+		try { if (loadingToastId !== undefined) toast.dismiss(loadingToastId); } catch {}
 	}
 }
 
@@ -413,7 +430,7 @@ function onGenerateClick() {
 
 async function confirmSaveThenGenerate() {
 	await handleSubmit();
-	// Only proceed to generate if submission didn't error out
+	// Only proceed to generate if the submission didn't error out
 	if (!submitError) {
 		await handleGenerate();
 	}
