@@ -132,6 +132,7 @@ let tokenOccurrences: Record<string, string[]> = {};
 let searchQuery = '';
 let showConfirm = false;
 let showGenerateConfirm = false;
+let showFinalGenerateConfirm = false;
 
 // Track if the TokenizedDocPreview overlay is open
 let isPreviewOpen = false;
@@ -424,20 +425,21 @@ function onGenerateClick() {
 	if (draftCount > 0) {
 		showGenerateConfirm = true;
 	} else {
-		void handleGenerate();
+		// Always ask for a final confirmation before generating
+		showFinalGenerateConfirm = true;
 	}
 }
 
 async function confirmSaveThenGenerate() {
 	await handleSubmit();
-	// Only proceed to generate if the submission didn't error out
+	// Only proceed to final confirmation if the submission didn't error out
 	if (!submitError) {
-		await handleGenerate();
+		showFinalGenerateConfirm = true;
 	}
 }
 
 function proceedGenerateWithoutSaving() {
-	void handleGenerate();
+	showFinalGenerateConfirm = true;
 }
 
 // Derived filtered tokens with filter modes
@@ -1081,6 +1083,14 @@ onDestroy(() => {
 	on:cancel={proceedGenerateWithoutSaving}
 />
 
+<ConfirmDialog
+	bind:show={showFinalGenerateConfirm}
+	title={$i18n.t('Generate Document')}
+	message={$i18n.t('Are you sure you want to generate the document?')}
+	cancelLabel={$i18n.t('Cancel')}
+	confirmLabel={$i18n.t('Generate')}
+	on:confirm={() => void handleGenerate()}
+/>
 
 <style>
   .token-text {
