@@ -8,11 +8,11 @@ import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelt
 import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 import { chatId, currentSelectedModelId } from '$lib/stores';
 import {
+	type GenerateDocumentResult,
+	generateTokenReplacerDocument,
 	getTokenReplacementValues,
 	putTokenReplacementValues,
-	generateTokenReplacerDocument,
-	type TokenReplacementValue,
-	type GenerateDocumentResult
+	type TokenReplacementValue
 } from '$lib/apis/private-ai/sidekicks/token-replacer';
 import {
 	clearTokenReplacerDraft,
@@ -41,7 +41,7 @@ function openPreviewPanel() {
 		});
 		isPreviewOpen = true;
 		// After opening, inform the preview of which tokens currently have drafts/saved/none
-  try {
+		try {
 			emitStatusIds();
 			emitValuesById();
 		} catch {
@@ -69,7 +69,8 @@ function emitStatusIds() {
 		}
 		if (draftIds.length > 0) appHooks.callHook('private-ai.token-replacer.preview.set-draft-ids', { ids: draftIds });
 		appHooks.callHook('private-ai.token-replacer.preview.set-status-ids', { draftIds, savedIds, noneIds });
-	} catch {}
+	} catch {
+	}
 }
 
 function emitValuesById() {
@@ -88,7 +89,8 @@ function emitValuesById() {
 			}
 		}
 		appHooks.callHook('private-ai.token-replacer.preview.set-values', { byId });
-	} catch {}
+	} catch {
+	}
 }
 
 function getFirstOccurrenceId(token: string, idx: number): string {
@@ -340,9 +342,10 @@ $: draftCount = tokens.reduce((acc, t) => ((values[t] ?? '').trim() !== (savedVa
 $: progressPercent = totalTokens > 0 ? Math.round((providedCount / totalTokens) * 100) : 0;
 
 // Build confirmation message (markdown supported by ConfirmDialog)
+$: currentProvidedCount = tokens.reduce((acc, t) => (((values[t] ?? '').trim().length > 0) ? acc + 1 : acc), 0);
 $: confirmMessage = `${$i18n.t('You are about to submit all token/value pairs for the selected document.')}<br><br>` +
 	`${$i18n.t('Tokens total')}: <b>${totalTokens}</b><br>` +
-	`${$i18n.t('Replacement values provided')}: <b>${providedCount}</b><br>` +
+	`${$i18n.t('Replacement values provided')}: <b>${currentProvidedCount}</b><br>` +
 	`${$i18n.t('Replacement values empty')}: <b>${emptyCount}</b><br><br>` +
 	`${$i18n.t('All tokens will be submitted, including those not currently visible due to search filters.')}<br><br>` +
 	`${$i18n.t('Do you want to continue?')}`;
@@ -417,7 +420,10 @@ async function handleGenerate() {
 		console.error(e);
 		toast.error($i18n.t('Failed to generate document.'));
 	} finally {
-		try { if (loadingToastId !== undefined) toast.dismiss(loadingToastId); } catch {}
+		try {
+			if (loadingToastId !== undefined) toast.dismiss(loadingToastId);
+		} catch {
+		}
 	}
 }
 
@@ -637,13 +643,18 @@ onMount(async () => {
 			try {
 				emitStatusIds();
 				emitValuesById();
-			} catch {}
+			} catch {
+			}
 		};
 		appHooks.hook('private-ai.token-replacer.preview.reloaded', previewReloadedHandler);
 		removePreviewReloadedHook = () => {
-			try { appHooks.removeHook('private-ai.token-replacer.preview.reloaded', previewReloadedHandler); } catch {}
+			try {
+				appHooks.removeHook('private-ai.token-replacer.preview.reloaded', previewReloadedHandler);
+			} catch {
+			}
 		};
-	} catch {}
+	} catch {
+	}
 
 	// Ensure the list of tokenized files is loaded so the selected document summary can resolve on refresh
 	try {
@@ -792,7 +803,7 @@ onDestroy(() => {
 			{#if !isSummaryVisible}
 				<div class="ml-auto">
 					<Tooltip content={$i18n.t('Preview Document')} placement="left">
-      <button
+						<button
 							type="button"
 							class="inline-flex items-center justify-center h-6 w-6 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
 							on:click={openPreviewPanel}
@@ -824,7 +835,7 @@ onDestroy(() => {
 		<!-- Selected document summary (non-sticky) -->
 		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
 				 bind:this={summaryEl}>
-   <SelectedDocumentSummary on:preview={openPreviewPanel} disabled={isPreviewOpen} />
+			<SelectedDocumentSummary on:preview={openPreviewPanel} disabled={isPreviewOpen} />
 		</div>
 
 		<!-- Overlay scope wrapper: covers from below SelectedDocumentSummary -->
@@ -833,7 +844,7 @@ onDestroy(() => {
 
 			<!-- Content area -->
 			{#if isTokenOverlayOpen && overlayToken}
- 			<!-- Token occurrences overlay (scoped within EditValuesView search+content area) -->
+				<!-- Token occurrences overlay (scoped within EditValuesView search+content area) -->
 				<div
 					class="sticky z-30 bg-gray-50 dark:bg-gray-900 border-l border-r border-gray-200 dark:border-gray-800 overflow-y-auto"
 					style={`top: ${headerHeight}px; height: calc(100vh - ${headerHeight}px); min-height: calc(100vh - ${headerHeight}px); padding-bottom: ${submitBarHeight}px;`}
@@ -847,8 +858,8 @@ onDestroy(() => {
 									<span class="text-xs font-normal">({overlayOccurrences.length})</span>
 								</div>
 								<button type="button"
-										class="inline-flex flex-shrink-0 items-center justify-center h-8 w-8 rounded text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
-										aria-label={$i18n.t('Close')} on:click={closeTokenOverlay}>
+												class="inline-flex flex-shrink-0 items-center justify-center h-8 w-8 rounded text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
+												aria-label={$i18n.t('Close')} on:click={closeTokenOverlay}>
 									<span aria-hidden="true">✕</span>
 								</button>
 							</div>
@@ -859,45 +870,45 @@ onDestroy(() => {
 									</Tooltip>
 								</div>
 							</div>
-							
+
 							<!-- Synced input -->
 							<div class="space-y-2 mb-3">
 								<input id="overlay-input"
-										 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
-										 type="text" placeholder={$i18n.t('Replacement value')}
-										 value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
-										 on:input={onOverlayInput} autocomplete="off" />
+											 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
+											 type="text" placeholder={$i18n.t('Replacement value')}
+											 value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
+											 on:input={onOverlayInput} autocomplete="off" />
 							</div>
-							
- 						<!-- Navigation (sticky header: only Prev/Next) -->
- 						<div class="flex flex-wrap items-center gap-2 mb-1">
- 							<button type="button"
- 									class="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
- 									on:click={gotoPrevOccurrence} disabled={overlayOccurrences.length <= 1}>
- 								{$i18n.t('Prev')}
- 							</button>
- 							<button type="button"
- 									class="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
- 									on:click={gotoNextOccurrence} disabled={overlayOccurrences.length <= 1}>
- 								{$i18n.t('Next')}
- 							</button>
- 						</div>
+
+							<!-- Navigation (sticky header: only Prev/Next) -->
+							<div class="flex flex-wrap items-center gap-2 mb-1">
+								<button type="button"
+												class="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
+												on:click={gotoPrevOccurrence} disabled={overlayOccurrences.length <= 1}>
+									{$i18n.t('Prev')}
+								</button>
+								<button type="button"
+												class="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
+												on:click={gotoNextOccurrence} disabled={overlayOccurrences.length <= 1}>
+									{$i18n.t('Next')}
+								</button>
+							</div>
 						</div>
 					</div>
-					
+
 					<!-- Non-sticky content (occurrence previews/list) -->
 					<div class="p-3 sm:p-4">
 						<div class="flex flex-wrap items-center gap-1">
 							{#each overlayOccurrences as occId, idx}
 								<button type="button"
-										class={`px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-										on:click={() => selectOverlayOccurrence(idx)}>
+												class={`px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+												on:click={() => selectOverlayOccurrence(idx)}>
 									{idx + 1}
 								</button>
 							{/each}
 						</div>
 					</div>
-					</div>
+				</div>
 			{/if}
 
 			<div
@@ -1034,7 +1045,8 @@ onDestroy(() => {
 
 	<!-- Submit bar (sticky bottom) -->
 	<div
-		class="px-4 py-3 border-t border-gray-200 dark:border-gray-800 sticky bottom-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20" bind:this={submitBarEl}>
+		class="px-4 py-3 border-t border-gray-200 dark:border-gray-800 sticky bottom-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20"
+		bind:this={submitBarEl}>
 		<div class="flex items-center justify-between gap-3">
 			<div class="text-xs text-gray-600 dark:text-gray-400">
 				{#if isSubmitting}
