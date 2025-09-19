@@ -30,7 +30,7 @@ export const selectedTokenizedDoc = derived(
 
 // Manage which sub-view is shown within the token-replacer sidekick
 export type TokenReplacerSubView = 'initial' | 'editValues';
-export const currentTokenReplacerSubView: Writable<TokenReplacerSubView> = writable('editValues');
+export const currentTokenReplacerSubView: Writable<TokenReplacerSubView> = writable('initial');
 
 export async function ensureFilesFetched(): Promise<void> {
 	if (get(filesFetched) || get(filesLoading)) return;
@@ -52,7 +52,7 @@ export function resetTokenReplacerStores(): void {
 	filesLoading.set(false);
 	filesFetched.set(false);
 	selectedTokenizedDocPath.set('');
-	currentTokenReplacerSubView.set('initial');
+	// Note: Do not set currentTokenReplacerSubView here to avoid race conditions.
 }
 
 // Centralized chat change handling to avoid component lifecycle race conditions.
@@ -86,9 +86,10 @@ chatId.subscribe((newIdRaw) => {
 		return;
 	}
 
-	// Starting a brand-new chat ('' -> someId): preserve the current selection; show actions
+	// Starting a brand-new chat ('' -> someId): clear any previous selection; show initial view
 	if (prev === '' && newId !== '') {
-		currentTokenReplacerSubView.set('editValues');
+		selectedTokenizedDocPath.set('');
+		currentTokenReplacerSubView.set('initial');
 		return;
 	}
 
