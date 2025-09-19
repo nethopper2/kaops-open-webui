@@ -369,6 +369,41 @@ async function loadTokensAndValues(): Promise<{
 	return { tokens: tokensFromApi, values: valuesFromApi, occurrences: occFromApi };
 }
 
+// Small delay + retry wrapper to mitigate race conditions after new chat creation
+const TOKENS_LOAD_MAX_RETRIES = 5;
+const TOKENS_LOAD_INITIAL_DELAY_MS = 200;
+
+function sleep(ms: number) {
+	return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function loadTokensAndValuesWithRetry() {
+	let lastError: any = null;
+	for (let attempt = 0; attempt < TOKENS_LOAD_MAX_RETRIES; attempt++) {
+		if (attempt > 0) {
+			const delay = TOKENS_LOAD_INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
+			await sleep(delay);
+		}
+		try {
+			const result = await loadTokensAndValues();
+			// If tokens are present, return immediately. Otherwise, retry until max attempts.
+			if (Array.isArray(result.tokens) && result.tokens.length > 0) {
+				return result;
+			}
+			lastError = lastError ?? new Error('No tokens available yet');
+		} catch (e) {
+			lastError = e;
+			// continue to retry unless this is the last attempt
+		}
+	}
+	// Final attempt: do one more direct call to surface any concrete error message
+	try {
+		return await loadTokensAndValues();
+	} catch (e) {
+		throw (e ?? lastError ?? new Error('Failed to load tokens'));
+	}
+}
+
 // Submit replacement values to API
 async function submitReplacementValues(payload: { token: string; value: string }[]): Promise<void> {
 	const cId = $chatId as string | null;
@@ -696,7 +731,7 @@ onMount(async () => {
 	isLoading = true;
 	loadError = null;
 	try {
-		const { tokens: tk, values: vals, occurrences: occ } = await loadTokensAndValues();
+		const { tokens: tk, values: vals, occurrences: occ } = await loadTokensAndValuesWithRetry();
 		tokens = tk;
 		// Track server-saved values separately from editable values
 		savedValues = vals;
