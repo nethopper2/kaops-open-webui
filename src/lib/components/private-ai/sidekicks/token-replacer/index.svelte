@@ -16,9 +16,9 @@
   export let initialState: PrivateAiSidekickState<TokenReplacerState> | null = null;
   $: void modelId;
 
-  // Hydrate selection from the initial state once, but only after a chat has started
+  // Hydrate selection from the initial state once, but only when showing edit values
   let hydrated = false;
-  $: if (!hydrated && $started && initialState?.tokenizedDocPath) {
+  $: if (!hydrated && $currentTokenReplacerSubView === 'editValues' && initialState?.tokenizedDocPath) {
     selectedTokenizedDocPath.set(String(initialState.tokenizedDocPath));
     hydrated = true;
   }
@@ -28,7 +28,7 @@
 </script>
 
 <div class="flex flex-col w-full h-full">
-  {#if $started}
+  {#if $currentTokenReplacerSubView === 'editValues'}
     <EditValuesView />
   {:else}
     <InitialView {modelId} />

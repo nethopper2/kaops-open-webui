@@ -86,10 +86,10 @@ chatId.subscribe((newIdRaw) => {
 		return;
 	}
 
-	// Starting a brand-new chat ('' -> someId): clear any previous selection; show initial view
+	// Starting a brand-new chat ('' -> someId): move to edit values. The Begin flow sets selection prior to chat creation.
+	// Do NOT clear selectedTokenizedDocPath here so user selection made pre-start persists.
 	if (prev === '' && newId !== '') {
-		selectedTokenizedDocPath.set('');
-		currentTokenReplacerSubView.set('initial');
+		currentTokenReplacerSubView.set('editValues');
 		return;
 	}
 
