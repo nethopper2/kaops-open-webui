@@ -35,7 +35,7 @@ function openPreviewPanel() {
 	if (file) {
 		appHooks.callHook('chat.overlay', {
 			action: 'open',
-			title: $i18n.t('Preview'),
+			title: `👀 ${$i18n.t('Preview')} `,
 			component: TokenizedDocPreview,
 			props: { file, previewType: 'docx' }
 		});
