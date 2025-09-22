@@ -1077,7 +1077,7 @@ onDestroy(() => {
 			<div class="flex items-center gap-2">
 				{#if savedCount > 0}
 					<button
-						class="px-4 py-2 rounded bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
+						class="px-4 py-2 rounded bg-green-700 text-white hover:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-green-700 dark:hover:bg-green-800 text-nowrap"
 						disabled={isLoading || isSubmitting || tokens.length === 0 || savedCount === 0}
 						on:click={onGenerateClick}
 					>
