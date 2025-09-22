@@ -215,7 +215,11 @@ async function handleGotoClick(e: MouseEvent) {
 
 		// If there is a configured base path, enforce that target path is under it (avoid prefix confusion)
 		const servicePath = (serviceBase.pathname || '').replace(/\/$/, '');
-		if (servicePath && !targetUrl.pathname.startsWith(servicePath)) return;
+		if (servicePath) {
+			const p = targetUrl.pathname || '';
+			// Require exact match or a path component boundary (servicePath + '/')
+			if (!(p === servicePath || p.startsWith(servicePath + '/'))) return;
+		}
 
 		// Safe to call backend service for this URL
 		let result: any;

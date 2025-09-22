@@ -30,15 +30,18 @@ export const apiFetch = ofetch.create({
 			options.baseURL = `${backendConfig.private_ai.rest_api_base_url}/api`;
 		}
 		
-		// Build a full URL for origin/path checks where possible
+		// Build a full URL for origin/path checks where possible (SSR-safe: avoid window usage)
 		let fullUrl: URL | null = null;
 		try {
-			// If options.url is absolute, use it; otherwise resolve against options.baseURL or current origin
+			// If options.url looks absolute (starts with http/https), use it.
 			if (options?.url && /^(https?:)?\/\//i.test(String(options.url))) {
 				const u = String(options.url);
-				fullUrl = new URL(u.startsWith('http') ? u : `${window.location.protocol}${u}`);
+				// If protocol-relative (//host/...), prepend https: to make a valid absolute URL for parsing.
+				const absolute = u.startsWith('http') ? u : `https:${u}`;
+				fullUrl = new URL(absolute);
 			} else {
-				const base = options.baseURL ?? window.location.origin;
+				// Resolve relative url against the configured baseURL if present; avoid window in SSR.
+				const base = options.baseURL ?? backendConfig.private_ai?.rest_api_base_url ?? 'http://localhost';
 				fullUrl = new URL(String(options.url ?? ''), base);
 			}
 		} catch (e) {
@@ -56,11 +59,15 @@ export const apiFetch = ofetch.create({
 				const allowedOrigin = serviceBase.origin;
 				const allowedPath = (serviceBase.pathname || '').replace(/\/$/, ''); // normalize
 
-				// Require same origin and that the target path starts with the configured base path (if any)
-				if (
-					fullUrl.origin === allowedOrigin &&
-					(allowedPath === '' || fullUrl.pathname.startsWith(allowedPath))
-				) {
+				// Require same origin and that the target path is either exactly the base path
+				// or a sub-path (ensure a path component boundary to avoid /api vs /api2 bypass).
+				const pathname = fullUrl.pathname || '';
+				const pathOk =
+					allowedPath === '' ||
+					pathname === allowedPath ||
+					pathname.startsWith(allowedPath + '/');
+
+				if (fullUrl.origin === allowedOrigin && pathOk) {
 					if (!options.headers.has('Authorization')) {
 						options.headers.set('Authorization', `Bearer ${token}`);
 					}
