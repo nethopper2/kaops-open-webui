@@ -12,7 +12,7 @@
 
 	import { get, type Unsubscriber, type Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
  import {
 		chatId,
@@ -75,7 +75,7 @@
 		chatAction,
 		generateMoACompletion,
 		stopTask,
-		getTaskIdsByChatId
+		getTaskIdsByChatId, getBackendConfig
 	} from '$lib/apis';
 	import { getTools } from '$lib/apis/tools';
 
@@ -139,6 +139,7 @@
  
 // Auto open/close of Private AI sidekick is now handled via appHooks 'model.changed' in onMount.
 import { appHooks } from '$lib/utils/hooks';
+	import { apiFetch } from '$lib/apis/private-ai/fetchClients';
 
 let __unhookModelChanged: (() => void) | undefined;
 let __unhookChatSubmit: (() => void) | undefined;
@@ -151,7 +152,116 @@ let overlayTitle = '';
 let overlayComponent: any = null;
 let overlayProps: Record<string, unknown> = {};
 
+// handle certain links in the chat Markdown.
+async function handleGotoClick(e: MouseEvent) {
+	// Find the anchor element closest to event target (covers clicks on child elements)
+	const target = e.target as Element | null;
+	const anchor = target?.closest ? target.closest('a') : null;
+	if (!anchor) return;
+
+	const href = anchor.getAttribute('href');
+	if (!href || !href.startsWith('#goto=')) return;
+
+	// Prevent default navigation for our custom handler
+	e.preventDefault();
+
+	const encoded = href.substring(6); // after '#goto='
+	let decodedUrl: string;
+	try {
+		decodedUrl = decodeURIComponent(encoded);
+	} catch (err) {
+		console.warn('Invalid goto payload encoding', err);
+		return;
+	}
+	if (!decodedUrl) return;
+
+	try {
+		const backendConfig = await getBackendConfig();
+
+		// Parse the target URL robustly
+		let targetUrl: URL;
+		try {
+			targetUrl = new URL(decodedUrl, window.location.href);
+		} catch (err) {
+			console.warn('Invalid goto URL', err);
+			return;
+		}
+
+		// Parse the configured service base and enforce same origin + path prefix.
+		let serviceBase: URL;
+		try {
+			serviceBase = new URL(backendConfig.nh_data_service.url);
+		} catch (err) {
+			console.warn('Invalid backend nh_data_service.url in config', err);
+			return;
+		}
+
+		// Allowlist for common development hostnames
+		const devHostnames = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
+		const pageIsLocal = devHostnames.has(window.location.hostname);
+		const targetIsLocal = devHostnames.has(targetUrl.hostname);
+		const serviceIsLocal = devHostnames.has(serviceBase.hostname);
+
+		// Accept when:
+		//  - the target origin exactly matches configured service origin (production)
+		//  - OR when running the app locally and the target is a local dev host (allow local dev flow)
+		//  - OR when the configured service itself is local and the target is local
+		const allowedForFetch =
+			targetUrl.origin === serviceBase.origin ||
+			(pageIsLocal && targetIsLocal) ||
+			(serviceIsLocal && targetIsLocal);
+
+		if (!allowedForFetch) return;
+
+		// If there is a configured base path, enforce that target path is under it (avoid prefix confusion)
+		const servicePath = (serviceBase.pathname || '').replace(/\/$/, '');
+		if (servicePath && !targetUrl.pathname.startsWith(servicePath)) return;
+
+		// Safe to call backend service for this URL
+		let result: any;
+		try {
+			result = await apiFetch(targetUrl.toString());
+		} catch (err) {
+			console.error('apiFetch failed for goto URL', err);
+			return;
+		}
+
+		// Validate signedUrl before opening
+		if (result?.signedUrl) {
+			try {
+				const signed = new URL(result.signedUrl);
+				// Prefer HTTPS for opened URLs; for local dev signed URLs could be http but we disallow opening non-HTTPS in prod.
+				if (signed.protocol !== 'https:') {
+					// Allow HTTP signed URLs only in local dev when both page and signed host are local:
+					const signedIsLocal = devHostnames.has(signed.hostname);
+					if (!(pageIsLocal && signedIsLocal)) {
+						console.warn('Rejected signedUrl with non-HTTPS protocol', signed.href);
+						return;
+					}
+				}
+				// Open in a new window safely
+				const win = window.open(signed.toString(), '_blank', 'noopener,noreferrer');
+				if (win) {
+					try {
+						win.opener = null;
+					} catch (err) {
+						// Some browsers may block access; ignore
+					}
+				} else {
+					console.warn('Popup blocked opening signedUrl');
+				}
+			} catch (err) {
+				console.warn('Invalid signedUrl returned', err);
+			}
+		}
+	} catch (err) {
+		console.error(err);
+	}
+}
+
 onMount(() => {
+	document.addEventListener('click', handleGotoClick, false);
+
 	const handler = async ({ prevModelId, modelId, canShowPrivateAiToolbar }: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => {
 		const currentId = get(currentSelectedModelId);
 		// Ignore stale/out-of-order events: only react if payload modelId matches current selection
@@ -202,6 +312,7 @@ onMount(() => {
 });
 
 onDestroy(() => {
+	document.removeEventListener('click', handleGotoClick);
 	__unhookModelChanged?.();
 	__unhookChatSubmit?.();
 	__unhookChatOverlay?.();
