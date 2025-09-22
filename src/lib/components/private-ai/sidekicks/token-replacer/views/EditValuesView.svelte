@@ -616,12 +616,8 @@ async function handleSubmit() {
 		savedValues = { ...values };
 		submitSuccess = true;
 		suppressDraftPersistence = true; // prevent re-saving this session unless user edits again
-		// If a token is currently selected in preview, reload preview and reselect/scroll to it when loaded
+		// If a token is currently selected in preview, reload the preview and reselect/scroll to it when loaded
 		if (isPreviewOpen && lastPreviewSelection) {
-			appHooks.callHook('private-ai.token-replacer.preview.reload', {
-				id: lastPreviewSelection.id,
-				state: 'saved'
-			});
 			lastPreviewSelection.state = 'saved';
 		}
 		// Clear the saved draft on successful submit so future sessions start fresh
@@ -658,7 +654,7 @@ onMount(async () => {
 		};
 	} catch {
 	}
-	// Also respond to a direct preview-closed notification from the preview component
+	// Also, respond to a direct preview-closed notification from the preview component
 	try {
 		const previewClosedHandler = () => {
 			isPreviewOpen = false;
@@ -707,7 +703,7 @@ onMount(async () => {
 	headerResizeHandler = () => updateHeaderHeight();
 	window.addEventListener('resize', headerResizeHandler);
 
-	// Measure submit bar height and watch for changes
+	// Measure the submit bar height and watch for changes
 	updateSubmitBarHeight();
 	try {
 		submitRO = new ResizeObserver(() => updateSubmitBarHeight());
