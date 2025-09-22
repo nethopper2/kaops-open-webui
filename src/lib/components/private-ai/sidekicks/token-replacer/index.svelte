@@ -16,9 +16,9 @@
   export let initialState: PrivateAiSidekickState<TokenReplacerState> | null = null;
   $: void modelId;
 
-  // Hydrate selection from the initial state once
+  // Hydrate selection from the initial state once, but only when showing edit values
   let hydrated = false;
-  $: if (!hydrated && initialState?.tokenizedDocPath) {
+  $: if (!hydrated && $currentTokenReplacerSubView === 'editValues' && initialState?.tokenizedDocPath) {
     selectedTokenizedDocPath.set(String(initialState.tokenizedDocPath));
     hydrated = true;
   }
@@ -28,12 +28,8 @@
 </script>
 
 <div class="flex flex-col w-full h-full">
-  {#if $started}
-    {#if $currentTokenReplacerSubView === 'editValues'}
-      <EditValuesView />
-    {:else}
-      <InitialView {modelId} />
-    {/if}
+  {#if $currentTokenReplacerSubView === 'editValues'}
+    <EditValuesView />
   {:else}
     <InitialView {modelId} />
   {/if}
