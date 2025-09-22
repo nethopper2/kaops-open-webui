@@ -26,6 +26,7 @@ import Tooltip from '$lib/components/common/Tooltip.svelte';
 import DOMPurify from 'dompurify';
 import ListBullet from '$lib/components/icons/ListBullet.svelte';
 import Minus from '$lib/components/icons/Minus.svelte';
+import ClearableInput from '$lib/components/common/ClearableInput.svelte';
 
 const i18n = getContext('i18n');
 
@@ -960,14 +961,14 @@ onDestroy(() => {
 							<option value="drafts">{$i18n.t('Drafts')}</option>
 						</select>
 					</div>
-					<input
+					<ClearableInput
 						id="token-search"
-						class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-						type="text"
+						type="search"
 						bind:value={searchQuery}
 						placeholder={$i18n.t('Type to filter tokens...')}
 						autocomplete="off"
 						spellcheck={false}
+						ariaLabel={$i18n.t('Token search')}
 					/>
 				</div>
 			</div>
