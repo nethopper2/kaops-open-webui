@@ -334,11 +334,8 @@ function scheduleSummaryVisibilityCheck() {
 
 // Derived counts and stats
 $: totalTokens = tokens.length;
-$: providedCount = tokens.reduce((acc, t) => {
-	const v = (values[t] ?? '').trim();
-	const s = (savedValues[t] ?? '').trim();
-	return v.length > 0 && v === s ? acc + 1 : acc;
-}, 0);
+// "Complete" should reflect saved values, not be reduced during edits
+$: providedCount = tokens.reduce((acc, t) => (((savedValues[t] ?? '').trim().length > 0) ? acc + 1 : acc), 0);
 $: savedCount = tokens.reduce((acc, t) => (((savedValues[t] ?? '').trim().length > 0) ? acc + 1 : acc), 0);
 $: emptyCount = tokens.reduce((acc, t) => (((values[t] ?? '').trim().length === 0) ? acc + 1 : acc), 0);
 $: draftCount = tokens.reduce((acc, t) => ((values[t] ?? '').trim() !== (savedValues[t] ?? '').trim() ? acc + 1 : acc), 0);
