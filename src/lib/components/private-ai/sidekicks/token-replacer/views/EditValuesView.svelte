@@ -1072,7 +1072,7 @@ onDestroy(() => {
 		bind:this={submitBarEl}>
 		<div class="flex items-center justify-end gap-3">
 			<div class="flex items-center gap-2">
-				{#if tokens.length > 0}
+				{#if savedCount > 0}
 					<button
 						class="px-4 py-2 rounded bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
 						disabled={isLoading || isSubmitting || tokens.length === 0 || savedCount === 0}
