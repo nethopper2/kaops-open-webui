@@ -432,6 +432,7 @@ async function handleGenerate() {
 	let loadingToastId: string | number | undefined;
 	try {
 		loadingToastId = toast.loading($i18n.t('Generating document...'));
+		// TODO: This should really happen from within the pipeline so we dont rely on the lifecycle of this component.
 		const result = (await generateTokenReplacerDocument(cId, mId)) as GenerateDocumentResult;
 		if (!result || result.didReplace === false) {
 			toast.error($i18n.t('No tokens were replaced.'));
