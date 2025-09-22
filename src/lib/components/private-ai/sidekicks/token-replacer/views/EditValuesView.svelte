@@ -48,6 +48,10 @@ function openPreviewPanel() {
 	}
 }
 
+function closePreviewPanel() {
+	appHooks.callHook('chat.overlay', { action: 'close' });
+}
+
 function emitStatusIds() {
 	try {
 		const draftIds: string[] = [];
@@ -431,6 +435,7 @@ async function handleGenerate() {
 	let loadingToastId: string | number | undefined;
 	try {
 		loadingToastId = toast.loading($i18n.t('Generating document...'));
+		closePreviewPanel();
 		// TODO: This should really happen from within the pipeline so we dont rely on the lifecycle of this component.
 		const result = (await generateTokenReplacerDocument(cId, mId)) as GenerateDocumentResult;
 		if (!result || result.didReplace === false) {

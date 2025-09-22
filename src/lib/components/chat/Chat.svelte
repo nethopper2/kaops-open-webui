@@ -173,8 +173,8 @@ onMount(() => {
 	})();
 
 	// Allow external components (e.g., Private AI sidekicks) to submit a prompt
-	__unhookChatSubmit = appHooks.hook('chat.submit', ({ prompt }) => {
-		submitPrompt(prompt);
+	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt }) => {
+		await submitPrompt(prompt);
 	});
 
 	// Hook for chat-level overlay control
