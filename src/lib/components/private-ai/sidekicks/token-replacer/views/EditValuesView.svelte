@@ -23,7 +23,6 @@ import {
 import Spinner from '$lib/components/common/Spinner.svelte';
 import Eye from '$lib/components/icons/Eye.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
-import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte';
 import DOMPurify from 'dompurify';
 import ListBullet from '$lib/components/icons/ListBullet.svelte';
 import Minus from '$lib/components/icons/Minus.svelte';
@@ -947,8 +946,7 @@ onDestroy(() => {
 				class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 sticky bg-white dark:bg-gray-900 z-10 shadow"
 				style={`top: ${headerHeight}px`}>
 				<div class="flex items-center justify-between gap-2 mb-1">
-					<div class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
-						<AdjustmentsHorizontal className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+					<div class="inline-flex self-stretch gap-2 text-xs text-gray-700 dark:text-gray-300">
 						<select
 							class="px-2 pr-6 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100"
 							bind:value={tokenFilter}
@@ -960,23 +958,16 @@ onDestroy(() => {
 							<option value="drafts">{$i18n.t('Drafts')}</option>
 						</select>
 					</div>
-					<button
-						class="px-2 py-1 rounded bg-gray-700 text-xs text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
-						disabled={isLoading || isSubmitting || tokens.length === 0 || savedCount === 0}
-						on:click={onGenerateClick}
-					>
-						{$i18n.t('Generate Document')}
-					</button>
+					<input
+						id="token-search"
+						class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+						type="text"
+						bind:value={searchQuery}
+						placeholder={$i18n.t('Type to filter tokens...')}
+						autocomplete="off"
+						spellcheck={false}
+					/>
 				</div>
-				<input
-					id="token-search"
-					class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-					type="text"
-					bind:value={searchQuery}
-					placeholder={$i18n.t('Type to filter tokens...')}
-					autocomplete="off"
-					spellcheck={false}
-				/>
 			</div>
 
 
@@ -1079,25 +1070,23 @@ onDestroy(() => {
 	<div
 		class="px-4 py-3 border-t border-gray-200 dark:border-gray-800 sticky bottom-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 z-20"
 		bind:this={submitBarEl}>
-		<div class="flex items-center justify-between gap-3">
-			<div class="text-xs text-gray-600 dark:text-gray-400">
-				{#if isSubmitting}
-					{$i18n.t('Submitting...')}
-				{:else if submitSuccess}
-          <span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-            {$i18n.t('🎉 Replacement values submitted!')}
-          </span>
-				{:else}
-					{$i18n.t('Provide replacement values and submit when ready.')}
-				{/if}
-			</div>
+		<div class="flex items-center justify-end gap-3">
 			<div class="flex items-center gap-2">
+				{#if tokens.length > 0}
+					<button
+						class="px-4 py-2 rounded bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-gray-700 dark:hover:bg-gray-800 text-nowrap"
+						disabled={isLoading || isSubmitting || tokens.length === 0 || savedCount === 0}
+						on:click={onGenerateClick}
+					>
+						{$i18n.t('Generate')}
+					</button>
+				{/if}
 				<button
 					class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-blue-500 dark:hover:bg-blue-600 text-nowrap"
 					disabled={isLoading || isSubmitting || tokens.length === 0 || draftCount === 0}
 					on:click={() => (showConfirm = true)}
 				>
-					{$i18n.t('Submit')}
+					{$i18n.t('Save Drafts')}
 				</button>
 			</div>
 		</div>
