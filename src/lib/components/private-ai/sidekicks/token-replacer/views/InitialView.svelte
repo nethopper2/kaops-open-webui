@@ -53,9 +53,7 @@ onMount(() => {
 				label="name"
 				itemId="fullPath"
 				clearable={true}
-				class="w-full max-w-full"
-				containerStyles="max-width: 100%; min-width: 0;"
-				inputStyles="text-overflow: ellipsis; white-space: nowrap; overflow: hidden;"
+				class="w-full max-w-full rounded-md border border-gray-300 bg-white text-gray-900 shadow-sm hover:border-gray-400 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-white dark:!border-gray-700 dark:!bg-gray-900 dark:!text-gray-100 dark:!hover:border-gray-600 dark:!focus-within:ring-blue-400 dark:!focus-within:ring-offset-gray-900"
 				showChevron
 				loading={$filesLoading}
 				on:select={(e) => {
