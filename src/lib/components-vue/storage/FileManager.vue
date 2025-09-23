@@ -101,10 +101,17 @@ onMounted(async () => {
 	loading.value = true;
 
 	const backendConfig = await getBackendConfig();
-	
+
 	// Check if we should use the new nh-pai-data-service
-	const useNewService = localStorage.getItem('use_nh_data_service') === 'true';
-	
+	// Check for cookie first
+	//Default to localstorage if cookie not found
+	const useNewService = (() => {
+		const cookieMatch = document.cookie.match(/(?:^|;\s*)use_nh_data_service=([^;]*)/);
+		return cookieMatch
+			? cookieMatch[1] === 'true'
+			: localStorage.getItem('use_nh_data_service') === 'true';
+	})();
+
 	let endpointUrl;
 	if (useNewService) {
 		// Use nh-pai-data-service
@@ -132,7 +139,7 @@ onMounted(async () => {
 		:file-system-provider="fileSystemProvider"
 		:on-context-menu-item-click="handleContextMenuItemClick"
 		:on-context-menu-showing="handleContextMenuShowing"
-		:root-folder-name="(i18nRef?.t?.('Knowledge Data')) ?? 'Knowledge Data'"
+		:root-folder-name="i18nRef?.t?.('Knowledge Data') ?? 'Knowledge Data'"
 		v-bind="$attrs"
 	>
 		<dx-permissions
@@ -146,7 +153,10 @@ onMounted(async () => {
 		/>
 
 		<dx-context-menu>
-			<dx-item :text="(i18nRef?.t?.('Edit Metadata')) ?? 'Edit Metadata'" :options="{ action: 'editMetadata' }" />
+			<dx-item
+				:text="i18nRef?.t?.('Edit Metadata') ?? 'Edit Metadata'"
+				:options="{ action: 'editMetadata' }"
+			/>
 		</dx-context-menu>
 
 		<dx-item-view>
@@ -156,7 +166,7 @@ onMounted(async () => {
 				<dx-column
 					data-field="dateModified"
 					dataType="datetime"
-					:caption="(i18nRef?.t?.('Date Modified')) ?? 'Date Modified'"
+					:caption="i18nRef?.t?.('Date Modified') ?? 'Date Modified'"
 					width="auto"
 				/>
 				<dx-column data-field="size" />
