@@ -50,8 +50,11 @@ class StorageConfig:
         self.pai_base_url = os.environ.get('NH_DATA_SERVICE_URL', 'http://localhost:4500/api/v1')
         self.pai_jwt_token = os.environ.get('NH_DATA_SERVICE_JWT_TOKEN')
         self.pai_jwt_secret = os.environ.get('NH_DATA_SERVICE_JWT_SECRET', 't0p-s3cr3t')
-        
-        self._validate_config()
+
+        ENABLE_SSO_DATA_SYNC = os.getenv("ENABLE_SSO_DATA_SYNC")
+
+        if ENABLE_SSO_DATA_SYNC:
+            self._validate_config()
     
     def _validate_config(self):
         """Validate configuration based on selected backend"""
