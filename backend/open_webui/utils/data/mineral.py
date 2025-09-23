@@ -11,22 +11,27 @@ import json
 
 from open_webui.env import SRC_LOG_LEVELS
 
-from open_webui.utils.data.data_ingestion import upload_to_gcs, list_gcs_files, delete_gcs_file, parse_date, format_bytes, validate_config, make_api_request, update_data_source_sync_status
+from open_webui.utils.data.data_ingestion import (
+    # Unified storage functions
+    list_files_unified, upload_file_unified, delete_file_unified,
+    # Utility functions
+    parse_date, format_bytes, validate_config, make_api_request, update_data_source_sync_status,
+    # Backend configuration
+    configure_storage_backend, get_current_backend
+)
 
 from open_webui.models.data import DataSources
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
-existing_gcs_files = set()
-
-# Metrics tracking
+# Global variables
+existing_files_cache = set()
 total_api_calls = 0
 script_start_time = time.time()
+USER_ID = ""
 
 # Load environment variables for Mineral OAuth
-USER_ID = ""
-GCS_BUCKET_NAME = ""
 MINERAL_CLIENT_ID = os.environ.get('MINERAL_CLIENT_ID')
 MINERAL_CLIENT_SECRET = os.environ.get('MINERAL_CLIENT_SECRET')
 MINERAL_BASE_URL = os.environ.get('MINERAL_BASE_URL', 'https://restapis.trustmineral.com')  # Production by default
@@ -40,6 +45,44 @@ RATE_LIMIT_WINDOW = int(os.environ.get('MINERAL_RATE_LIMIT_WINDOW', '3600'))  # 
 
 # Rate limiting state
 rate_limit_calls = []
+
+def initialize_globals(user_id):
+    """Initialize global variables properly"""
+    global USER_ID, existing_files_cache
+    
+    if not user_id:
+        raise ValueError("user_id is required")
+    
+    USER_ID = user_id
+    existing_files_cache = set()
+
+def load_existing_files(user_id):
+    """Load existing files into memory for duplicate checking using unified interface"""
+    global existing_files_cache, USER_ID
+    
+    try:
+        current_backend = get_current_backend()
+        print(f"Loading existing files from {current_backend} storage for duplicate checking...")
+        user_prefix = f"userResources/{USER_ID}/Mineral/"
+        
+        existing_files = list_files_unified(prefix=user_prefix, user_id=user_id)
+        
+        existing_files_cache = set()
+        for file in existing_files:
+            file_name = file.get('name') or file.get('key', '')
+            if file_name and file_name.startswith(user_prefix):
+                existing_files_cache.add(file_name)
+        
+        print(f"Found {len(existing_files_cache)} existing files in {current_backend} storage for user {USER_ID}")
+    except Exception as e:
+        print(f"Error loading existing files: {str(e)}")
+        log.error("Error loading existing files:", exc_info=True)
+        existing_files_cache = set()
+
+def file_exists_in_storage(file_path):
+    """Check if file already exists in storage"""
+    global existing_files_cache
+    return file_path in existing_files_cache
 
 def check_rate_limit():
     """Check if we're within rate limits"""
@@ -69,29 +112,6 @@ def make_mineral_request(url, method='GET', headers=None, params=None, data=None
     rate_limit_calls.append(time.time())
     
     return make_api_request(url, method=method, headers=headers, params=params, data=data, stream=stream, auth_token=auth_token)
-
-def load_existing_gcs_files(service_account_base64, gcs_bucket_name):
-    """Load existing GCS files into memory for duplicate checking"""
-    global existing_gcs_files, USER_ID
-    
-    try:
-        print("Loading existing files from GCS for duplicate checking...")
-        user_prefix = f"userResources/{USER_ID}/Mineral/"
-        gcs_files = list_gcs_files(service_account_base64, gcs_bucket_name, prefix=user_prefix)
-        existing_gcs_files = {
-            gcs_file['name'] for gcs_file in gcs_files 
-            if gcs_file['name'].startswith(user_prefix)
-        }
-        print(f"Found {len(existing_gcs_files)} existing files in GCS for user {USER_ID}")
-    except Exception as e:
-        print(f"Error loading existing GCS files: {str(e)}")
-        log.error("Error loading existing GCS files:", exc_info=True)
-        existing_gcs_files = set()
-
-def file_exists_in_gcs(file_path):
-    """Check if file already exists in GCS"""
-    global existing_gcs_files
-    return file_path in existing_gcs_files
 
 def list_mineral_handbooks(auth_token, base_url):
     """List all handbooks available in Mineral"""
@@ -226,8 +246,8 @@ def download_mineral_handbook(handbook_id, auth_token, base_url):
         log.error(f"Error in download_mineral_handbook for {handbook_id}:", exc_info=True)
         return None, None, None
 
-def download_and_upload_mineral_handbook(handbook_id, handbook_info, auth_token, base_url, service_account_base64, gcs_bucket_name):
-    """Download Mineral handbook and upload to GCS"""
+def download_and_upload_mineral_handbook(handbook_id, handbook_info, auth_token, base_url):
+    """Download Mineral handbook and upload using unified storage interface"""
     start_time = time.time()
     
     try:
@@ -237,7 +257,6 @@ def download_and_upload_mineral_handbook(handbook_id, handbook_info, auth_token,
                 'title': handbook_info.get('handbookName', f'Handbook_{handbook_id}'),
                 'type': 'list_fallback'
             }
-            
         
         title = handbook_details.get('title', f'Handbook_{handbook_id}')
         safe_title = title.replace('/', '_').replace('\\', '_').replace(':', '_')
@@ -247,7 +266,7 @@ def download_and_upload_mineral_handbook(handbook_id, handbook_info, auth_token,
         pdf_path = f"userResources/{USER_ID}/Mineral/Handbooks/tokenized-documents/{safe_title}.pdf"
         html_path = f"userResources/{USER_ID}/Mineral/Handbooks/tokenized-documents/{safe_title}.html"
         
-        if file_exists_in_gcs(docx_path) or file_exists_in_gcs(pdf_path) or file_exists_in_gcs(html_path):
+        if file_exists_in_storage(docx_path) or file_exists_in_storage(pdf_path) or file_exists_in_storage(html_path):
             print(f"Skipping existing handbook: {title}")
             return None
         
@@ -260,23 +279,29 @@ def download_and_upload_mineral_handbook(handbook_id, handbook_info, auth_token,
         # Create file path with appropriate extension
         file_path = f"userResources/{USER_ID}/Mineral/Handbooks/tokenized-documents/{safe_title}{file_ext}"
         
-        # Upload to GCS
-        result = upload_to_gcs(
-            handbook_content,
+        # Upload using unified storage interface
+        success = upload_file_unified(
+            handbook_content.getvalue(),
             file_path,
             content_type,
-            service_account_base64,
-            gcs_bucket_name
+            USER_ID
         )
+        
+        if not success:
+            return None
+        
+        # Add to cache
+        existing_files_cache.add(file_path)
         
         upload_result = {
             'path': file_path,
             'type': 'new',
-            'size': result.get('size'),
+            'size': len(handbook_content.getvalue()),
             'title': title,
             'handbook_id': handbook_id,
             'format': file_ext.replace('.', '').upper(),
-            'durationMs': int((time.time() - start_time) * 1000)
+            'durationMs': int((time.time() - start_time) * 1000),
+            'backend': get_current_backend()
         }
         
         print(f"[{datetime.now().isoformat()}] Uploaded handbook: {title} ({file_ext.replace('.', '').upper()})")
@@ -287,8 +312,8 @@ def download_and_upload_mineral_handbook(handbook_id, handbook_info, auth_token,
         log.error(f"Error in download_and_upload_mineral_handbook for {handbook_id}:", exc_info=True)
         return None
 
-async def sync_mineral_to_gcs(auth_token, base_url, service_account_base64, gcs_bucket_name):
-    """Sync Mineral handbooks to GCS"""
+async def sync_mineral_to_storage(auth_token, base_url):
+    """Sync Mineral handbooks to unified storage"""
     global USER_ID
     
     print('🔄 Starting Mineral HR sync process...')
@@ -319,7 +344,7 @@ async def sync_mineral_to_gcs(auth_token, base_url, service_account_base64, gcs_
                 pdf_path = f"userResources/{USER_ID}/Mineral/Handbooks/tokenized-documents/{safe_title}.pdf"
                 html_path = f"userResources/{USER_ID}/Mineral/Handbooks/tokenized-documents/{safe_title}.html"
                 
-                if file_exists_in_gcs(docx_path) or file_exists_in_gcs(pdf_path) or file_exists_in_gcs(html_path):
+                if file_exists_in_storage(docx_path) or file_exists_in_storage(pdf_path) or file_exists_in_storage(html_path):
                     print(f"⏭️  Skipping existing handbook: {title}")
                     skipped_files += 1
                     continue
@@ -332,9 +357,7 @@ async def sync_mineral_to_gcs(auth_token, base_url, service_account_base64, gcs_
                             handbook_id,
                             handbook,
                             auth_token,
-                            base_url,
-                            service_account_base64,
-                            gcs_bucket_name
+                            base_url
                         ),
                         title
                     )
@@ -346,7 +369,7 @@ async def sync_mineral_to_gcs(auth_token, base_url, service_account_base64, gcs_
                     result = future.result()
                     if result:
                         uploaded_files.append(result)
-                        existing_gcs_files.add(result['path'])  # Add to cache
+                        existing_files_cache.add(result['path'])  # Add to cache
                         format_stats[result['format']] += 1
                     else:
                         skipped_files += 1
@@ -355,9 +378,11 @@ async def sync_mineral_to_gcs(auth_token, base_url, service_account_base64, gcs_
                     log.error(f"Error processing handbook {title}:", exc_info=True)
                     skipped_files += 1
         
+        current_backend = get_current_backend()
         print(f"\nMineral HR Sync Summary:")
         print(f"📚 Handbooks uploaded: {len(uploaded_files)}")
         print(f"⏭️  Handbooks skipped: {skipped_files}")
+        print(f"💾 Storage Backend: {current_backend}")
         print(f"📄 Format breakdown:")
         for format_type, count in format_stats.items():
             if count > 0:
@@ -368,7 +393,8 @@ async def sync_mineral_to_gcs(auth_token, base_url, service_account_base64, gcs_
         return {
             'uploaded': len(uploaded_files),
             'skipped': skipped_files,
-            'format_stats': format_stats
+            'format_stats': format_stats,
+            'backend': current_backend
         }
         
     except Exception as error:
@@ -376,42 +402,66 @@ async def sync_mineral_to_gcs(auth_token, base_url, service_account_base64, gcs_
         log.error("Mineral HR sync failed:", exc_info=True)
         raise error
 
-async def initiate_mineral_sync(user_id, access_token, base_url, service_account_base64, gcs_bucket_name):
+async def initiate_mineral_sync(
+    user_id, 
+    access_token, 
+    base_url, 
+    service_account_base64=None, 
+    gcs_bucket_name=None,
+    storage_backend=None
+):
     """
-    Main entry point to sync Mineral HR handbooks to GCS
-    This function matches the pattern used by other providers in the router
+    Main entry point to sync Mineral HR handbooks to unified storage
     
     Args:
         user_id (str): User ID to prefix file paths
         access_token (str): Valid OAuth access token
         base_url (str): Mineral API base URL
-        service_account_base64 (str): Base64-encoded Google service account JSON
-        gcs_bucket_name (str): GCS bucket name
+        service_account_base64 (str, optional): Base64-encoded Google service account JSON
+        gcs_bucket_name (str, optional): GCS bucket name
+        storage_backend (str, optional): Storage backend to use ('gcs', 'pai', etc.)
         
     Returns:
         dict: Summary of sync operations
     """
-    global USER_ID 
-    global GCS_BUCKET_NAME
     global script_start_time
     global total_api_calls
 
-    USER_ID = user_id
-    GCS_BUCKET_NAME = gcs_bucket_name
+    # Initialize globals first
+    initialize_globals(user_id)
+    
+    # Configure storage backend if specified
+    if storage_backend:
+        configure_storage_backend(
+            storage_backend,
+            service_account_base64=service_account_base64,
+            gcs_bucket_name=gcs_bucket_name
+        )
+    elif service_account_base64 and gcs_bucket_name:
+        # For backward compatibility, configure GCS backend
+        configure_storage_backend(
+            'gcs',
+            service_account_base64=service_account_base64,
+            gcs_bucket_name=gcs_bucket_name
+        )
+    
+    current_backend = get_current_backend()
+    log.info(f"Using storage backend: {current_backend}")
+
     total_api_calls = 0
     script_start_time = time.time()
 
-    log.info(f"Initiating Mineral HR sync for user {USER_ID} to bucket {GCS_BUCKET_NAME}")
+    log.info(f"Initiating Mineral HR sync for user {USER_ID} using {current_backend} storage")
     
-    # Load existing GCS files for duplicate checking
-    load_existing_gcs_files(service_account_base64, gcs_bucket_name)
+    # Load existing files for duplicate checking
+    load_existing_files(user_id)
     
     try:
         # Update sync status
         await update_data_source_sync_status(USER_ID, 'mineral', 'handbooks', 'syncing')
         
         # Sync handbooks
-        results = await sync_mineral_to_gcs(access_token, base_url, service_account_base64, gcs_bucket_name)
+        results = await sync_mineral_to_storage(access_token, base_url)
         
         # Enhanced summary
         total_runtime = int((time.time() - script_start_time) * 1000)
@@ -419,6 +469,7 @@ async def initiate_mineral_sync(user_id, access_token, base_url, service_account
         print(f"⏱️  Total Runtime: {(total_runtime/1000):.2f} seconds")
         print(f"📊 Total API Calls: {total_api_calls}")
         print(f"📚 Handbooks Processed: {results['uploaded'] + results['skipped']}")
+        print(f"💾 Storage Backend: {current_backend}")
         
         print(f"\nTotal: +{results['uploaded']} handbooks uploaded, {results['skipped']} skipped")
         

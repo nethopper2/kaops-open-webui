@@ -14,7 +14,7 @@ from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
 from open_webui.utils.data.encryption import encrypt_data, decrypt_data
 from open_webui.models.datatokens import OAuthTokens, OAuthTokenModel
-from open_webui.utils.data.data_ingestion import update_data_source_sync_status, delete_gcs_folder
+from open_webui.utils.data.data_ingestion import update_data_source_sync_status, delete_folder_unified
 import time
 from uuid import uuid4
 
@@ -200,30 +200,22 @@ PROVIDER_CONFIGS = {
         'revoke_url': None,  # Atlassian doesn't have a direct revoke endpoint
         'scope_separator': ' ',
         'default_scopes': [
+            "read:me",           # Required for user identity
+            "read:account", 
             "read:user:jira",
-            "read:issue:jira",
+            "read:issue:jira", 
             "read:comment:jira",
             "read:attachment:jira",
             "read:project:jira",
             "read:issue-meta:jira",
-            "read:field:jira",
+            "read:field:jira", 
             "read:filter:jira",
             "read:jira-work",
             "read:jira-user",
             "read:me",
             "read:account",
             "report:personal-data",
-            "read:content:confluence",
-            "read:space:confluence",
-            "read:page:confluence",
-            "read:blogpost:confluence",
-            "read:attachment:confluence",
-            "read:comment:confluence",
-            "read:user:confluence",
-            "read:group:confluence",
-            "read:configuration:confluence",
-            "search:confluence",
-            "read:audit-log:confluence"
+            "offline_access"  # Add this for refresh tokens
         ],
         'layer_scopes': {
             'jira': [
@@ -409,21 +401,40 @@ def build_auth_url(provider: str, scopes: List[str], state: str, **extra_params)
     param_str = '&'.join(f"{k}={v}" for k, v in base_params.items())
     return f"{config['authorize_url']}?{param_str}"
 
-def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str) -> Dict[str, Any]:
-    """Exchange authorization code for tokens."""
+def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str):
     config = PROVIDER_CONFIGS[provider]
     
-    data = {
-        'client_id': config['client_id'],
-        'client_secret': config['client_secret'],
-        'code': code,
-        'redirect_uri': redirect_uri,
-        'grant_type': 'authorization_code'
-    }
-    
-    headers = {}
-    if provider == 'slack':
-        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    if provider == 'atlassian':
+        credentials = f"{config['client_id']}:{config['client_secret']}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        
+        log.info(f"Atlassian credentials length: client_id={len(config['client_id'])}, client_secret={len(config['client_secret'])}")
+        log.info(f"Encoded credentials: {encoded_credentials[:20]}...")  # Only log first 20 chars for security
+        
+        headers = {
+            'Authorization': f'Basic {encoded_credentials}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        
+        data = {
+            'grant_type': 'authorization_code',
+            'code': code,
+            'redirect_uri': redirect_uri
+        }
+    else:
+        # Standard OAuth flow for other providers
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        data = {
+            'grant_type': 'authorization_code',
+            'client_id': config['client_id'],
+            'client_secret': config['client_secret'],
+            'code': code,
+            'redirect_uri': redirect_uri
+        }
+
+    log.info(f"Making token request to: {config['token_url']}")
+    log.info(f"Request headers: {headers}")
+    log.info(f"Request data: {data}")
     
     response = requests.post(config['token_url'], data=data, headers=headers)
     response.raise_for_status()
@@ -537,7 +548,7 @@ async def create_background_sync_task(request: Request, provider: str, user_id: 
             return await loop.run_in_executor(
                 None,
                 lambda: asyncio.run(initiate_atlassian_sync(
-                    user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, layer
+                    user_id, access_token,  layer
                 ))
             )
         
@@ -556,7 +567,7 @@ async def create_background_sync_task(request: Request, provider: str, user_id: 
         await create_task(redis_connection, run_mineral_sync(), id=f"mineral_sync_{user_id}")
 
 async def create_background_delete_task(request: Request, provider: str, user_id: str, layer: str = None):
-    """Create background GCS cleanup task for any provider."""
+    """Create background storage cleanup task using unified delete function."""
     redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
     
     config = PROVIDER_CONFIGS[provider]
@@ -578,7 +589,7 @@ async def create_background_delete_task(request: Request, provider: str, user_id
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
-            lambda: asyncio.run(delete_gcs_folder(folder_path, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME))
+            lambda: asyncio.run(delete_folder_unified(folder_path, user_id))  # Using unified delete
         )
     
     await create_task(redis_connection, delete_sync(), id=f"delete_{provider}_sync_{user_id}")
@@ -1008,6 +1019,8 @@ def create_universal_initialize_endpoint(provider: str):
         scopes = get_provider_scopes(provider, layer)
         state = create_oauth_state(user.id, layer)
         auth_url = build_auth_url(provider, scopes, state)
+
+        log.info(f"{auth_url}")
         
         return {
             "url": auth_url,
@@ -1097,12 +1110,6 @@ def create_universal_callback_endpoint(provider: str):
                 log.error(f"Failed to store {provider.title()} OAuth tokens in DB for user {user_id}: {db_error}")
                 raise HTTPException(status_code=500, detail=f"Failed to store {provider.title()} tokens securely.")
 
-            # Validate GCS configuration
-            if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-                raise HTTPException(
-                    status_code=500,
-                    detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-                )
 
             # Initiate sync
             try:
@@ -1208,8 +1215,6 @@ def create_universal_status_endpoint(provider: str):
 
         config = PROVIDER_CONFIGS[provider]
         config_status = {
-            "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
-            "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
             f"{provider}_client_configured": bool(config['client_id'] and config['client_secret'] and config['redirect_uri']),
         }
 
@@ -1282,13 +1287,6 @@ def create_universal_sync_endpoint(provider: str):
         except Exception as e:
             log.error(f"Token refresh failed for {provider} user {user.id}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to refresh {provider.title()} token.")
-
-        # Validate GCS configuration
-        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-            raise HTTPException(
-                status_code=500,
-                detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-            )
     
         log.info(f"""Manually trigger {provider.title()} sync for the authenticated user.""")
 
