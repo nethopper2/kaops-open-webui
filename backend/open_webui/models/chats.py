@@ -130,11 +130,7 @@ class ChatTable:
                 **{
                     "id": id,
                     "user_id": user_id,
-                    "title": (
-                        form_data.chat["title"]
-                        if "title" in form_data.chat
-                        else "New Chat"
-                    ),
+                    "title": ((form_data.chat.get("title", "") or "").strip() or "New Chat"),
                     "chat": form_data.chat,
                     "folder_id": form_data.folder_id,
                     "created_at": int(time.time()),
@@ -190,7 +186,8 @@ class ChatTable:
             with get_db() as db:
                 chat_item = db.get(Chat, id)
                 chat_item.chat = chat
-                chat_item.title = chat["title"] if "title" in chat else "New Chat"
+                title = chat.get("title", "").strip()
+                chat_item.title = title if title else "New Chat"
                 chat_item.updated_at = int(time.time())
                 db.commit()
                 db.refresh(chat_item)
@@ -206,7 +203,6 @@ class ChatTable:
 
         chat = chat.chat
         chat["title"] = title
-
         return self.update_chat_by_id(id, chat)
 
     def update_chat_tags_by_id(
