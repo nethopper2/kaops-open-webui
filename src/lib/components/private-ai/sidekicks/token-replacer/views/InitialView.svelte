@@ -102,7 +102,8 @@ onMount(() => {
               }
             };
             const prompt = JSON.stringify(directive);
-            appHooks.callHook('chat.submit', { prompt });
+            const title = `🔁 ${String(file?.name ?? '').trim()}`;
+            appHooks.callHook('chat.submit', { prompt, title });
             // Switch to the edit values sub-view after the beginning
             currentTokenReplacerSubView.set('editValues');
             // Persist sidekick UI state (selected document) for this chat+sidekick

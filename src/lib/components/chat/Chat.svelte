@@ -287,8 +287,8 @@ onMount(() => {
 	})();
 
 	// Allow external components (e.g., Private AI sidekicks) to submit a prompt
-	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt }) => {
-		await submitPrompt(prompt);
+	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt, title }) => {
+		await submitPrompt(prompt, { title });
 	});
 
 	// Hook for chat-level overlay control
@@ -1688,7 +1688,7 @@ onDestroy(() => {
 	// Chat functions
 	//////////////////////////
 
-	const submitPrompt = async (userPrompt, { _raw = false } = {}) => {
+	const submitPrompt = async (userPrompt, { _raw = false, title }: { _raw?: boolean; title?: string } = {}) => {
 		console.log('submitPrompt', userPrompt, $chatId);
 
 		const messages = createMessagesList(history, history.currentId);
@@ -1793,7 +1793,7 @@ onDestroy(() => {
 
 		saveSessionSelectedModels();
 
-		await sendMessage(history, userMessageId, { newChat: true });
+		await sendMessage(history, userMessageId, { newChat: true, title });
 
 		// If this was an assistant-only directive, remove the user message immediately on the client
 		if (isAssistantOnlyDirective) {
@@ -1808,12 +1808,14 @@ onDestroy(() => {
 			messages = null,
 			modelId = null,
 			modelIdx = null,
-			newChat = false
+			newChat = false,
+			title
 		}: {
 			messages?: any[] | null;
 			modelId?: string | null;
 			modelIdx?: number | null;
 			newChat?: boolean;
+			title?: string;
 		} = {}
 	) => {
 		if (autoScroll) {
@@ -1869,7 +1871,7 @@ onDestroy(() => {
 
 		// Create new chat if newChat is true and first user message
 		if (newChat && _history.messages[_history.currentId].parentId === null) {
-			_chatId = await initChatHandler(_history);
+			_chatId = await initChatHandler(_history, { title });
 		}
 
 		await tick();
@@ -2345,7 +2347,7 @@ onDestroy(() => {
 		}
 	};
 
-	const initChatHandler = async (history) => {
+	const initChatHandler = async (history, opts: { title?: string } = {}) => {
 		let _chatId = $chatId;
 
 		if (!$temporaryChatEnabled) {
@@ -2353,7 +2355,7 @@ onDestroy(() => {
 				localStorage.token,
 				{
 					id: _chatId,
-					title: $i18n.t('New Chat'),
+					title: (opts?.title && String(opts.title).trim()) ? String(opts.title).trim() : $i18n.t('New Chat'),
 					models: selectedModels,
 					system: $settings.system ?? undefined,
 					params: params,
