@@ -225,7 +225,7 @@ async function pinOverlayIntoSticky() {
 $: overlayState = overlayToken ? computeTokenState(overlayToken) : 'saved';
 
 function onOverlayFocus() {
-	// Do not move focus away from the input when it gains focus; just sync selection/scroll.
+	// Keep focus on the input; just sync preview selection and scroll the selected occurrence button into view.
 	selectOverlayOccurrence(overlayCurrentIdx, { focusButton: false, scroll: true });
 }
 
@@ -253,10 +253,26 @@ function computeTokenState(token: string, valueOverride?: string): 'draft' | 'sa
 	return v === s ? 'saved' : 'draft';
 }
 
+function focusOverlayInput(options?: { preventScroll?: boolean; placeCursorEnd?: boolean }) {
+	try {
+		const preventScroll = options?.preventScroll ?? true;
+		const placeCursorEnd = options?.placeCursorEnd ?? false;
+		const inputEl = document.getElementById('overlay-input') as HTMLTextAreaElement | null;
+		if (!inputEl) return;
+		inputEl.focus({ preventScroll });
+		if (placeCursorEnd) {
+			const val = inputEl.value ?? '';
+			try {
+				inputEl.selectionStart = inputEl.selectionEnd = val.length;
+			} catch {}
+		}
+	} catch {}
+}
+
 function focusOverlayOccurrenceButton(options?: { focusButton?: boolean }) {
 	try {
 		if (!overlayContainerEl) return;
-		const { focusButton = true } = options ?? {};
+		const { focusButton = false } = options ?? {};
 		const parent = overlayContainerEl;
 		const btn = parent.querySelector(
 			`button[data-occurrence-index="${overlayCurrentIdx}"]`
@@ -282,18 +298,21 @@ function focusOverlayOccurrenceButton(options?: { focusButton?: boolean }) {
 
 function selectOverlayOccurrence(idx: number, options?: { focusButton?: boolean; scroll?: boolean }) {
 	if (!overlayToken || !isPreviewOpen) return;
-	const { focusButton = true, scroll = true } = options ?? {};
+	const { focusButton = false, scroll = true } = options ?? {};
 	overlayCurrentIdx = Math.max(0, Math.min(idx, overlayOccurrences.length - 1));
 	const id = overlayOccurrences[overlayCurrentIdx];
 	const state = computeTokenState(overlayToken);
 	appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state });
 	lastPreviewSelection = { id, state };
 	lastPreviewToken = overlayToken;
-	// After DOM updates, optionally focus and scroll the selected occurrence button into view
-	if (scroll || focusButton) setTimeout(() => focusOverlayOccurrenceButton({ focusButton }), 0);
+	// Keep input focused while the overlay is open and optionally scroll the selected occurrence button into view
+	if (scroll || focusButton) setTimeout(() => {
+		focusOverlayOccurrenceButton({ focusButton });
+		focusOverlayInput({ preventScroll: true });
+	}, 0);
 }
 
-function openTokenOverlay(i: number, token: string) {
+async function openTokenOverlay(i: number, token: string) {
 	overlayToken = token;
 	overlayTokenIndex = i;
 	// Use provided occurrence IDs if available; otherwise fallback to legacy id
@@ -302,10 +321,13 @@ function openTokenOverlay(i: number, token: string) {
 	isTokenOverlayOpen = true;
 	// On open, highlight the first occurrence in the preview if open
 	if (isPreviewOpen) {
-		selectOverlayOccurrence(0);
+		selectOverlayOccurrence(0, { focusButton: false, scroll: true });
 	}
 	// Ensure the overlay immediately pins under the sticky header so its internal scroller can reach the end
 	void pinOverlayIntoSticky();
+	// After the overlay renders, focus the input to make editing immediate
+	await tick();
+	focusOverlayInput({ preventScroll: true, placeCursorEnd: true });
 }
 
 function closeTokenOverlay() {
