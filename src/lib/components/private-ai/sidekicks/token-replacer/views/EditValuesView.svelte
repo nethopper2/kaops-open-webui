@@ -1000,7 +1000,7 @@ onDestroy(() => {
 									<div
 										class="lg:col-span-1 text-[11px] text-gray-800 dark:text-gray-200 select-text">
 										<!-- 									<div class="flex items-start gap-1">-->
-										<Tooltip content={token} placement="top" className="inline-flex max-w-full">
+										<Tooltip content={token} placement="top" tippyOptions={{ delay: 1000 }} className="inline-flex max-w-full">
 											<span class="token-text">{token}</span>
 										</Tooltip>
 										<!-- 									</div>-->
