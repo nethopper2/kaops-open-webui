@@ -27,6 +27,7 @@ import DOMPurify from 'dompurify';
 import ListBullet from '$lib/components/icons/ListBullet.svelte';
 import Minus from '$lib/components/icons/Minus.svelte';
 import ClearableInput from '$lib/components/common/ClearableInput.svelte';
+import ExpandableTextarea from '$lib/components/common/ExpandableTextarea.svelte';
 
 const i18n = getContext('i18n');
 
@@ -200,10 +201,11 @@ function onOverlayFocus() {
 	selectOverlayOccurrence(overlayCurrentIdx);
 }
 
-function onOverlayInput(e: Event) {
+function onOverlayInput(e: Event | CustomEvent<{ value: string }>) {
 	if (!overlayToken) return;
-	const target = e.currentTarget as HTMLInputElement;
-	const v = target.value;
+	const v = (e as CustomEvent<{
+		value: string
+	}>).detail?.value ?? (e.target as HTMLTextAreaElement | null)?.value ?? '';
 	updateValue(overlayToken, v);
 	if (isPreviewOpen) {
 		const id = overlayOccurrences[overlayCurrentIdx];
@@ -511,12 +513,14 @@ function updateValue(token: string, value: string) {
 }
 
 function handleInput(token: string, id?: string) {
-	return (e: Event) => {
-		const target = e.currentTarget as HTMLInputElement;
-		updateValue(token, target.value);
+	return (e: Event | CustomEvent<{ value: string }>) => {
+		const vRaw = (e as CustomEvent<{
+			value: string
+		}>).detail?.value ?? (e.target as HTMLTextAreaElement | null)?.value ?? '';
+		updateValue(token, vRaw);
 		// If this token is currently selected in preview, update highlight state when it flips.
 		if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
-			const v = (target.value ?? '').trim();
+			const v = (vRaw ?? '').trim();
 			const s = (savedValues[token] ?? '').trim();
 			const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
 			if (lastPreviewSelection.state !== newState) {
@@ -907,11 +911,17 @@ onDestroy(() => {
 
 							<!-- Synced input -->
 							<div class="space-y-2 mb-3">
-								<textarea id="overlay-input"
-													class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 resize-y min-h-[4em] text-xs ${overlayState === 'draft' ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
-													placeholder={$i18n.t('Replacement value')}
-													value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
-													on:input={onOverlayInput} autocomplete="off" />
+								<ExpandableTextarea
+									fullscreenStrategy="container"
+									id="overlay-input"
+									ariaLabel={$i18n.t('Replacement value')}
+									placeholder={$i18n.t('Replacement value')}
+									value={overlayToken ? (values[overlayToken] ?? '') : ''}
+									highlight={overlayState === 'draft'}
+									badgeText={overlayState === 'draft' ? $i18n.t('Draft') : undefined}
+									on:focus={onOverlayFocus}
+									on:input={onOverlayInput}
+								/>
 							</div>
 
 							<!-- Navigation (sticky header: only Prev/Next) -->
@@ -1000,7 +1010,8 @@ onDestroy(() => {
 									<div
 										class="lg:col-span-1 text-[11px] text-gray-800 dark:text-gray-200 select-text">
 										<!-- 									<div class="flex items-start gap-1">-->
-										<Tooltip content={token} placement="top" tippyOptions={{ delay: 1000 }} className="inline-flex max-w-full">
+										<Tooltip content={token} placement="top" tippyOptions={{ delay: 1000 }}
+														 className="inline-flex max-w-full">
 											<span class="token-text">{token}</span>
 										</Tooltip>
 										<!-- 									</div>-->
@@ -1010,25 +1021,19 @@ onDestroy(() => {
 											<div class="flex flex-col gap-1">
 												<div class="flex items-start gap-1">
 													<div class="relative w-full">
-														<textarea
+														<ExpandableTextarea
+															fullscreenStrategy="container"
 															id={getInputId(token)}
-															class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 resize-y min-h-[4em] text-xs ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
 															placeholder={$i18n.t('token will be removed from document')}
-															aria-label={$i18n.t('Replacement value')}
-															aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
+															ariaLabel={$i18n.t('Replacement value')}
+															ariaDescribedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
+															describedByText={$i18n.t('Value differs from the last saved value and is not yet saved.')}
+															value={values[token] ?? ''}
+															highlight={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim())}
+															badgeText={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? $i18n.t('Draft') : undefined}
 															on:focus={() => onPreviewTokenClick(i, token)}
 															on:input={handleInput(token, getFirstOccurrenceId(token, i))}
-															autocomplete="off"
-														>{values[token] ?? ''}</textarea>
-														{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
-															<div id={`${getInputId(token)}-draft`}
-																	 class="pointer-events-none absolute -top-2 -right-2 text-[10px] inline-flex items-center gap-1 text-blue-700 dark:text-blue-300">
-																<span
-																	class="inline-block px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 shadow-sm">{$i18n.t('Draft')}</span>
-																<span
-																	class="sr-only">{$i18n.t('Value differs from the last saved value and is not yet saved.')}</span>
-															</div>
-														{/if}
+														/>
 													</div>
 													{#if (values[token] ?? '') !== ''}
 														<Tooltip content={$i18n.t('Remove from document')} placement="top">
