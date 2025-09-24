@@ -225,7 +225,8 @@ async function pinOverlayIntoSticky() {
 $: overlayState = overlayToken ? computeTokenState(overlayToken) : 'saved';
 
 function onOverlayFocus() {
-	selectOverlayOccurrence(overlayCurrentIdx);
+	// Do not move focus away from the input when it gains focus; just sync selection/scroll.
+	selectOverlayOccurrence(overlayCurrentIdx, { focusButton: false, scroll: true });
 }
 
 function onOverlayInput(e: Event | CustomEvent<{ value: string }>) {
@@ -252,31 +253,44 @@ function computeTokenState(token: string, valueOverride?: string): 'draft' | 'sa
 	return v === s ? 'saved' : 'draft';
 }
 
-function focusOverlayOccurrenceButton() {
+function focusOverlayOccurrenceButton(options?: { focusButton?: boolean }) {
 	try {
 		if (!overlayContainerEl) return;
-		const btn = overlayContainerEl.querySelector(
+		const { focusButton = true } = options ?? {};
+		const parent = overlayContainerEl;
+		const btn = parent.querySelector(
 			`button[data-occurrence-index="${overlayCurrentIdx}"]`
 		) as HTMLButtonElement | null;
 		if (btn) {
-			// Focus the selected button and ensure it's visible in the overlay scroll area
-			(btn as any).focus?.({ preventScroll: true });
-			btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+			// Optionally move focus to the selected button without causing the browser to auto-scroll
+			if (focusButton) (btn as any).focus?.({ preventScroll: true });
+			// Deterministic scrolling to ensure the button is fully visible with a margin, even at the end of long lists
+			const margin = 24; // px
+			const btnTop = btn.offsetTop;
+			const btnBottom = btnTop + btn.offsetHeight;
+			const viewTop = parent.scrollTop;
+			const viewBottom = viewTop + parent.clientHeight;
+			if (btnBottom > viewBottom - margin) {
+				parent.scrollTo({ top: Math.min(btnBottom - parent.clientHeight + margin, parent.scrollHeight), behavior: 'smooth' });
+			} else if (btnTop < viewTop + margin) {
+				parent.scrollTo({ top: Math.max(btnTop - margin, 0), behavior: 'smooth' });
+			}
 		}
 	} catch {
 	}
 }
 
-function selectOverlayOccurrence(idx: number) {
+function selectOverlayOccurrence(idx: number, options?: { focusButton?: boolean; scroll?: boolean }) {
 	if (!overlayToken || !isPreviewOpen) return;
+	const { focusButton = true, scroll = true } = options ?? {};
 	overlayCurrentIdx = Math.max(0, Math.min(idx, overlayOccurrences.length - 1));
 	const id = overlayOccurrences[overlayCurrentIdx];
 	const state = computeTokenState(overlayToken);
 	appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state });
 	lastPreviewSelection = { id, state };
 	lastPreviewToken = overlayToken;
-	// After DOM updates, focus and scroll the selected occurrence button into view
-	setTimeout(() => focusOverlayOccurrenceButton(), 0);
+	// After DOM updates, optionally focus and scroll the selected occurrence button into view
+	if (scroll || focusButton) setTimeout(() => focusOverlayOccurrenceButton({ focusButton }), 0);
 }
 
 function openTokenOverlay(i: number, token: string) {
@@ -1058,11 +1072,11 @@ onDestroy(() => {
 						<div class="flex flex-wrap items-center gap-1">
 							{#each overlayOccurrences as occId, idx}
         <button type="button"
-											class={`px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-											data-occurrence-index={idx}
-											on:click={() => selectOverlayOccurrence(idx)}>
-									{idx + 1}
-								</button>
+												class={`token-occurrence-btn px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+												data-occurrence-index={idx}
+												on:click={() => selectOverlayOccurrence(idx)}>
+										{idx + 1}
+										</button>
 							{/each}
 						</div>
 					</div>
