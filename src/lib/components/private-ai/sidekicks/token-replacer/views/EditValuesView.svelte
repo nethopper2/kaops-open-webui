@@ -754,7 +754,7 @@ onMount(async () => {
 
 	// Listen for clicks in the preview to focus corresponding input and handle occurrences overlay
 	try {
-		const previewTokenClickedHandler = (params: { id: string }) => {
+		const previewTokenClickedHandler = async (params: { id: string }) => {
 			if (!params?.id) return;
 			const clickedId = params.id;
 			// Find token and occurrence index by id
@@ -779,6 +779,14 @@ onMount(async () => {
 				}
 			}
 			if (!foundToken) return;
+
+			// If clicking the first occurrence while the Token Occurrence overlay is open,
+			// close the overlay BEFORE scrolling, so it doesn't obscure the input.
+			const shouldCloseOverlayFirst = isTokenOverlayOpen && occIdx === 0;
+			if (shouldCloseOverlayFirst) {
+				isTokenOverlayOpen = false;
+				await tick();
+			}
 
 			// Focus the associated input and set cursor at end
 			const inputEl = document.getElementById(getInputId(foundToken)) as HTMLTextAreaElement | null;
