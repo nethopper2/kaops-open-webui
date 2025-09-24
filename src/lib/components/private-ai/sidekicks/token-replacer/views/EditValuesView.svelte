@@ -1008,20 +1008,18 @@ onDestroy(() => {
 									<div class="lg:col-span-2">
 										{#key token}
 											<div class="flex flex-col gap-1">
-												<div class="flex items-center gap-2">
+												<div class="flex items-start gap-2">
 													<div class="relative w-full">
-														<input
+														<textarea
 															id={getInputId(token)}
-															class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
-															type="text"
+															class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 resize-y min-h-[4em] text-xs ${((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
 															placeholder={$i18n.t('token will be removed from document')}
 															aria-label={$i18n.t('Replacement value')}
 															aria-describedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
-															value={values[token] ?? ''}
 															on:focus={() => onPreviewTokenClick(i, token)}
 															on:input={handleInput(token, getFirstOccurrenceId(token, i))}
 															autocomplete="off"
-														/>
+														>{values[token] ?? ''}</textarea>
 														{#if (values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()}
 															<div id={`${getInputId(token)}-draft`}
 																	 class="pointer-events-none absolute -top-2 -right-2 text-[10px] inline-flex items-center gap-1 text-blue-700 dark:text-blue-300">
