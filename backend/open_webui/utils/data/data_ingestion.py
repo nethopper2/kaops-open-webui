@@ -47,7 +47,20 @@ class StorageConfig:
         self.gcs_bucket_name = os.environ.get('GCS_BUCKET_NAME')
         
         # PAI Data Service Configuration
-        self.pai_base_url = os.environ.get('NH_DATA_SERVICE_URL', 'http://localhost:4500/api/v1')
+        base_url = os.environ.get('NH_DATA_SERVICE_URL', 'http://localhost:4500')
+        
+        # Ensure /api/v1 is appended if NH_DATA_SERVICE_URL is set
+        if 'NH_DATA_SERVICE_URL' in os.environ:
+            # Remove trailing slash if present
+            base_url = base_url.rstrip('/')
+            # Add /api/v1 if not already present
+            if not base_url.endswith('/api/v1'):
+                base_url = f"{base_url}/api/v1"
+        else:
+            # Default case - ensure it has /api/v1
+            base_url = 'http://localhost:4500/api/v1'
+        
+        self.pai_base_url = base_url
         self.pai_jwt_token = os.environ.get('NH_DATA_SERVICE_JWT_TOKEN')
         self.pai_jwt_secret = os.environ.get('NH_DATA_SERVICE_JWT_SECRET', 't0p-s3cr3t')
 
@@ -55,7 +68,7 @@ class StorageConfig:
 
         if ENABLE_SSO_DATA_SYNC:
             self._validate_config()
-    
+
     def _validate_config(self):
         """Validate configuration based on selected backend"""
         if self.backend == StorageBackend.GCS:
