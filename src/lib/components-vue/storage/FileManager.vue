@@ -102,18 +102,10 @@ onMounted(async () => {
 
 	const backendConfig = await getBackendConfig();
 
-	// Check if we should use the new nh-pai-data-service
-	// Check for cookie first
-	//Default to localstorage if cookie not found
-	const useNewService = (() => {
-		const cookieMatch = document.cookie.match(/(?:^|;\s*)use_nh_data_service=([^;]*)/);
-		return cookieMatch
-			? cookieMatch[1] === 'true'
-			: localStorage.getItem('use_nh_data_service') === 'true';
-	})();
+	console.log('Using new data service:', backendConfig.features.use_new_data_service);
 
 	let endpointUrl;
-	if (useNewService) {
+	if (backendConfig.features.use_new_data_service) {
 		// Use nh-pai-data-service
 		endpointUrl = `${backendConfig.nh_data_service.url}/api/v1/files/devextreme`;
 	} else {
