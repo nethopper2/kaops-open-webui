@@ -62,7 +62,7 @@ class StorageConfig:
         
         self.pai_base_url = base_url
         self.pai_jwt_token = os.environ.get('NH_DATA_SERVICE_JWT_TOKEN')
-        self.pai_jwt_secret = os.environ.get('NH_DATA_SERVICE_JWT_SECRET', 't0p-s3cr3t')
+        self.pai_jwt_secret = os.environ.get('JWT_SECRET_KEY')
 
         ENABLE_SSO_DATA_SYNC = os.getenv("ENABLE_SSO_DATA_SYNC")
 
