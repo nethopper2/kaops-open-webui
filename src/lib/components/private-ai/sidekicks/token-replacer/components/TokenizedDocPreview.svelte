@@ -446,6 +446,8 @@ onDestroy(() => {
     font-size: 0.95em; /* slightly larger */
     /*font-weight: 600; !* improve readability *!*/
     border: 1px solid rgba(107, 114, 128, 0.25); /* gray-500/25 */
+    /* Preserve user-entered line breaks and spaces in replacement values */
+    white-space: pre-wrap;
   }
 
   @media (prefers-color-scheme: dark) {
