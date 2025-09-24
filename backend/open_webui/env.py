@@ -417,6 +417,7 @@ OAUTH_PROVIDER_NAME = os.environ.get("OAUTH_PROVIDER_NAME", None)
 ####################################
 # DATA_INGESTION
 ####################################
+STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "gcs")  # gcs or nh-data-service
 SSO_PROVIDER_NAME = os.environ.get("SSO_PROVIDER_NAME", None)
 ENABLE_SSO_DATA_SYNC = os.environ.get("ENABLE_SSO_DATA_SYNC", None)
 OVERIDE_WEB_SOCKET_URL = os.environ.get("OVERIDE_WEB_SOCKET_URL", None)
