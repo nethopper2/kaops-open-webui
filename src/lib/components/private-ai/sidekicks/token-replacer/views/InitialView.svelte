@@ -49,7 +49,7 @@ onMount(() => {
 			<Select
 				items={$tokenizedFiles}
 				value={$selectedTokenizedDoc}
-				placeholder="Select a Document"
+				placeholder="Search or select a document"
 				label="name"
 				itemId="fullPath"
 				clearable={true}
