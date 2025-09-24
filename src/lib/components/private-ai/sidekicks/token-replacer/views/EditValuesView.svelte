@@ -907,11 +907,11 @@ onDestroy(() => {
 
 							<!-- Synced input -->
 							<div class="space-y-2 mb-3">
-								<input id="overlay-input"
-											 class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 ${overlayState === 'draft' ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
-											 type="text" placeholder={$i18n.t('Replacement value')}
-											 value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
-											 on:input={onOverlayInput} autocomplete="off" />
+								<textarea id="overlay-input"
+													class={`w-full px-3 py-2 rounded border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border-gray-300 dark:border-gray-700 resize-y min-h-[4em] text-xs ${overlayState === 'draft' ? 'ring-1 ring-blue-400 border-blue-400 dark:ring-blue-500 dark:border-blue-500' : ''}`}
+													placeholder={$i18n.t('Replacement value')}
+													value={overlayToken ? (values[overlayToken] ?? '') : ''} on:focus={onOverlayFocus}
+													on:input={onOverlayInput} autocomplete="off" />
 							</div>
 
 							<!-- Navigation (sticky header: only Prev/Next) -->
@@ -1008,7 +1008,7 @@ onDestroy(() => {
 									<div class="lg:col-span-2">
 										{#key token}
 											<div class="flex flex-col gap-1">
-												<div class="flex items-start gap-2">
+												<div class="flex items-start gap-1">
 													<div class="relative w-full">
 														<textarea
 															id={getInputId(token)}
