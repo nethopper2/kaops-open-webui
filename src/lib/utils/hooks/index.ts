@@ -18,6 +18,8 @@ export const appHooks = createHooks<{
 	// Token Replacer: preview component opened/closed notification
 	'private-ai.token-replacer.preview.closed': () => void,
 	'private-ai.token-replacer.preview.opened': () => void,
+	// Token Replacer: user clicked a token in the preview (id is the occurrence id)
+	'private-ai.token-replacer.preview.token-clicked': (params: { id: string }) => void,
 	// Token Replacer: set specific ID groups for color/status tints
 	'private-ai.token-replacer.preview.set-draft-ids': (params: { ids: string[] }) => void,
 	'private-ai.token-replacer.preview.set-saved-ids': (params: { ids: string[] }) => void,

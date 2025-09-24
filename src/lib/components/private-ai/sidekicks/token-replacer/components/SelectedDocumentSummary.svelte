@@ -57,7 +57,7 @@
         <div class="shrink-0 self-start text-gray-500 dark:text-gray-400" aria-hidden="true">
           <Tooltip content={$i18n.t('Preview Document')} placement="top">
             <span class="inline-flex items-center">
-              <Eye className="w-5 h-5" />
+              👀
             </span>
           </Tooltip>
         </div>

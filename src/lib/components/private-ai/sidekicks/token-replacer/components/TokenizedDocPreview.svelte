@@ -301,11 +301,30 @@ function selectAndScroll(id: string, state: 'draft' | 'saved') {
 	}
 }
 
+function handlePreviewClick(ev: MouseEvent) {
+	try {
+		if (!previewContainer) return;
+		const target = ev.target as HTMLElement | null;
+		if (!target) return;
+		const tokenEl = target.closest('.token[id]') as HTMLElement | null;
+		if (!tokenEl || !previewContainer.contains(tokenEl)) return;
+		const id = tokenEl.id;
+		const dsState = (tokenEl.dataset?.tokenState as TokenState | undefined);
+		const state: 'draft' | 'saved' = dsState === 'draft' ? 'draft' : 'saved';
+		selectAndScroll(id, state);
+		appHooks.callHook('private-ai.token-replacer.preview.token-clicked', { id });
+	} catch {
+	}
+}
+
 onMount(() => {
 	const h = (params: { id: string; state: 'draft' | 'saved' }) => {
 		selectAndScroll(params.id, params.state);
 	};
 	appHooks.hook('private-ai.token-replacer.preview.select-token', h);
+
+	// (moved) Click handler is now bound declaratively on the container so it works even when the
+	// preview container is created after onMount (i.e., after previewHtml loads)
 
 	const setDrafts = (params: { ids: string[] }) => {
 		try {
@@ -414,10 +433,10 @@ onDestroy(() => {
 		{:else if previewHtml}
 			<div class="p-4">
 				<div class="preview-html prose prose-sm max-w-none dark:prose-invert"
-						 class:mode-original={previewMode==='original'} class:mode-values={previewMode==='values'}
-						 bind:this={previewContainer} style="min-height:80px; text-align: left;">
-					{@html DOMPurify.sanitize(previewHtml)}
-				</div>
+							 class:mode-original={previewMode==='original'} class:mode-values={previewMode==='values'}
+							 bind:this={previewContainer} style="min-height:80px; text-align: left;" on:click={handlePreviewClick}>
+						{@html DOMPurify.sanitize(previewHtml)}
+					</div>
 			</div>
 		{:else}
 			<div class="p-4 text-sm text-gray-500 dark:text-gray-400">{$i18n.t('No preview available.')}</div>
@@ -448,6 +467,7 @@ onDestroy(() => {
     border: 1px solid rgba(107, 114, 128, 0.25); /* gray-500/25 */
     /* Preserve user-entered line breaks and spaces in replacement values */
     white-space: pre-wrap;
+    cursor: pointer; /* show hand cursor over tokens */
   }
 
   @media (prefers-color-scheme: dark) {

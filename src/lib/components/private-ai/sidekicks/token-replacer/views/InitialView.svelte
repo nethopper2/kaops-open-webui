@@ -67,12 +67,13 @@ onMount(() => {
 			/>
 			<Tooltip content="Preview Document" placement="top">
 				<button
-					class="p-1 rounded border bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed {$selectedTokenizedDocPath === '' ? 'border-gray-200 dark:border-gray-800 cursor-not-allowed' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900'}"
+					class="p-1 rounded bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed {$selectedTokenizedDocPath === '' ? 'border-gray-200 dark:border-gray-800 cursor-not-allowed' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900'}"
 					disabled={$selectedTokenizedDocPath === ""}
 					aria-label="Preview Document"
 					on:click={() => openPreviewDialog()}
 				>
-					<Eye className="w-5 h-5" />
+					<div class="h-5 w-5">👀</div>
+<!--					<Eye className="w-5 h-5" />-->
 				</button>
 			</Tooltip>
 		</div>

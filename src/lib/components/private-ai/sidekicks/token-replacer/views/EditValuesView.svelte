@@ -146,6 +146,7 @@ let isPreviewOpen = false;
 let removeOverlayHook: (() => void) | null = null;
 let removePreviewClosedHook: (() => void) | null = null;
 let removePreviewReloadedHook: (() => void) | null = null;
+let removePreviewTokenClickedHook: (() => void) | null = null;
 // Track the last previewed token selection to update highlight state on edits
 let lastPreviewSelection: { id: string; state: 'draft' | 'saved' } | null = null;
 let lastPreviewToken: string | null = null;
@@ -159,6 +160,8 @@ let overlayCurrentIdx = 0;
 
 // Ref to the overlay container to measure and auto-pin into sticky position
 let overlayContainerEl: HTMLDivElement | null = null;
+// Sticky search/filter bar element (below header) to account for its height when scrolling inputs
+let filterBarEl: HTMLDivElement | null = null;
 
 function getScrollableParent(el: HTMLElement | null): HTMLElement | Window {
 	if (!el) return window;
@@ -172,7 +175,31 @@ function getScrollableParent(el: HTMLElement | null): HTMLElement | Window {
 		}
 		parent = parent.parentElement;
 	}
-	return window;
+ return window;
+}
+
+function scrollTokenInputIntoView(inputEl: HTMLElement) {
+	// Scroll so the input appears just below sticky header and filter bar,
+	// even when it's currently above the viewport or partially hidden under sticky UI.
+	try {
+		const stickyOffset = headerHeight + (filterBarEl?.offsetHeight ?? 0) + 8; // small padding
+		const scrollParent = getScrollableParent(inputEl);
+		if (scrollParent === window) {
+			const rect = inputEl.getBoundingClientRect();
+			const absoluteTargetTop = window.pageYOffset + rect.top - stickyOffset;
+			window.scrollTo({ top: Math.max(absoluteTargetTop, 0), behavior: 'smooth' });
+		} else {
+			// Internal scroll container: compute the element's position relative to the container and adjust scrollTop
+			const parent = scrollParent as HTMLElement;
+			const parentRect = parent.getBoundingClientRect();
+			const elRect = inputEl.getBoundingClientRect();
+			const relativeTop = elRect.top - parentRect.top; // distance from parent's visible top to the element
+			const targetScrollTop = parent.scrollTop + relativeTop - stickyOffset;
+			parent.scrollTo({ top: Math.max(targetScrollTop, 0), behavior: 'smooth' });
+		}
+	} catch {
+		// no-op
+	}
 }
 
 async function pinOverlayIntoSticky() {
@@ -198,7 +225,8 @@ async function pinOverlayIntoSticky() {
 $: overlayState = overlayToken ? computeTokenState(overlayToken) : 'saved';
 
 function onOverlayFocus() {
-	selectOverlayOccurrence(overlayCurrentIdx);
+	// Keep focus on the input; just sync preview selection and scroll the selected occurrence button into view.
+	selectOverlayOccurrence(overlayCurrentIdx, { focusButton: false, scroll: true });
 }
 
 function onOverlayInput(e: Event | CustomEvent<{ value: string }>) {
@@ -225,17 +253,66 @@ function computeTokenState(token: string, valueOverride?: string): 'draft' | 'sa
 	return v === s ? 'saved' : 'draft';
 }
 
-function selectOverlayOccurrence(idx: number) {
+function focusOverlayInput(options?: { preventScroll?: boolean; placeCursorEnd?: boolean }) {
+	try {
+		const preventScroll = options?.preventScroll ?? true;
+		const placeCursorEnd = options?.placeCursorEnd ?? false;
+		const inputEl = document.getElementById('overlay-input') as HTMLTextAreaElement | null;
+		if (!inputEl) return;
+		inputEl.focus({ preventScroll });
+		if (placeCursorEnd) {
+			const val = inputEl.value ?? '';
+			try {
+				inputEl.selectionStart = inputEl.selectionEnd = val.length;
+			} catch {}
+		}
+	} catch {}
+}
+
+function focusOverlayOccurrenceButton(options?: { focusButton?: boolean }) {
+	try {
+		if (!overlayContainerEl) return;
+		const { focusButton = false } = options ?? {};
+		const parent = overlayContainerEl;
+		const btn = parent.querySelector(
+			`button[data-occurrence-index="${overlayCurrentIdx}"]`
+		) as HTMLButtonElement | null;
+		if (btn) {
+			// Optionally move focus to the selected button without causing the browser to auto-scroll
+			if (focusButton) (btn as any).focus?.({ preventScroll: true });
+			// Deterministic scrolling to ensure the button is fully visible with a margin, even at the end of long lists
+			const margin = 24; // px
+			const btnTop = btn.offsetTop;
+			const btnBottom = btnTop + btn.offsetHeight;
+			const viewTop = parent.scrollTop;
+			const viewBottom = viewTop + parent.clientHeight;
+			if (btnBottom > viewBottom - margin) {
+				parent.scrollTo({ top: Math.min(btnBottom - parent.clientHeight + margin, parent.scrollHeight), behavior: 'smooth' });
+			} else if (btnTop < viewTop + margin) {
+				parent.scrollTo({ top: Math.max(btnTop - margin, 0), behavior: 'smooth' });
+			}
+		}
+	} catch {
+	}
+}
+
+function selectOverlayOccurrence(idx: number, options?: { focusButton?: boolean; scroll?: boolean }) {
 	if (!overlayToken || !isPreviewOpen) return;
+	const { focusButton = false, scroll = true } = options ?? {};
 	overlayCurrentIdx = Math.max(0, Math.min(idx, overlayOccurrences.length - 1));
 	const id = overlayOccurrences[overlayCurrentIdx];
 	const state = computeTokenState(overlayToken);
 	appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state });
 	lastPreviewSelection = { id, state };
 	lastPreviewToken = overlayToken;
+	// Keep input focused while the overlay is open and optionally scroll the selected occurrence button into view
+	if (scroll || focusButton) setTimeout(() => {
+		focusOverlayOccurrenceButton({ focusButton });
+		focusOverlayInput({ preventScroll: true });
+	}, 0);
 }
 
-function openTokenOverlay(i: number, token: string) {
+async function openTokenOverlay(i: number, token: string) {
 	overlayToken = token;
 	overlayTokenIndex = i;
 	// Use provided occurrence IDs if available; otherwise fallback to legacy id
@@ -244,10 +321,13 @@ function openTokenOverlay(i: number, token: string) {
 	isTokenOverlayOpen = true;
 	// On open, highlight the first occurrence in the preview if open
 	if (isPreviewOpen) {
-		selectOverlayOccurrence(0);
+		selectOverlayOccurrence(0, { focusButton: false, scroll: true });
 	}
 	// Ensure the overlay immediately pins under the sticky header so its internal scroller can reach the end
 	void pinOverlayIntoSticky();
+	// After the overlay renders, focus the input to make editing immediate
+	await tick();
+	focusOverlayInput({ preventScroll: true, placeCursorEnd: true });
 }
 
 function closeTokenOverlay() {
@@ -694,6 +774,78 @@ onMount(async () => {
 	} catch {
 	}
 
+	// Listen for clicks in the preview to focus corresponding input and handle occurrences overlay
+	try {
+		const previewTokenClickedHandler = async (params: { id: string }) => {
+			if (!params?.id) return;
+			const clickedId = params.id;
+			// Find token and occurrence index by id
+			let foundToken: string | null = null;
+			let occIdx = 0;
+			for (const [tok, ids] of Object.entries(tokenOccurrences)) {
+				const idx = (ids || []).indexOf(clickedId);
+				if (idx !== -1) {
+					foundToken = tok;
+					occIdx = idx;
+					break;
+				}
+			}
+			if (!foundToken) {
+				const m = clickedId.match(/^nh-token-(\d+)$/);
+				if (m) {
+					const n = parseInt(m[1], 10) - 1;
+					if (!Number.isNaN(n) && n >= 0 && n < tokens.length) {
+						foundToken = tokens[n];
+						occIdx = 0;
+					}
+				}
+			}
+			if (!foundToken) return;
+
+			// If clicking the first occurrence while the Token Occurrence overlay is open,
+			// close the overlay BEFORE scrolling, so it doesn't obscure the input.
+			const shouldCloseOverlayFirst = isTokenOverlayOpen && occIdx === 0;
+			if (shouldCloseOverlayFirst) {
+				isTokenOverlayOpen = false;
+				await tick();
+			}
+
+			// Focus the associated input and set cursor at end
+			const inputEl = document.getElementById(getInputId(foundToken)) as HTMLTextAreaElement | null;
+			if (inputEl) {
+				// Scroll accounting for sticky header + filter bar so input isn't hidden at the top
+				scrollTokenInputIntoView(inputEl);
+				// Then focus without re-scrolling
+				inputEl.focus({ preventScroll: true });
+				const val = inputEl.value ?? '';
+				// Place cursor at end
+				try {
+					inputEl.selectionStart = inputEl.selectionEnd = val.length;
+				} catch {}
+			}
+
+			// If not the first occurrence, open the overlay and select the clicked occurrence
+			if (occIdx > 0) {
+				// Determine index for openTokenOverlay fallback semantics
+				const tokenIndex = tokens.indexOf(foundToken);
+				if (tokenIndex >= 0) {
+					openTokenOverlay(tokenIndex, foundToken);
+					selectOverlayOccurrence(occIdx);
+				}
+			} else {
+				// Ensure overlay is closed when clicking the first occurrence
+				isTokenOverlayOpen = false;
+			}
+		};
+		appHooks.hook('private-ai.token-replacer.preview.token-clicked', previewTokenClickedHandler);
+		removePreviewTokenClickedHook = () => {
+			try {
+				appHooks.removeHook('private-ai.token-replacer.preview.token-clicked', previewTokenClickedHandler);
+			} catch {}
+		};
+	} catch {
+	}
+
 	// Ensure the list of tokenized files is loaded so the selected document summary can resolve on refresh
 	try {
 		await ensureFilesFetched();
@@ -791,6 +943,11 @@ onDestroy(() => {
 		removePreviewReloadedHook && removePreviewReloadedHook();
 	} catch {
 	}
+	// Remove preview token clicked hook listener
+	try {
+		removePreviewTokenClickedHook && removePreviewTokenClickedHook();
+	} catch {
+	}
 	// Cleanup summary visibility listeners
 	try {
 		if (summaryScrollHandler) {
@@ -843,19 +1000,19 @@ onDestroy(() => {
 					<Tooltip content={$i18n.t('Preview Document')} placement="left">
 						<button
 							type="button"
-							class="inline-flex items-center justify-center h-6 w-6 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
+							class="inline-flex items-center justify-center h-6 w-6 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
 							on:click={openPreviewPanel}
 							aria-label={$i18n.t('Preview')}
 							title={$i18n.t('Preview')}
 							disabled={isPreviewOpen}
 						>
-							<Eye class="h-4 w-4" />
+							👀
 						</button>
 					</Tooltip>
 				</div>
 			{/if}
 		</div>
-		<div class="relative mt-1 w-full h-2.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden" role="progressbar"
+		<div class="relative mt-1 w-full h-4 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden" role="progressbar"
 				 aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent}
 				 aria-label={$i18n.t('Completion progress')}>
 			<div class="h-full bg-green-500 dark:bg-green-400 transition-[width] duration-300"
@@ -944,20 +1101,22 @@ onDestroy(() => {
 					<div class="p-3 sm:p-4">
 						<div class="flex flex-wrap items-center gap-1">
 							{#each overlayOccurrences as occId, idx}
-								<button type="button"
-												class={`px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        <button type="button"
+												class={`token-occurrence-btn px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+												data-occurrence-index={idx}
 												on:click={() => selectOverlayOccurrence(idx)}>
-									{idx + 1}
-								</button>
+										{idx + 1}
+										</button>
 							{/each}
 						</div>
 					</div>
 				</div>
 			{/if}
 
-			<div
+   <div
 				class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 sticky bg-white dark:bg-gray-900 z-10 shadow"
-				style={`top: ${headerHeight}px`}>
+				style={`top: ${headerHeight}px`}
+				bind:this={filterBarEl}>
 				<div class="flex items-center justify-between gap-2 mb-1">
 					<div class="inline-flex self-stretch gap-2 text-xs text-gray-700 dark:text-gray-300">
 						<select
