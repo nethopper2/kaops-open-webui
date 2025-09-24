@@ -146,6 +146,7 @@ let isPreviewOpen = false;
 let removeOverlayHook: (() => void) | null = null;
 let removePreviewClosedHook: (() => void) | null = null;
 let removePreviewReloadedHook: (() => void) | null = null;
+let removePreviewTokenClickedHook: (() => void) | null = null;
 // Track the last previewed token selection to update highlight state on edits
 let lastPreviewSelection: { id: string; state: 'draft' | 'saved' } | null = null;
 let lastPreviewToken: string | null = null;
@@ -159,6 +160,8 @@ let overlayCurrentIdx = 0;
 
 // Ref to the overlay container to measure and auto-pin into sticky position
 let overlayContainerEl: HTMLDivElement | null = null;
+// Sticky search/filter bar element (below header) to account for its height when scrolling inputs
+let filterBarEl: HTMLDivElement | null = null;
 
 function getScrollableParent(el: HTMLElement | null): HTMLElement | Window {
 	if (!el) return window;
@@ -172,7 +175,31 @@ function getScrollableParent(el: HTMLElement | null): HTMLElement | Window {
 		}
 		parent = parent.parentElement;
 	}
-	return window;
+ return window;
+}
+
+function scrollTokenInputIntoView(inputEl: HTMLElement) {
+	// Scroll so the input appears just below sticky header and filter bar,
+	// even when it's currently above the viewport or partially hidden under sticky UI.
+	try {
+		const stickyOffset = headerHeight + (filterBarEl?.offsetHeight ?? 0) + 8; // small padding
+		const scrollParent = getScrollableParent(inputEl);
+		if (scrollParent === window) {
+			const rect = inputEl.getBoundingClientRect();
+			const absoluteTargetTop = window.pageYOffset + rect.top - stickyOffset;
+			window.scrollTo({ top: Math.max(absoluteTargetTop, 0), behavior: 'smooth' });
+		} else {
+			// Internal scroll container: compute the element's position relative to the container and adjust scrollTop
+			const parent = scrollParent as HTMLElement;
+			const parentRect = parent.getBoundingClientRect();
+			const elRect = inputEl.getBoundingClientRect();
+			const relativeTop = elRect.top - parentRect.top; // distance from parent's visible top to the element
+			const targetScrollTop = parent.scrollTop + relativeTop - stickyOffset;
+			parent.scrollTo({ top: Math.max(targetScrollTop, 0), behavior: 'smooth' });
+		}
+	} catch {
+		// no-op
+	}
 }
 
 async function pinOverlayIntoSticky() {
@@ -225,6 +252,21 @@ function computeTokenState(token: string, valueOverride?: string): 'draft' | 'sa
 	return v === s ? 'saved' : 'draft';
 }
 
+function focusOverlayOccurrenceButton() {
+	try {
+		if (!overlayContainerEl) return;
+		const btn = overlayContainerEl.querySelector(
+			`button[data-occurrence-index="${overlayCurrentIdx}"]`
+		) as HTMLButtonElement | null;
+		if (btn) {
+			// Focus the selected button and ensure it's visible in the overlay scroll area
+			(btn as any).focus?.({ preventScroll: true });
+			btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+		}
+	} catch {
+	}
+}
+
 function selectOverlayOccurrence(idx: number) {
 	if (!overlayToken || !isPreviewOpen) return;
 	overlayCurrentIdx = Math.max(0, Math.min(idx, overlayOccurrences.length - 1));
@@ -233,6 +275,8 @@ function selectOverlayOccurrence(idx: number) {
 	appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state });
 	lastPreviewSelection = { id, state };
 	lastPreviewToken = overlayToken;
+	// After DOM updates, focus and scroll the selected occurrence button into view
+	setTimeout(() => focusOverlayOccurrenceButton(), 0);
 }
 
 function openTokenOverlay(i: number, token: string) {
@@ -694,6 +738,70 @@ onMount(async () => {
 	} catch {
 	}
 
+	// Listen for clicks in the preview to focus corresponding input and handle occurrences overlay
+	try {
+		const previewTokenClickedHandler = (params: { id: string }) => {
+			if (!params?.id) return;
+			const clickedId = params.id;
+			// Find token and occurrence index by id
+			let foundToken: string | null = null;
+			let occIdx = 0;
+			for (const [tok, ids] of Object.entries(tokenOccurrences)) {
+				const idx = (ids || []).indexOf(clickedId);
+				if (idx !== -1) {
+					foundToken = tok;
+					occIdx = idx;
+					break;
+				}
+			}
+			if (!foundToken) {
+				const m = clickedId.match(/^nh-token-(\d+)$/);
+				if (m) {
+					const n = parseInt(m[1], 10) - 1;
+					if (!Number.isNaN(n) && n >= 0 && n < tokens.length) {
+						foundToken = tokens[n];
+						occIdx = 0;
+					}
+				}
+			}
+			if (!foundToken) return;
+
+			// Focus the associated input and set cursor at end
+			const inputEl = document.getElementById(getInputId(foundToken)) as HTMLTextAreaElement | null;
+			if (inputEl) {
+				// Scroll accounting for sticky header + filter bar so input isn't hidden at the top
+				scrollTokenInputIntoView(inputEl);
+				// Then focus without re-scrolling
+				inputEl.focus({ preventScroll: true });
+				const val = inputEl.value ?? '';
+				// Place cursor at end
+				try {
+					inputEl.selectionStart = inputEl.selectionEnd = val.length;
+				} catch {}
+			}
+
+			// If not the first occurrence, open the overlay and select the clicked occurrence
+			if (occIdx > 0) {
+				// Determine index for openTokenOverlay fallback semantics
+				const tokenIndex = tokens.indexOf(foundToken);
+				if (tokenIndex >= 0) {
+					openTokenOverlay(tokenIndex, foundToken);
+					selectOverlayOccurrence(occIdx);
+				}
+			} else {
+				// Ensure overlay is closed when clicking the first occurrence
+				isTokenOverlayOpen = false;
+			}
+		};
+		appHooks.hook('private-ai.token-replacer.preview.token-clicked', previewTokenClickedHandler);
+		removePreviewTokenClickedHook = () => {
+			try {
+				appHooks.removeHook('private-ai.token-replacer.preview.token-clicked', previewTokenClickedHandler);
+			} catch {}
+		};
+	} catch {
+	}
+
 	// Ensure the list of tokenized files is loaded so the selected document summary can resolve on refresh
 	try {
 		await ensureFilesFetched();
@@ -789,6 +897,11 @@ onDestroy(() => {
 	// Remove preview reloaded hook listener
 	try {
 		removePreviewReloadedHook && removePreviewReloadedHook();
+	} catch {
+	}
+	// Remove preview token clicked hook listener
+	try {
+		removePreviewTokenClickedHook && removePreviewTokenClickedHook();
 	} catch {
 	}
 	// Cleanup summary visibility listeners
@@ -944,9 +1057,10 @@ onDestroy(() => {
 					<div class="p-3 sm:p-4">
 						<div class="flex flex-wrap items-center gap-1">
 							{#each overlayOccurrences as occId, idx}
-								<button type="button"
-												class={`px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-												on:click={() => selectOverlayOccurrence(idx)}>
+        <button type="button"
+											class={`px-2 py-1 rounded border text-xs ${idx === overlayCurrentIdx ? 'bg-gray-200 dark:bg-gray-800 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+											data-occurrence-index={idx}
+											on:click={() => selectOverlayOccurrence(idx)}>
 									{idx + 1}
 								</button>
 							{/each}
@@ -955,9 +1069,10 @@ onDestroy(() => {
 				</div>
 			{/if}
 
-			<div
+   <div
 				class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 sticky bg-white dark:bg-gray-900 z-10 shadow"
-				style={`top: ${headerHeight}px`}>
+				style={`top: ${headerHeight}px`}
+				bind:this={filterBarEl}>
 				<div class="flex items-center justify-between gap-2 mb-1">
 					<div class="inline-flex self-stretch gap-2 text-xs text-gray-700 dark:text-gray-300">
 						<select
