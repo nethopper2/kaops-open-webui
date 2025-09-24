@@ -1000,19 +1000,19 @@ onDestroy(() => {
 					<Tooltip content={$i18n.t('Preview Document')} placement="left">
 						<button
 							type="button"
-							class="inline-flex items-center justify-center h-6 w-6 rounded border border-gray-300 dark:border-gray-700 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
+							class="inline-flex items-center justify-center h-6 w-6 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
 							on:click={openPreviewPanel}
 							aria-label={$i18n.t('Preview')}
 							title={$i18n.t('Preview')}
 							disabled={isPreviewOpen}
 						>
-							<Eye class="h-4 w-4" />
+							👀
 						</button>
 					</Tooltip>
 				</div>
 			{/if}
 		</div>
-		<div class="relative mt-1 w-full h-2.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden" role="progressbar"
+		<div class="relative mt-1 w-full h-4 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden" role="progressbar"
 				 aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent}
 				 aria-label={$i18n.t('Completion progress')}>
 			<div class="h-full bg-green-500 dark:bg-green-400 transition-[width] duration-300"
