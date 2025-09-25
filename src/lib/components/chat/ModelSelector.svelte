@@ -52,7 +52,7 @@ import { appHooks } from '$lib/utils/hooks';
 	// NOTE: For now we are only handling setting isPublicModelChosen from here
 	//       which will only occur from the chat area (the only area that
 	//       currently cares since the user is making chat content choices from there)
-	//       We can move to a more global way of handlig this later if needed.
+	//       We can move to a more global way of handling this later if needed.
 	// ============================================================================
 	// Handle ongoing changes
 	$: updatePublicModelStatus(selectedModels, $models);

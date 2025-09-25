@@ -866,12 +866,17 @@
 	};
 
 	const selectTemplate = () => {
-		if (value !== '') {
+		if (value !== '' && editor) {
 			// After updating the state, try to find and select the next template
 			setTimeout(() => {
+				if (!editor || !editor.view) return;
 				const templateFound = selectNextTemplate(editor.view.state, editor.view.dispatch);
 				if (!templateFound) {
-					editor.commands.focus('end');
+					try {
+						editor.commands.focus('end');
+					} catch (e) {
+						// Editor may not be mounted yet; ignore focus attempt
+					}
 				}
 			}, 0);
 		}

@@ -1,10 +1,13 @@
-import { APP_NAME } from '$lib/constants';
-import { type Writable, writable } from 'svelte/store';
+import { APP_NAME, WEBUI_BASE_URL } from '$lib/constants';
+import { type Writable, writable, derived } from 'svelte/store';
 import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
 import type { Socket } from 'socket.io-client';
+import type { ComponentType } from 'svelte';
 
 import emojiShortCodes from '$lib/emoji-shortcodes.json';
+import { canSupportSidekick, loadPrivateAiSidekickComponent } from '$lib/private-ai/toolbars';
+import { appHooks } from '$lib/utils/hooks';
 
 // Backend
 export const WEBUI_NAME = writable(APP_NAME);
@@ -46,6 +49,9 @@ export const TTSWorker = writable(null);
 export const chatId = writable('');
 export const chatTitle = writable('');
 
+// Derived: whether there is an active chat (used by multiple features)
+export const isChatStarted = derived(chatId, ($chatId) => Boolean($chatId));
+
 export const channels = writable([]);
 export const chats = writable(null);
 export const pinnedChats = writable([]);
@@ -75,10 +81,88 @@ export const showShortcuts = writable(false);
 export const showArchivedChats = writable(false);
 export const showChangelog = writable(false);
 
+// Used to show a sidekick when the selected model supports it.
+export const showPrivateAiSidekick = writable(false);
+
 export const showControls = writable(false);
 export const showOverview = writable(false);
 export const showArtifacts = writable(false);
 export const showCallOverlay = writable(false);
+
+// Ensure mutual exclusivity between Controls and Private AI Model sidekick globally
+// This centralizes the logic so only one of these can be true at a time
+let __enforcingExclusivePanels = false;
+showControls.subscribe((v) => {
+	if (__enforcingExclusivePanels) return;
+	if (v) {
+		__enforcingExclusivePanels = true;
+		showPrivateAiSidekick.set(false);
+		__enforcingExclusivePanels = false;
+	}
+});
+showPrivateAiSidekick.subscribe((v) => {
+	if (__enforcingExclusivePanels) return;
+	if (v) {
+		__enforcingExclusivePanels = true;
+		showControls.set(false);
+		__enforcingExclusivePanels = false;
+	}
+});
+
+// Single source of truth for which right-side pane is active in the PaneGroup
+export const activeRightPane = derived(
+	[showControls, showPrivateAiSidekick],
+	([controls, privateAi]) => (controls ? 'controls' : privateAi ? 'private' : null) as 'controls' | 'private' | null
+);
+
+
+// Selected single model id used for Private AI sidekicks
+export const currentSelectedModelId: Writable<string | null> = writable<string | null>(null);
+
+// Component to render for the selected model's sidekick (loaded asynchronously)
+export const privateAiSidekickComponent: Writable<ComponentType | null> = writable<ComponentType | null>(null);
+currentSelectedModelId.subscribe(async (id) => {
+	try {
+		const comp = await loadPrivateAiSidekickComponent(id);
+		privateAiSidekickComponent.set(comp);
+	} catch {
+		privateAiSidekickComponent.set(null);
+	}
+});
+
+// Derived: whether Private AI Model sidekick can be used with the selected model
+export const canShowPrivateAiSidekick = derived(currentSelectedModelId, (id) => canSupportSidekick(id));
+
+// Derived: avatar URL for the selected model (matches ModelSelector avatar)
+export const privateAiSelectedModelAvatarUrl = derived(
+	[currentSelectedModelId, models],
+	([id, $models]) => {
+		if (!id) return `${WEBUI_BASE_URL}/static/favicon.png`;
+		const model = ($models || []).find((m) => m.id === id);
+		return (
+			(model?.info as any)?.meta?.profile_image_url ?? `${WEBUI_BASE_URL}/static/favicon.png`
+		);
+	}
+);
+
+
+// Emit model.changed hook whenever the selected model changes
+let __prevHookModelId: string | null = null;
+currentSelectedModelId.subscribe((modelId) => {
+	const prevModelId = __prevHookModelId;
+	__prevHookModelId = modelId;
+	try {
+		// Compute canShow synchronously using pure helper to avoid reactive timing issues
+		const canShow = canSupportSidekick(modelId);
+		appHooks.callHook('model.changed', {
+			prevModelId,
+			modelId,
+			canShowPrivateAiToolbar: canShow
+		});
+	} catch {
+		// ignore hook errors
+	}
+});
 
 export const artifactCode = writable(null);
 

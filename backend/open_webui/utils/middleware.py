@@ -1146,67 +1146,73 @@ async def process_chat_response(
                             pass
 
                 if TASKS.TITLE_GENERATION in tasks:
-                    user_message = get_last_user_message(messages)
-                    if user_message and len(user_message) > 100:
-                        user_message = user_message[:100] + "..."
+                    # Gate: skip title generation if a meaningful title already exists
+                    existing_title = (Chats.get_chat_title_by_id(metadata["chat_id"]) or "").strip()
+                    placeholder_titles = {"", "New Chat"}
+                    has_meaningful_title = existing_title not in placeholder_titles
 
-                    if tasks[TASKS.TITLE_GENERATION]:
+                    if not has_meaningful_title:
+                        user_message = get_last_user_message(messages)
+                        if user_message and len(user_message) > 100:
+                            user_message = user_message[:100] + "..."
 
-                        res = await generate_title(
-                            request,
-                            {
-                                "model": message["model"],
-                                "messages": messages,
-                                "chat_id": metadata["chat_id"],
-                            },
-                            user,
-                        )
+                        if tasks[TASKS.TITLE_GENERATION]:
+                            res = await generate_title(
+                                request,
+                                {
+                                    "model": message["model"],
+                                    "messages": messages,
+                                    "chat_id": metadata["chat_id"],
+                                },
+                                user,
+                            )
 
-                        if res and isinstance(res, dict):
-                            if len(res.get("choices", [])) == 1:
-                                title_string = (
-                                    res.get("choices", [])[0]
-                                    .get("message", {})
-                                    .get(
-                                        "content", message.get("content", user_message)
+                            if res and isinstance(res, dict):
+                                if len(res.get("choices", [])) == 1:
+                                    title_string = (
+                                        res.get("choices", [])[0]
+                                        .get("message", {})
+                                        .get(
+                                            "content", message.get("content", user_message)
+                                        )
                                     )
+                                else:
+                                    title_string = ""
+
+                                title_string = title_string[
+                                    title_string.find("{") : title_string.rfind("}") + 1
+                                ]
+
+                                try:
+                                    title = json.loads(title_string).get(
+                                        "title", user_message
+                                    )
+                                except Exception:
+                                    title = ""
+
+                                if not title:
+                                    title = messages[0].get("content", user_message)
+
+                                # Persist the generated title only if the current title is a placeholder
+                                try:
+                                    Chats.update_chat_title_by_id(metadata["chat_id"], title)
+                                except Exception:
+                                    pass
+                                await event_emitter(
+                                    {
+                                        "type": "chat:title",
+                                        "data": title,
+                                    }
                                 )
-                            else:
-                                title_string = ""
-
-                            title_string = title_string[
-                                title_string.find("{") : title_string.rfind("}") + 1
-                            ]
-
-                            try:
-                                title = json.loads(title_string).get(
-                                    "title", user_message
-                                )
-                            except Exception as e:
-                                title = ""
-
-                            if not title:
-                                title = messages[0].get("content", user_message)
-
+                        elif len(messages) == 2:
+                            title = messages[0].get("content", user_message)
                             Chats.update_chat_title_by_id(metadata["chat_id"], title)
-
                             await event_emitter(
                                 {
                                     "type": "chat:title",
-                                    "data": title,
+                                    "data": message.get("content", user_message),
                                 }
                             )
-                    elif len(messages) == 2:
-                        title = messages[0].get("content", user_message)
-
-                        Chats.update_chat_title_by_id(metadata["chat_id"], title)
-
-                        await event_emitter(
-                            {
-                                "type": "chat:title",
-                                "data": message.get("content", user_message),
-                            }
-                        )
 
                 if TASKS.TAGS_GENERATION in tasks and tasks[TASKS.TAGS_GENERATION]:
                     res = await generate_chat_tags(

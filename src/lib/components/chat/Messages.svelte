@@ -77,7 +77,10 @@
 
 		let message = history.messages[history.currentId];
 		while (message && _messages.length <= messagesCount) {
-			_messages.unshift({ ...message });
+			// Skip rendering hidden messages (e.g., assistant-only directives)
+			if (!message?.hidden) {
+				_messages.unshift({ ...message });
+			}
 			message = message.parentId !== null ? history.messages[message.parentId] : null;
 		}
 

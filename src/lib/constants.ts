@@ -98,7 +98,6 @@ export const SUPPORTED_FILE_EXTENSIONS = [
 
 export const PASTED_TEXT_CHARACTER_LIMIT = 1000;
 
-export const TOKEN_REPLACER_MODEL_ID = 'private-ai-token-replacer';
 
 // Source: https://kit.svelte.dev/docs/modules#$env-static-public
 // This feature, akin to $env/static/private, exclusively incorporates environment variables

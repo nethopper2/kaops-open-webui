@@ -12,9 +12,9 @@
 
 	import { get, type Unsubscriber, type Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
-	import {
+ import {
 		chatId,
 		chats,
 		config,
@@ -29,6 +29,7 @@
 		socket,
 		showControls,
 		showCallOverlay,
+		showPrivateAiSidekick,
 		currentChatPage,
 		temporaryChatEnabled,
 		mobile,
@@ -38,7 +39,9 @@
 		tools,
 		toolServers,
 		selectedFolder,
-		pinnedChats
+		pinnedChats,
+		currentSelectedModelId,
+		canShowPrivateAiSidekick
 	} from '$lib/stores';
 	import {
 		convertMessagesToHistory,
@@ -72,7 +75,7 @@
 		chatAction,
 		generateMoACompletion,
 		stopTask,
-		getTaskIdsByChatId
+		getTaskIdsByChatId, getBackendConfig
 	} from '$lib/apis';
 	import { getTools } from '$lib/apis/tools';
 
@@ -80,7 +83,9 @@
 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
-	import ChatControls from './ChatControls.svelte';
+ import ChatControls from './ChatControls.svelte';
+ import PrivateAiSidekick from './PrivateAiSidekick.svelte';
+ import ChatOverlay from './ChatOverlay.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import Placeholder from './Placeholder.svelte';
 	import NotificationToast from '../NotificationToast.svelte';
@@ -95,8 +100,11 @@
 	let loading = true;
 
 	const eventTarget = new EventTarget();
+
 	let controlPane;
 	let controlPaneComponent;
+	let privateAiPane;
+	let privateAiPaneComponent;
 
 	let messageInput;
 
@@ -118,8 +126,202 @@
 
 	let selectedModels = [''];
 	let atSelectedModel: Model | undefined;
-	let selectedModelIds = [];
-	$: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
+ let selectedModelIds = [];
+ $: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
+ 
+ // Keep a global store updated with the current single selected model id (or null if multiple/none)
+ $: {
+ 	const singleId = (Array.isArray(selectedModels) && selectedModels.length === 1 && selectedModels[0] !== ''
+ 			? selectedModels[0]
+ 			: (atSelectedModel ? atSelectedModel.id : null));
+ 	currentSelectedModelId.set(singleId);
+ }
+ 
+// Auto open/close of Private AI sidekick is now handled via appHooks 'model.changed' in onMount.
+import { appHooks } from '$lib/utils/hooks';
+	import { apiFetch } from '$lib/apis/private-ai/fetchClients';
+
+let __unhookModelChanged: (() => void) | undefined;
+let __unhookChatSubmit: (() => void) | undefined;
+let __unhookChatOverlay: (() => void) | undefined;
+let __unsubShowPrivateToolbar: Unsubscriber | undefined;
+
+// Overlay state controlled via appHooks 'chat.overlay'
+let overlayShow = false;
+let overlayTitle = '';
+let overlayComponent: any = null;
+let overlayProps: Record<string, unknown> = {};
+
+// handle certain links in the chat Markdown.
+async function handleGotoClick(e: MouseEvent) {
+	// Find the anchor element closest to event target (covers clicks on child elements)
+	const target = e.target as Element | null;
+	const anchor = target?.closest ? target.closest('a') : null;
+	if (!anchor) return;
+
+	const href = anchor.getAttribute('href');
+	if (!href || !href.startsWith('#goto=')) return;
+
+	// Prevent default navigation for our custom handler
+	e.preventDefault();
+
+	const encoded = href.substring(6); // after '#goto='
+	let decodedUrl: string;
+	try {
+		decodedUrl = decodeURIComponent(encoded);
+	} catch (err) {
+		console.warn('Invalid goto payload encoding', err);
+		return;
+	}
+	if (!decodedUrl) return;
+
+	try {
+		const backendConfig = await getBackendConfig();
+
+		// Parse the target URL robustly
+		let targetUrl: URL;
+		try {
+			targetUrl = new URL(decodedUrl, window.location.href);
+		} catch (err) {
+			console.warn('Invalid goto URL', err);
+			return;
+		}
+
+		// Parse the configured service base and enforce same origin + path prefix.
+		let serviceBase: URL;
+		try {
+			serviceBase = new URL(backendConfig.nh_data_service.url);
+		} catch (err) {
+			console.warn('Invalid backend nh_data_service.url in config', err);
+			return;
+		}
+
+		// Allowlist for common development hostnames
+		const devHostnames = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
+		const pageIsLocal = devHostnames.has(window.location.hostname);
+		const targetIsLocal = devHostnames.has(targetUrl.hostname);
+		const serviceIsLocal = devHostnames.has(serviceBase.hostname);
+
+		// Accept when:
+		//  - the target origin exactly matches configured service origin (production)
+		//  - OR when running the app locally and the target is a local dev host (allow local dev flow)
+		//  - OR when the configured service itself is local and the target is local
+		const allowedForFetch =
+			targetUrl.origin === serviceBase.origin ||
+			(pageIsLocal && targetIsLocal) ||
+			(serviceIsLocal && targetIsLocal);
+
+		if (!allowedForFetch) return;
+
+		// If there is a configured base path, enforce that target path is under it (avoid prefix confusion)
+		const servicePath = (serviceBase.pathname || '').replace(/\/$/, '');
+		if (servicePath) {
+			const p = targetUrl.pathname || '';
+			// Require exact match or a path component boundary (servicePath + '/')
+			if (!(p === servicePath || p.startsWith(servicePath + '/'))) return;
+		}
+
+		// Safe to call backend service for this URL
+		let result: any;
+		try {
+			result = await apiFetch(targetUrl.toString());
+		} catch (err) {
+			console.error('apiFetch failed for goto URL', err);
+			return;
+		}
+
+		// Validate signedUrl before opening
+		if (result?.signedUrl) {
+			try {
+				const signed = new URL(result.signedUrl);
+				// Prefer HTTPS for opened URLs; for local dev signed URLs could be http but we disallow opening non-HTTPS in prod.
+				if (signed.protocol !== 'https:') {
+					// Allow HTTP signed URLs only in local dev when both page and signed host are local:
+					const signedIsLocal = devHostnames.has(signed.hostname);
+					if (!(pageIsLocal && signedIsLocal)) {
+						console.warn('Rejected signedUrl with non-HTTPS protocol', signed.href);
+						return;
+					}
+				}
+				// Open in a new window safely
+				const win = window.open(signed.toString(), '_blank', 'noopener,noreferrer');
+				if (win) {
+					try {
+						win.opener = null;
+					} catch (err) {
+						// Some browsers may block access; ignore
+					}
+				} else {
+					console.warn('Popup blocked opening signedUrl');
+				}
+			} catch (err) {
+				console.warn('Invalid signedUrl returned', err);
+			}
+		}
+	} catch (err) {
+		console.error(err);
+	}
+}
+
+onMount(() => {
+	document.addEventListener('click', handleGotoClick, false);
+
+	const handler = async ({ prevModelId, modelId, canShowPrivateAiToolbar }: { prevModelId: string | null; modelId: string | null; canShowPrivateAiToolbar: boolean }) => {
+		const currentId = get(currentSelectedModelId);
+		// Ignore stale/out-of-order events: only react if payload modelId matches current selection
+		if (modelId !== currentId) {
+			return;
+		}
+		if (canShowPrivateAiToolbar) {
+			showPrivateAiSidekick.set(true);
+			await tick();
+			privateAiPaneComponent?.openPane?.();
+		} else {
+			showPrivateAiSidekick.set(false);
+		}
+	};
+	__unhookModelChanged = appHooks.hook('model.changed', handler);
+	// Call once on mount to handle initial state
+	(async () => {
+		await handler({ prevModelId: null, modelId: get(currentSelectedModelId), canShowPrivateAiToolbar: get(canShowPrivateAiSidekick) });
+	})();
+
+	// Allow external components (e.g., Private AI sidekicks) to submit a prompt
+	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt, title }) => {
+		await submitPrompt(prompt, { title });
+	});
+
+	// Hook for chat-level overlay control
+	__unhookChatOverlay = appHooks.hook('chat.overlay', ({ action, title, component, props }) => {
+		if (action === 'open') {
+			overlayTitle = title ?? '';
+			overlayComponent = component ?? null;
+			overlayProps = props ?? {};
+			overlayShow = true;
+		} else if (action === 'update') {
+			overlayTitle = title ?? overlayTitle;
+			overlayComponent = component ?? overlayComponent;
+			overlayProps = props ? { ...overlayProps, ...props } : overlayProps;
+		} else if (action === 'close') {
+			overlayShow = false;
+		}
+	});
+
+	// Close overlay if the Private AI sidekick closes
+	__unsubShowPrivateToolbar = showPrivateAiSidekick.subscribe((v) => {
+		if (!v) {
+			overlayShow = false;
+		}
+	});
+});
+
+onDestroy(() => {
+	document.removeEventListener('click', handleGotoClick);
+	__unhookModelChanged?.();
+	__unhookChatSubmit?.();
+	__unhookChatOverlay?.();
+	__unsubShowPrivateToolbar?.();
+});
 
 	let selectedToolIds = [];
 	let selectedFilterIds = [];
@@ -173,6 +375,17 @@
 			loading = false;
 			window.setTimeout(() => scrollToBottom(), 0);
 
+			// Ensure Private AI sidekick opens when an existing chat is loaded
+			try {
+				if (get(canShowPrivateAiSidekick)) {
+					showPrivateAiSidekick.set(true);
+					await tick();
+					privateAiPaneComponent?.openPane?.();
+				}
+			} catch {
+				// ignore any errors initializing the sidekick on chat load
+			}
+
 			await tick();
 
 			if (storageChatInput) {
@@ -216,7 +429,6 @@
 			return;
 		}
 		sessionStorage.selectedModels = JSON.stringify(selectedModels);
-		console.log('saveSessionSelectedModels', selectedModels, sessionStorage.selectedModels);
 	};
 
 	let oldSelectedModelIds = [''];
@@ -299,6 +511,60 @@
 		saveChatHandler(_chatId, history);
 	};
 
+	// Helper: parse directive envelope from a string; returns object or null
+	const parseDirectiveEnvelope = (text: string) => {
+		if (typeof text !== 'string') return null;
+		try {
+			const data = JSON.parse(text);
+			if (
+				data &&
+				typeof data === 'object' &&
+				data._kind === 'openwebui.directive' &&
+				(data.version === 1 || data.version === '1') &&
+				typeof data.name === 'string' && data.name
+			) {
+				return data;
+			}
+		} catch {}
+		return null;
+	};
+
+	// Helper: delete a message by id, re-parent its children, and persist
+	const deleteMessageById = async (targetId: string) => {
+		if (!targetId || !history.messages[targetId]) return;
+		const target = history.messages[targetId];
+		const parentId = target.parentId;
+		const children = Array.isArray(target.childrenIds) ? [...target.childrenIds] : [];
+		// Remove target from parent's childrenIds
+		if (parentId && history.messages[parentId]) {
+			history.messages[parentId].childrenIds = history.messages[parentId].childrenIds.filter((cid) => cid !== targetId);
+		}
+		// Re-parent children to target's parent
+		for (const childId of children) {
+			if (history.messages[childId]) {
+				history.messages[childId].parentId = parentId ?? null;
+				if (parentId && history.messages[parentId]) {
+					const p = history.messages[parentId];
+					if (!Array.isArray(p.childrenIds)) p.childrenIds = [];
+					if (!p.childrenIds.includes(childId)) {
+						p.childrenIds.push(childId);
+					}
+				}
+			}
+		}
+		// If currentId points to the deleted message, move currentId to last child or parent
+		if (history.currentId === targetId) {
+			if (children.length > 0) {
+				history.currentId = children[children.length - 1];
+			} else {
+				history.currentId = parentId ?? null;
+			}
+		}
+		// Finally, remove the target message
+		delete history.messages[targetId];
+		await saveChatHandler($chatId, history);
+	};
+
 	const chatEventHandler = async (event, cb) => {
 		console.log(event);
 
@@ -315,6 +581,10 @@
 						message.statusHistory.push(data);
 					} else {
 						message.statusHistory = [data];
+					}
+					// If the backend indicates the response is done via status, mark the message as done
+					if (data?.done === true) {
+						message.done = true;
 					}
 				} else if (type === 'chat:completion') {
 					chatCompletionEventHandler(data, message, event.chat_id);
@@ -428,6 +698,13 @@
 					eventConfirmationMessage = data.message;
 					eventConfirmationInputPlaceholder = data.placeholder;
 					eventConfirmationInputValue = data?.value ?? '';
+				} else if (type === 'chat:message:delete') {
+					// NOTE: private-ai added the `chat:message:delete` message type
+					// Delete a specific message by ID and optionally re-parent its children
+					const targetId = data?.id ?? null;
+					if (targetId) {
+						await deleteMessageById(targetId);
+					}
 				} else if (type === 'metadata') {
 					message.metadata = data;
 				} else {
@@ -530,9 +807,7 @@
 		showControls.subscribe(async (value) => {
 			if (controlPane && !$mobile) {
 				try {
-					if (value) {
-						controlPaneComponent.openPane();
-					} else {
+					if (!value) {
 						controlPane.collapse();
 					}
 				} catch (e) {
@@ -1413,7 +1688,7 @@
 	// Chat functions
 	//////////////////////////
 
-	const submitPrompt = async (userPrompt, { _raw = false } = {}) => {
+	const submitPrompt = async (userPrompt, { _raw = false, title }: { _raw?: boolean; title?: string } = {}) => {
 		console.log('submitPrompt', userPrompt, $chatId);
 
 		const messages = createMessagesList(history, history.currentId);
@@ -1489,6 +1764,8 @@
 
 		// Create user message
 		let userMessageId = uuidv4();
+		const directive = parseDirectiveEnvelope(userPrompt);
+		const isAssistantOnlyDirective = Boolean(directive?.assistant_only === true);
 		let userMessage = {
 			id: userMessageId,
 			parentId: messages.length !== 0 ? messages.at(-1).id : null,
@@ -1497,7 +1774,8 @@
 			content: userPrompt,
 			files: _files.length > 0 ? _files : undefined,
 			timestamp: Math.floor(Date.now() / 1000), // Unix epoch
-			models: selectedModels
+			models: selectedModels,
+			...(isAssistantOnlyDirective ? { hidden: true } : {})
 		};
 
 		// Add message to history and Set currentId to messageId
@@ -1515,7 +1793,12 @@
 
 		saveSessionSelectedModels();
 
-		await sendMessage(history, userMessageId, { newChat: true });
+		await sendMessage(history, userMessageId, { newChat: true, title });
+
+		// If this was an assistant-only directive, remove the user message immediately on the client
+		if (isAssistantOnlyDirective) {
+			await deleteMessageById(userMessageId);
+		}
 	};
 
 	const sendMessage = async (
@@ -1525,12 +1808,14 @@
 			messages = null,
 			modelId = null,
 			modelIdx = null,
-			newChat = false
+			newChat = false,
+			title
 		}: {
 			messages?: any[] | null;
 			modelId?: string | null;
 			modelIdx?: number | null;
 			newChat?: boolean;
+			title?: string;
 		} = {}
 	) => {
 		if (autoScroll) {
@@ -1586,7 +1871,7 @@
 
 		// Create new chat if newChat is true and first user message
 		if (newChat && _history.messages[_history.currentId].parentId === null) {
-			_chatId = await initChatHandler(_history);
+			_chatId = await initChatHandler(_history, { title });
 		}
 
 		await tick();
@@ -2062,7 +2347,7 @@
 		}
 	};
 
-	const initChatHandler = async (history) => {
+	const initChatHandler = async (history, opts: { title?: string } = {}) => {
 		let _chatId = $chatId;
 
 		if (!$temporaryChatEnabled) {
@@ -2070,7 +2355,7 @@
 				localStorage.token,
 				{
 					id: _chatId,
-					title: $i18n.t('New Chat'),
+					title: (opts?.title && String(opts.title).trim()) ? String(opts.title).trim() : $i18n.t('New Chat'),
 					models: selectedModels,
 					system: $settings.system ?? undefined,
 					params: params,
@@ -2199,7 +2484,7 @@
 <div
 	class="h-screen max-h-[100dvh] transition-width duration-200 ease-in-out {$showSidebar
 		? '  md:max-w-[calc(100%-260px)]'
-		: ' '} w-full max-w-full flex flex-col"
+		: ' '} w-full max-w-full flex flex-col relative"
 	id="chat-container"
 >
 	{#if !loading}
@@ -2220,6 +2505,14 @@
 
 			<PaneGroup direction="horizontal" class="w-full h-full">
 				<Pane defaultSize={50} class="h-full flex relative max-w-full flex-col">
+					<ChatOverlay
+						show={overlayShow}
+						title={overlayTitle}
+						component={overlayComponent}
+						componentProps={overlayProps}
+						on:close={() => { overlayShow = false; }}
+					/>
+
 					<Navbar
 						bind:this={navbarElement}
 						chat={{
@@ -2445,6 +2738,14 @@
 					{showMessage}
 					{eventTarget}
 				/>
+
+    <PrivateAiSidekick
+					bind:this={privateAiPaneComponent}
+					bind:pane={privateAiPane}
+     on:close={() => {
+						showPrivateAiSidekick.set(false);
+					}}
+					/>
 			</PaneGroup>
 		</div>
 	{:else if loading}
