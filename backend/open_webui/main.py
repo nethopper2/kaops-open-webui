@@ -1704,7 +1704,6 @@ async def get_app_config(request: Request):
             "enable_websocket": ENABLE_WEBSOCKET_SUPPORT,
             "enable_version_update_check": ENABLE_VERSION_UPDATE_CHECK,
             "enable_file_ingestion": ENABLE_SSO_DATA_SYNC if isinstance(ENABLE_SSO_DATA_SYNC, bool) else (ENABLE_SSO_DATA_SYNC.lower() == 'true' if isinstance(ENABLE_SSO_DATA_SYNC, str) else False),
-            "use_new_data_service": STORAGE_BACKEND == 'pai',
             "overide_socket_url": OVERIDE_WEB_SOCKET_URL,
             **(
                 {
