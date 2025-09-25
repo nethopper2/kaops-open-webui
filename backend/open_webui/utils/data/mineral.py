@@ -430,21 +430,6 @@ async def initiate_mineral_sync(
     # Initialize globals first
     initialize_globals(user_id)
     
-    # Configure storage backend if specified
-    if storage_backend:
-        configure_storage_backend(
-            storage_backend,
-            service_account_base64=service_account_base64,
-            gcs_bucket_name=gcs_bucket_name
-        )
-    elif service_account_base64 and gcs_bucket_name:
-        # For backward compatibility, configure GCS backend
-        configure_storage_backend(
-            'gcs',
-            service_account_base64=service_account_base64,
-            gcs_bucket_name=gcs_bucket_name
-        )
-    
     current_backend = get_current_backend()
     log.info(f"Using storage backend: {current_backend}")
 
