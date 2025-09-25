@@ -3384,6 +3384,7 @@ NH_ENABLE_UPSTREAM_UI = PersistentConfig(
 )
 # The base url for the nh-pai-data-service
 if 'NH_DATA_SERVICE_URL' in os.environ:
+    base_url = os.environ.get('NH_DATA_SERVICE_URL')
     # Remove trailing slash if present
     base_url = base_url.rstrip('/')
     # Add /api/v1 if not already present
@@ -3393,7 +3394,7 @@ else:
     # Default case - ensure it has /api/v1
     base_url = 'http://localhost:4500/api/v1'
 NH_DATA_SERVICE_URL = PersistentConfig(
-    "NH_DATA_SERVICE_URL", "lprivate_ai.nh_data_service_url", base_url
+    "NH_DATA_SERVICE_URL", "private_ai.nh_data_service_url", base_url
 )
 # Custom NH settings for the WebUI model directly from environment variable
 NH_DOCKER_IMAGE = os.environ.get("DOCKER_IMAGE", "")
