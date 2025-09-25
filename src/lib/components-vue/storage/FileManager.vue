@@ -103,7 +103,7 @@ onMounted(async () => {
 	const backendConfig = await getBackendConfig();
 
 	fileSystemProvider = new RemoteFileSystemProvider({
-		endpointUrl: `${backendConfig.nh_data_service.url}/files/devextreme`,
+		endpointUrl: `${backendConfig.private_ai.nh_data_service_url}/files/devextreme`,
 		requestHeaders: {
 			Authorization: 'Bearer ' + localStorage.getItem('token')
 		}

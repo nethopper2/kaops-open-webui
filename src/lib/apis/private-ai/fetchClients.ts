@@ -16,7 +16,7 @@ export const apiFetch = ofetch.create({
 	async onRequest({ request, options }) {
 		const backendConfig = await getBackendConfig();
 
-		options.baseURL = backendConfig.nh_data_service.url;
+		options.baseURL = backendConfig.private_ai.nh_data_service_url;
 
 		// Build a full URL for origin/path checks where possible (SSR-safe: avoid window usage)
 		let fullUrl: URL | null = null;
@@ -43,7 +43,7 @@ export const apiFetch = ofetch.create({
 		const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
 		if (token && fullUrl) {
 			try {
-				const serviceBase = new URL(backendConfig.nh_data_service.url);
+				const serviceBase = new URL(backendConfig.private_ai.nh_data_service_url);
 				const allowedOrigin = serviceBase.origin;
 
 				// Relax path check: attach auth for any request to the same origin as the configured backend.

@@ -363,7 +363,7 @@ type Config = {
 		citation_document_url: string;
 		// If true, some original open web ui interfaces are shown instead of Private AI.
 		enable_upstream_ui: boolean;
-		rest_api_base_url: string;
+		nh_data_service_url: string;
 		webui_custom?: {
 			logo?: string;
 			logoMaxHeight?: string;

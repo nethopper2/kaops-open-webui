@@ -190,9 +190,9 @@ async function handleGotoClick(e: MouseEvent) {
 		// Parse the configured service base and enforce same origin + path prefix.
 		let serviceBase: URL;
 		try {
-			serviceBase = new URL(backendConfig.nh_data_service.url);
+			serviceBase = new URL(backendConfig.private_ai.nh_data_service_url);
 		} catch (err) {
-			console.warn('Invalid backend nh_data_service.url in config', err);
+			console.warn('Invalid backend private_ai.nh_data_service_url in config', err);
 			return;
 		}
 
