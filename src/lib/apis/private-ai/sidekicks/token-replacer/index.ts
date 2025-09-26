@@ -5,9 +5,12 @@ export async function getTokenizedFiles() {
 	return await apiFetch('/tools/token-replacer/documents', { query: {} });
 }
 
-export async function getFilePreview(type: 'docx' | 'csv', path: string) {
+export async function getFilePreview(type: 'docx' | 'csv', chatId: string, modelId: string) {
 	const params: Record<string, string> = {};
-	return apiFetch(`/files/preview/${type}/${path}`, { params });
+	return apiFetch(
+		`/tools/token-replacer/preview/${type}/chat/${encodeURIComponent(chatId)}/model/${encodeURIComponent(modelId)}`,
+		{ params }
+	);
 }
 
 // Types for Token Replacer values API
