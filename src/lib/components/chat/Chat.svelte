@@ -171,12 +171,24 @@ async function handleGotoClick(e: MouseEvent) {
 		decodedUrl = decodeURIComponent(encoded);
 	} catch (err) {
 		console.warn('Invalid goto payload encoding', err);
+		toast.error('Invalid link encoding');
 		return;
 	}
-	if (!decodedUrl) return;
+	if (!decodedUrl) {
+		console.warn('No url to goto');
+		toast.error('No link provided');
+		return;
+	}
 
 	try {
 		const backendConfig = await getBackendConfig();
+
+		// Validate backend config shape early
+		if (!backendConfig || !backendConfig.private_ai || !backendConfig.private_ai.nh_data_service_url) {
+			console.warn('Missing private_ai.nh_data_service_url in backend config', backendConfig);
+			toast.error('Configuration issue: cannot open linked resource.');
+			return;
+		}
 
 		// Parse the target URL robustly
 		let targetUrl: URL;
@@ -184,15 +196,17 @@ async function handleGotoClick(e: MouseEvent) {
 			targetUrl = new URL(decodedUrl, window.location.href);
 		} catch (err) {
 			console.warn('Invalid goto URL', err);
+			toast.error('Invalid link');
 			return;
 		}
 
-		// Parse the configured service base and enforce same origin + path prefix.
+		// Parse the configured service base
 		let serviceBase: URL;
 		try {
 			serviceBase = new URL(backendConfig.private_ai.nh_data_service_url);
 		} catch (err) {
-			console.warn('Invalid backend private_ai.nh_data_service_url in config', err);
+			console.warn('Invalid backend private_ai.nh_data_service_url in config', err, backendConfig);
+			toast.error('Configuration issue: invalid service URL.');
 			return;
 		}
 
@@ -202,31 +216,50 @@ async function handleGotoClick(e: MouseEvent) {
 		const targetIsLocal = devHostnames.has(targetUrl.hostname);
 		const serviceIsLocal = devHostnames.has(serviceBase.hostname);
 
-		// Accept when:
-		//  - the target origin exactly matches configured service origin (production)
-		//  - OR when running the app locally and the target is a local dev host (allow local dev flow)
-		//  - OR when the configured service itself is local and the target is local
-		const allowedForFetch =
+		// Accept only when the target URL will be fetched by the configured service:
+		// 1) In production: require exact same origin as configured service (serviceBase.origin)
+		//    AND the target path must be equal to or under the configured service base path.
+		// 2) In local dev: allow local-to-local flows (page local && target local) or when the configured
+		//    service itself is local and target is local.
+		const originAllowed =
 			targetUrl.origin === serviceBase.origin ||
 			(pageIsLocal && targetIsLocal) ||
 			(serviceIsLocal && targetIsLocal);
 
-		if (!allowedForFetch) return;
+		if (!originAllowed) {
+			console.warn('Link origin not allowed by policy', {
+				target: targetUrl.toString(),
+				serviceBase: serviceBase.toString(),
+				pageHostname: window.location.hostname
+			});
+			toast.error('Link refused: origin mismatch for linked resource.');
+			return;
+		}
 
-		// If there is a configured base path, enforce that target path is under it (avoid prefix confusion)
+		// Enforce that the clicked path is under the configured service path (if service path provided).
+		// This prevents accepting unrelated paths on same origin.
 		const servicePath = (serviceBase.pathname || '').replace(/\/$/, '');
 		if (servicePath) {
 			const p = targetUrl.pathname || '';
-			// Require exact match or a path component boundary (servicePath + '/')
-			if (!(p === servicePath || p.startsWith(servicePath + '/'))) return;
+			// Allow when the target path exactly equals servicePath or is under it (component boundary)
+			if (!(p === servicePath || p.startsWith(servicePath + '/'))) {
+				console.warn('Link path not under configured service path', {
+					targetPath: p,
+					servicePath
+				});
+				toast.error('Link refused.');
+				return;
+			}
 		}
 
-		// Safe to call backend service for this URL
+		// OK: targetUrl is permitted to be fetched via the configured service.
+		// Call the backend relay/fetch endpoint to get a signed URL (apiFetch wraps auth).
 		let result: any;
 		try {
 			result = await apiFetch(targetUrl.toString());
 		} catch (err) {
 			console.error('apiFetch failed for goto URL', err);
+			toast.error('Failed to retrieve resource');
 			return;
 		}
 
@@ -234,32 +267,45 @@ async function handleGotoClick(e: MouseEvent) {
 		if (result?.signedUrl) {
 			try {
 				const signed = new URL(result.signedUrl);
-				// Prefer HTTPS for opened URLs; for local dev signed URLs could be http but we disallow opening non-HTTPS in prod.
+
+				// Prefer HTTPS for opened URLs in production.
 				if (signed.protocol !== 'https:') {
-					// Allow HTTP signed URLs only in local dev when both page and signed host are local:
 					const signedIsLocal = devHostnames.has(signed.hostname);
 					if (!(pageIsLocal && signedIsLocal)) {
 						console.warn('Rejected signedUrl with non-HTTPS protocol', signed.href);
+						toast.error('Refusing to open insecure link');
 						return;
 					}
 				}
+
+				// For additional safety, ensure signed URL host is not a high-risk host (optional).
+				// (Keep this commented or extend as needed.)
+				// const blockedHosts = new Set(['example-bad.com']);
+				// if (blockedHosts.has(signed.hostname)) { ... }
+
 				// Open in a new window safely
 				const win = window.open(signed.toString(), '_blank', 'noopener,noreferrer');
 				if (win) {
 					try {
+						// Try to sever opener reference where permitted
 						win.opener = null;
 					} catch (err) {
-						// Some browsers may block access; ignore
+						// Browsers may block, ignore
 					}
 				} else {
 					console.warn('Popup blocked opening signedUrl');
 				}
 			} catch (err) {
 				console.warn('Invalid signedUrl returned', err);
+				toast.error('Invalid resource URL');
 			}
+		} else {
+			console.warn('No signedUrl returned from service', result);
+			toast.error('Resource unavailable');
 		}
 	} catch (err) {
-		console.error(err);
+		console.error('handleGotoClick error', err);
+		toast.error('Error handling link');
 	}
 }
 
