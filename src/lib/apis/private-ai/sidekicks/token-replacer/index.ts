@@ -25,6 +25,43 @@ export type TokenReplacementValuesResponse = {
 	occurrences: TokenOccurrences;
 };
 
+// Health/analysis API types
+export type TokenReplacerFileHealth = {
+	filePath: string;
+	stats: {
+		tokensFound: number;
+		uniqueTokens: number;
+		nestedDepthMax: number;
+		extractionMs: number;
+		cache: 'hit' | 'miss' | string;
+	};
+	unbalanced: {
+		hasIssues: boolean;
+		unmatchedStarts: Array<{
+			occurrenceIndex: number;
+			charOffset: number;
+			contextBefore: string;
+			contextAfter: string;
+		}>;
+		unmatchedEnds: Array<{
+			occurrenceIndex: number;
+			charOffset: number;
+			contextBefore: string;
+			contextAfter: string;
+		}>;
+	};
+	duplicates: Array<{ token: string; count: number }>;
+	entityAnomalies: Array<{ token: string; entities: string[] }>;
+	styleMarkers: { detected: boolean; notes?: string };
+	anomalySummary: Array<{ type: string; message: string; severity: 'info' | 'warning' | 'error' | string; count: number }>;
+};
+
+export async function getTokenReplacerFileHealth(filePath: string) {
+	const path = encodeURIComponent(filePath);
+	const raw = await apiFetch<any>(`/tools/token-replacer/health/file/${path}`);
+	return ((raw as any)?.data ?? raw) as TokenReplacerFileHealth;
+}
+
 // GET the available tokens and current values for a chat/model and selected document path
 export async function getTokenReplacementValues(chatId: string, modelId: string) {
 	const raw = await apiFetch<any>(
