@@ -2,6 +2,9 @@
 
 ## ENV vars
 
+### 0.6.25
+* removed * **NH_API_BASE_URL** in favor of * **NH_DATA_SERVICE_URL** which points to a new REST api.
+
 ### 0.6.5
 * **NH_API_BASE_URL** - The base of the url for the private-ai-rest dependency.
 * **NH_ENABLE_UPSTREAM_UI** - When `true`, UI behaves as it does without our modification. When `false` or not defined, this affects:

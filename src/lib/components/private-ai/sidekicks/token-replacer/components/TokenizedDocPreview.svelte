@@ -2,6 +2,7 @@
 import DOMPurify from 'dompurify';
 import { getContext, onDestroy, onMount } from 'svelte';
 import { getFilePreview } from '$lib/apis/private-ai/sidekicks/token-replacer';
+import { chatId, currentSelectedModelId } from '$lib/stores';
 import type { TokenFile } from '../stores';
 import Spinner from '$lib/components/common/Spinner.svelte';
 import { appHooks } from '$lib/utils/hooks';
@@ -156,7 +157,17 @@ async function load() {
 			previewError = $i18n.t('No file selected.');
 			return;
 		}
-		const res = await getFilePreview(previewType, file.fullPath);
+		const cId = $chatId as string;
+		const mId = $currentSelectedModelId as string | null;
+		if (!cId) {
+			previewError = $i18n.t('No chat is active.');
+			return;
+		}
+		if (!mId) {
+			previewError = $i18n.t('No model selected.');
+			return;
+		}
+		const res = await getFilePreview(previewType, cId, mId);
 		previewHtml = res.preview ?? '';
 	} catch (e) {
 		previewError = $i18n.t('Failed to load preview.');

@@ -403,7 +403,6 @@ from open_webui.config import (
     GCS_BUCKET_NAME,
     # Private AI
     NH_ENABLE_UPSTREAM_UI,
-    NH_API_BASE_URL,
     NH_WEBUI_CUSTOM,
     NH_DOCKER_IMAGE,
     NH_DATA_SERVICE_URL,
@@ -1140,7 +1139,6 @@ app.state.config.AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH = (
 ########################################
 
 app.state.config.NH_ENABLE_UPSTREAM_UI = NH_ENABLE_UPSTREAM_UI
-app.state.config.NH_API_BASE_URL = NH_API_BASE_URL
 app.state.config.NH_DATA_SERVICE_URL = NH_DATA_SERVICE_URL
 app.state.NH_WEBUI_CUSTOM = NH_WEBUI_CUSTOM
 app.state.NH_DOCKER_IMAGE = NH_DOCKER_IMAGE
@@ -1704,7 +1702,6 @@ async def get_app_config(request: Request):
             "enable_websocket": ENABLE_WEBSOCKET_SUPPORT,
             "enable_version_update_check": ENABLE_VERSION_UPDATE_CHECK,
             "enable_file_ingestion": ENABLE_SSO_DATA_SYNC if isinstance(ENABLE_SSO_DATA_SYNC, bool) else (ENABLE_SSO_DATA_SYNC.lower() == 'true' if isinstance(ENABLE_SSO_DATA_SYNC, str) else False),
-            "use_new_data_service": STORAGE_BACKEND == 'pai',
             "overide_socket_url": OVERIDE_WEB_SOCKET_URL,
             **(
                 {
@@ -1731,12 +1728,9 @@ async def get_app_config(request: Request):
         "private_ai": {
             "citation_document_url": f"https://storage.cloud.google.com/{GCS_BUCKET_NAME}",
             "enable_upstream_ui": app.state.config.NH_ENABLE_UPSTREAM_UI,
-            "rest_api_base_url": app.state.config.NH_API_BASE_URL,
             "webui_custom": app.state.NH_WEBUI_CUSTOM,
             "docker_image": app.state.NH_DOCKER_IMAGE,
-        },
-        "nh_data_service": {
-            "url": app.state.config.NH_DATA_SERVICE_URL,
+            "nh_data_service_url": app.state.config.NH_DATA_SERVICE_URL,
         },
         **(
             {
