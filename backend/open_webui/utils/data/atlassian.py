@@ -156,7 +156,7 @@ def list_jira_projects_and_issues(site_url, cloud_id, bearer_token: str, all_ite
         else:
             folder_name = 'Jira'
 
-        # Step 2: For each project, search for issues (using JQL)
+        # Step 2: For each project, search for issues (using JQL) - UPDATED TO USE /search/jql
         for project in projects:
             project_key = project.get('key')
             project_name = project.get('name')
@@ -175,7 +175,8 @@ def list_jira_projects_and_issues(site_url, cloud_id, bearer_token: str, all_ite
                     'maxResults': max_results_issue,
                     'fields': 'summary,description,status,issuetype,priority,creator,reporter,assignee,created,updated,comment,attachment'
                 }
-                search_response = make_atlassian_request(f"{jira_base_url}/search", params=params, bearer_token=bearer_token)
+                # FIXED: Changed from /search to /search/jql
+                search_response = make_atlassian_request(f"{jira_base_url}/search/jql", params=params, bearer_token=bearer_token)
                 issues = search_response.get('issues', [])
 
                 for issue in issues:
@@ -265,8 +266,9 @@ def list_jira_selected_projects_and_issues(site_url, cloud_id, bearer_token: str
                 }
                 
                 try:
+                    # FIXED: Changed from /search to /search/jql
                     search_response = make_atlassian_request(
-                        f"{jira_base_url}/search", 
+                        f"{jira_base_url}/search/jql", 
                         params=params, 
                         bearer_token=bearer_token
                     )
