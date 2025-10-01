@@ -477,6 +477,14 @@ MICROSOFT_INTROSPECT_URL = os.environ.get(
     f"https://login.microsoftonline.com/{MICROSOFT_TENANT_ID}/oauth2/v2.0/introspect"
 )
 
+# Atlassian Deployment Type
+ATLASSIAN_DEPLOYMENT_TYPE = os.environ.get("ATLASSIAN_DEPLOYMENT_TYPE", "cloud")  # "cloud" or "server"
+
+# Self-hosted Atlassian Configuration
+ATLASSIAN_SERVER_URL = os.environ.get("ATLASSIAN_SERVER_URL", None) 
+ATLASSIAN_SERVER_USERNAME = os.environ.get("ATLASSIAN_SERVER_USERNAME", None)
+ATLASSIAN_SERVER_API_TOKEN = os.environ.get("ATLASSIAN_SERVER_API_TOKEN", None)
+
 ATLASSIAN_CLIENT_ID = os.environ.get("ATLASSIAN_CLIENT_ID", None)
 ATLASSIAN_CLIENT_SECRET = os.environ.get("ATLASSIAN_CLIENT_SECRET", None)
 ATLASSIAN_REDIRECT_URL = os.environ.get("ATLASSIAN_REDIRECT_URI", None)

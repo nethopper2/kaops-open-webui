@@ -7,7 +7,7 @@ from requests.auth import HTTPBasicAuth
 import concurrent.futures
 from datetime import datetime
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from urllib.parse import quote
 
 from open_webui.models.users import Users
@@ -230,6 +230,334 @@ def list_jira_projects_and_issues(site_url, cloud_id, bearer_token: str, all_ite
 
     return all_items
 
+### TODO: Optimize this block to avoid code duplication with sync all projects
+def list_jira_selected_projects_and_issues(site_url, cloud_id, bearer_token: str, project_keys: List[str], all_items=None, layer=None):
+    """Lists Jira issues for selected projects only"""
+    if all_items is None:
+        all_items = []
+
+    # Use OAuth 2.0 (3LO) URI format
+    jira_base_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3"
+    
+    log.info(f"Listing selected Jira projects for OAuth URI: {jira_base_url}")
+    log.info(f"Selected project keys: {project_keys}")
+
+    try:
+        # Determine folder name based on layer or default
+        if layer and layer in LAYER_CONFIG:
+            folder_name = LAYER_CONFIG[layer]['folder']
+        else:
+            folder_name = 'Jira'
+
+        # For each selected project key, search for issues
+        for project_key in project_keys:
+            log.info(f"Listing issues for selected Jira project: {project_key}")
+            start_at_issue = 0
+            max_results_issue = 100
+            
+            while True:
+                jql_query = f"project = \"{project_key}\""
+                params = {
+                    'jql': jql_query,
+                    'startAt': start_at_issue,
+                    'maxResults': max_results_issue,
+                    'fields': 'summary,description,status,issuetype,priority,creator,reporter,assignee,created,updated,comment,attachment'
+                }
+                
+                try:
+                    search_response = make_atlassian_request(
+                        f"{jira_base_url}/search", 
+                        params=params, 
+                        bearer_token=bearer_token
+                    )
+                except Exception as e:
+                    log.error(f"Failed to fetch issues for project {project_key}: {e}")
+                    break  # Skip this project and continue with others
+                
+                issues = search_response.get('issues', [])
+
+                for issue in issues:
+                    issue_key = issue.get('key')
+                    issue_summary = issue.get('fields', {}).get('summary', 'no_summary').replace('/', '_')
+                    
+                    full_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{project_key}/{issue_key}-{issue_summary}.json"
+                    
+                    issue_info = {
+                        'id': issue.get('id'),
+                        'key': issue_key,
+                        'fullPath': full_path,
+                        'mimeType': 'application/json',
+                        'content': json.dumps(issue, indent=2),
+                        'modifiedTime': issue.get('fields', {}).get('updated'),
+                        'createdTime': issue.get('fields', {}).get('created'),
+                        'type': 'issue',
+                        'layer': layer
+                    }
+                    all_items.append(issue_info)
+
+                    # Handle attachments for the issue
+                    attachments = issue.get('fields', {}).get('attachment', [])
+                    for attachment in attachments:
+                        attachment_filename = attachment.get('filename')
+                        attachment_id = attachment.get('id')
+                        attachment_content_url = attachment.get('content')
+                        attachment_mime_type = attachment.get('mimeType')
+                        attachment_size = attachment.get('size')
+                        
+                        attachment_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{project_key}/{issue_key}/attachments/{attachment_filename}"
+                        
+                        attachment_info = {
+                            'id': attachment_id,
+                            'fullPath': attachment_path,
+                            'mimeType': attachment_mime_type,
+                            'downloadUrl': attachment_content_url,
+                            'size': attachment_size,
+                            'modifiedTime': attachment.get('created'),
+                            'createdTime': attachment.get('created'),
+                            'type': 'attachment',
+                            'layer': layer
+                        }
+                        all_items.append(attachment_info)
+
+                if search_response.get('total') <= start_at_issue + len(issues):
+                    break
+                start_at_issue += max_results_issue
+
+    except Exception as error:
+        log.error(f'Listing selected Jira projects/issues failed for site {site_url}: {str(error)}', exc_info=True)
+
+    return all_items
+
+async def sync_atlassian_selected_projects(username: str, token: str, project_keys: List[str], layer=None):
+    """Sync only selected Jira projects"""
+    global total_api_calls
+    
+    log.info(f'Starting sync for {len(project_keys)} selected Jira projects...')
+    log.info(f'Selected projects: {project_keys}')
+    
+    uploaded_items = []
+    deleted_items = []
+    skipped_items = 0
+    
+    try:
+        bearer_token = token
+        
+        # Get accessible Atlassian sites
+        accessible_sites = get_accessible_atlassian_sites(bearer_token)
+        log.info(f"Found {len(accessible_sites)} accessible sites")
+        
+        if not accessible_sites:
+            raise ValueError("Could not retrieve user's accessible Atlassian sites.")
+        
+        all_atlassian_items = []
+
+        # Process each accessible Atlassian site
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures_to_site = {}
+            
+            for site in accessible_sites:
+                site_url = site.get('url')
+                cloud_id = site.get('id')
+                scopes = site.get('scopes', [])
+
+                log.info(f"Processing site: {site_url}")
+                
+                if not site_url or not cloud_id:
+                    log.warning(f"Skipping Atlassian resource with missing URL or Cloud ID: {site}")
+                    continue
+
+                # Only process Jira sites
+                if any('jira' in scope for scope in scopes):
+                    futures_to_site[executor.submit(
+                        list_jira_selected_projects_and_issues, 
+                        site_url, 
+                        cloud_id, 
+                        bearer_token, 
+                        project_keys,
+                        [], 
+                        layer
+                    )] = {"type": "Jira", "site_url": site_url}
+
+            for future in concurrent.futures.as_completed(futures_to_site):
+                site_info = futures_to_site[future]
+                try:
+                    site_items = future.result()
+                    log.info(f"Completed listing selected projects for site {site_info['site_url']} with {len(site_items)} items")
+                    all_atlassian_items.extend(site_items)
+                except Exception as e:
+                    log.error(f"Error listing selected projects for site {site_info['site_url']}: {str(e)}", exc_info=True)
+        
+        log.info(f"Found {len(all_atlassian_items)} items from selected projects.")
+
+        # Delete orphaned files for selected projects only
+        if layer and layer in LAYER_CONFIG:
+            layer_folder = LAYER_CONFIG[layer]['folder']
+            user_prefix = f"userResources/{USER_ID}/Atlassian/{layer_folder}/"
+        else:
+            user_prefix = f"userResources/{USER_ID}/Atlassian/"
+
+        # List all files using unified storage interface
+        storage_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
+        storage_file_map = {file_info['name']: file_info for file_info in storage_files}
+        atlassian_item_paths = {item['fullPath'] for item in all_atlassian_items}
+        
+        # Only delete files for the selected projects
+        for file_name, file_info in storage_file_map.items():
+            # Check if file belongs to one of the selected projects
+            is_selected_project = any(
+                f"/{project_key}/" in file_name 
+                for project_key in project_keys
+            )
+            
+            if file_name.startswith(user_prefix) and is_selected_project and file_name not in atlassian_item_paths:
+                delete_file_unified(file_name, user_id=USER_ID)
+                deleted_items.append({
+                    'name': file_name,
+                    'size': file_info.get('size'),
+                    'timeCreated': file_info.get('timeCreated')
+                })
+                log.info(f"[{datetime.now().isoformat()}] Deleted orphan: {file_name}")
+        
+        # Process items in parallel for upload
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = []
+            
+            for item in all_atlassian_items:
+                # Check for excluded files/extensions
+                if item.get('type') == 'attachment':
+                    if any(pattern.lower() in item['fullPath'].lower() for pattern in EXCLUDED_FILES if pattern):
+                        log.info(f"Excluded (filename pattern): {item['fullPath']}")
+                        skipped_items += 1
+                        continue
+                    
+                    file_ext = item['fullPath'].split('.')[-1].lower() if '.' in item['fullPath'] else ''
+                    if ALLOWED_EXTENSIONS and file_ext not in ALLOWED_EXTENSIONS:
+                        log.info(f"Skipped (extension): {file_ext} in {item['fullPath']}")
+                        skipped_items += 1
+                        continue
+
+                storage_file = storage_file_map.get(item['fullPath'])
+                
+                needs_upload = False
+                reason = ''
+                
+                if not storage_file:
+                    needs_upload = True
+                    reason = 'New item'
+                else:
+                    storage_updated = parse_date(storage_file.get('updated'))
+                    atlassian_modified = parse_date(item.get('modifiedTime'))
+                    
+                    if atlassian_modified and storage_updated and atlassian_modified > storage_updated:
+                        needs_upload = True
+                        reason = f"Atlassian version newer ({item['modifiedTime']} > {storage_file.get('updated')})"
+                
+                if needs_upload:
+                    futures.append(
+                        (
+                            executor.submit(
+                                download_and_upload_atlassian_item,
+                                item,
+                                bearer_token,
+                                bool(storage_file),
+                                reason
+                            ),
+                            item
+                        )
+                    )
+                else:
+                    skipped_items += 1
+            
+            # Process completed uploads
+            for future, item_for_log in futures:
+                try:
+                    result = future.result()
+                    if result:
+                        uploaded_items.append(result)
+                except Exception as e:
+                    log.error(f"Error processing future for {item_for_log.get('fullPath')}: {str(e)}", exc_info=True)
+        
+        # Enhanced summary
+        log.info('\nSync Summary for Selected Projects:')
+        for item in uploaded_items:
+            symbol = '+' if item['type'] == 'new' else '^'
+            log.info(
+                f" {symbol} {item['path']} | {format_bytes(item['size'])} | {item['durationMs']}ms | {item['reason']}"
+            )
+        
+        for item in deleted_items:
+            log.info(f" - {item['name']} | {format_bytes(item['size'])} | Created: {item['timeCreated']}")
+        
+        total_runtime = int((time.time() - script_start_time) * 1000)
+        log.info("\nAccounting Metrics:")
+        log.info(f"⏱️  Total Runtime: {(total_runtime/1000):.2f} seconds")
+        log.info(f"📊 Billable API Calls: {total_api_calls}")
+        log.info(f"📦 Items Processed: {len(all_atlassian_items)}")
+        log.info(f"🗑️  Orphans Removed: {len(deleted_items)}")
+        log.info(f"📂 Selected Projects: {', '.join(project_keys)}")
+        
+        log.info(f"\nTotal: +{len([f for f in uploaded_items if f['type'] == 'new'])} added, " +
+              f"^{len([f for f in uploaded_items if f['type'] == 'updated'])} updated, " +
+              f"-{len(deleted_items)} removed, {skipped_items} skipped")
+        
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'synced')
+    
+    except Exception as error:
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
+        log.error(f"[{datetime.now().isoformat()}] Atlassian Selected Projects Sync failed: {str(error)}", exc_info=True)
+        raise error
+
+async def initiate_atlassian_sync_selected(user_id: str, token: str, project_keys: List[str], layer: str = 'jira'):
+    """
+    Sync only selected Jira projects
+    
+    Args:
+        user_id (str): User ID from your app
+        token (str): Atlassian OAuth access token (JWT)
+        project_keys (List[str]): List of Jira project keys to sync
+        layer (str): Atlassian layer (defaults to 'jira')
+    """
+    log.info(f'Initiating Atlassian sync for selected projects')
+    log.info(f'User Open WebUI ID: {user_id}')
+    log.info(f'Selected Projects: {project_keys}')
+    log.info(f'Layer: {layer}')
+
+    global USER_ID
+    global USER
+    global USER_AUTH
+    global script_start_time
+    global total_api_calls
+
+    USER_ID = user_id
+    USER = Users.get_user_by_id(user_id)
+    
+    if not USER:
+        raise ValueError(f"User with ID {user_id} not found")
+    
+    username = USER.email
+    USER_AUTH = HTTPBasicAuth(username, token) 
+    log.info(f'Using email as username: {username}')
+    
+    total_api_calls = 0
+    script_start_time = time.time()
+
+    await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'syncing')
+
+    try:
+        await sync_atlassian_selected_projects(username, token, project_keys, layer)
+        return {
+            "status": "started", 
+            "message": f"Atlassian sync process completed for {len(project_keys)} selected projects",
+            "user_id": user_id,
+            "layer": layer,
+            "project_count": len(project_keys)
+        }
+    except Exception as e:
+        log.error(f"Atlassian selected projects sync failed: {e}", exc_info=True)
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
+        raise
+
+### TODO: Optimize this block to avoid code duplication with sync all projects
 def list_confluence_spaces_and_pages(site_url, cloud_id, bearer_token: str, all_items=None, layer=None):
     """
     Lists Confluence spaces and then all pages within those spaces.
