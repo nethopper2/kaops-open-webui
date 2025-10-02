@@ -93,12 +93,19 @@ function handlecancel(e) {
                 }}
             >
                 {option}
-                {#if option === 'Custom' && ShowCustomMenu}
-                    <div class='absolute left-full ml-1 rounded-md shadow-lg w-48 bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50'>
+            </button>
+            
+            {#if option === 'Custom' && ShowCustomMenu}
+                <div
+                    class="fixed inset-0 z-[999] flex items-center justify-center bg-black/30"
+                    on:click={handlecancel}>
+                    
+                    <div class='rounded-md shadow-lg w-80 bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50'>
                         <CustomDateMenu on:apply={handleapply} on:cancel={handlecancel} />
                     </div>
-                {/if}
-            </button>
+                </div>
+            {/if}
+
         {/each}
     </div>
 {/if}
