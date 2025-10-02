@@ -2156,6 +2156,7 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 	const modelIsPrivate = typeof model?.id === 'string' && model.id.startsWith(PRIVATE_AI_MODEL_PREFIX);
 	let extrasPayload: any = extras ? { ...extras } : undefined;
 	if (modelIsPrivate) {
+		// TODO: consider other options and remove this.
 		extrasPayload = extrasPayload ?? {};
 		extrasPayload.auth = {
 			authorization: `Bearer ${localStorage.token}`
