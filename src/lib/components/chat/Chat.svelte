@@ -335,17 +335,30 @@ async function handleGotoClick(e: MouseEvent) {
 				filename = `${namePart}${ext}`;
 			}
 
-			// Create an object URL and trigger a secure download.
+			// Create an object URL. If it's a PDF, open in a new tab; otherwise trigger a secure download.
 			const objectUrl = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = objectUrl;
-			a.download = filename;
-			a.rel = 'noopener noreferrer';
-			document.body.appendChild(a);
-			a.click();
-			a.remove();
 
-			// Revoke the object URL after a short timeout to allow the download to start.
+			const isPdf = (blob.type === 'application/pdf') || /\.pdf$/i.test(filename);
+
+			let opened = false;
+			if (isPdf) {
+				// Attempt to open in a new tab. Because this runs in a click handler, most browsers will allow it.
+				const w = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+				opened = !!w;
+			}
+
+			if (!opened) {
+				// Fallback to download (or non-PDFs)
+				const a = document.createElement('a');
+				a.href = objectUrl;
+				if (!isPdf) a.download = filename;
+				a.rel = 'noopener noreferrer';
+				document.body.appendChild(a);
+				a.click();
+				a.remove();
+			}
+
+			// Revoke the object URL after a short timeout to allow the browser to consume it.
 			setTimeout(() => {
 				try {
 					URL.revokeObjectURL(objectUrl);
@@ -354,7 +367,7 @@ async function handleGotoClick(e: MouseEvent) {
 				}
 			}, 60000);
 
-			toast.success($i18n.t('Download started'));
+			toast.success($i18n.t(isPdf ? 'Opened in a new tab' : 'Download started'));
 		} catch (err) {
 			console.error('Failed to process downloaded Blob', err);
 			toast.error('Failed to download resource');
