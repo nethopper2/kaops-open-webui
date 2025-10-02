@@ -95,6 +95,7 @@ import { fade } from 'svelte/transition';
 import Tooltip from '../common/Tooltip.svelte';
 import Sidebar from '../icons/Sidebar.svelte';
 import { uploadFile } from '$lib/apis/files';
+import { PRIVATE_AI_MODEL_PREFIX } from '$lib/shared/private_ai';
 
 export let chatIdProp = '';
 
@@ -410,8 +411,8 @@ onMount(() => {
 	})();
 
 	// Allow external components (e.g., Private AI sidekicks) to submit a prompt
-	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt, title }) => {
-		await submitPrompt(prompt, { title });
+	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt, title, extras }) => {
+		await submitPrompt(prompt, { title, extras });
 	});
 
 	// Hook for chat-level overlay control
@@ -1819,7 +1820,10 @@ const chatCompletionEventHandler = async (data, message, chatId) => {
 // Chat functions
 //////////////////////////
 
-const submitPrompt = async (userPrompt, { _raw = false, title }: { _raw?: boolean; title?: string } = {}) => {
+const submitPrompt = async (
+	userPrompt,
+	{ _raw = false, title, extras }: { _raw?: boolean; title?: string; extras?: { directive?: Record<string, unknown>; metadata?: Record<string, unknown> } } = {}
+) => {
 	console.log('submitPrompt', userPrompt, $chatId);
 
 	const messages = createMessagesList(history, history.currentId);
@@ -1895,8 +1899,7 @@ const submitPrompt = async (userPrompt, { _raw = false, title }: { _raw?: boolea
 
 	// Create user message
 	let userMessageId = uuidv4();
-	const directive = parseDirectiveEnvelope(userPrompt);
-	const isAssistantOnlyDirective = Boolean(directive?.assistant_only === true);
+	const isAssistantOnlyDirective = Boolean((extras as any)?.directive && (extras as any)?.directive?.assistant_only === true);
 	let userMessage = {
 		id: userMessageId,
 		parentId: messages.length !== 0 ? messages.at(-1).id : null,
@@ -1924,7 +1927,7 @@ const submitPrompt = async (userPrompt, { _raw = false, title }: { _raw?: boolea
 
 	saveSessionSelectedModels();
 
-	await sendMessage(history, userMessageId, { newChat: true, title });
+	await sendMessage(history, userMessageId, { newChat: true, title, extras });
 
 	// If this was an assistant-only directive, remove the user message immediately on the client
 	if (isAssistantOnlyDirective) {
@@ -1940,13 +1943,15 @@ const sendMessage = async (
 		modelId = null,
 		modelIdx = null,
 		newChat = false,
-		title
+		title,
+		extras
 	}: {
 		messages?: any[] | null;
 		modelId?: string | null;
 		modelIdx?: number | null;
 		newChat?: boolean;
 		title?: string;
+		extras?: { directive?: Record<string, unknown>; metadata?: Record<string, unknown> } | undefined;
 	} = {}
 ) => {
 	if (autoScroll) {
@@ -2042,7 +2047,8 @@ const sendMessage = async (
 						: createMessagesList(_history, responseMessageId),
 					_history,
 					responseMessageId,
-					_chatId
+					_chatId,
+					extras
 				);
 
 				if (chatEventEmitter) clearInterval(chatEventEmitter);
@@ -2056,7 +2062,7 @@ const sendMessage = async (
 	chats.set(await getChatList(localStorage.token, $currentChatPage));
 };
 
-const sendMessageSocket = async (model, _messages, _history, responseMessageId, _chatId) => {
+const sendMessageSocket = async (model, _messages, _history, responseMessageId, _chatId, extras?: { directive?: Record<string, unknown>; metadata?: Record<string, unknown> }) => {
 	const responseMessage = _history.messages[responseMessageId];
 	const userMessage = _history.messages[responseMessage.parentId];
 
@@ -2146,79 +2152,95 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 		}))
 		.filter((message) => message?.role === 'user' || message?.content?.trim());
 
+ // Build extras payload for pipelines (optional)
+	const modelIsPrivate = typeof model?.id === 'string' && model.id.startsWith(PRIVATE_AI_MODEL_PREFIX);
+	let extrasPayload: any = extras ? { ...extras } : undefined;
+	if (modelIsPrivate) {
+		extrasPayload = extrasPayload ?? {};
+		extrasPayload.auth = {
+			authorization: `Bearer ${localStorage.token}`
+		};
+	}
+
+ const bodyObj: any = {
+		stream: stream,
+		model: model.id,
+		messages: messages,
+		params: {
+			...$settings?.params,
+			...params,
+			stop:
+				(params?.stop ?? $settings?.params?.stop ?? undefined)
+					? (params?.stop.split(',').map((token) => token.trim()) ?? $settings.params.stop).map(
+						(str) => decodeURIComponent(JSON.parse('"' + str.replace(/\"/g, '\\"') + '"'))
+					)
+					: undefined
+		},
+
+		files: (files?.length ?? 0) > 0 ? files : undefined,
+
+		filter_ids: selectedFilterIds.length > 0 ? selectedFilterIds : undefined,
+		tool_ids: selectedToolIds.length > 0 ? selectedToolIds : undefined,
+		tool_servers: $toolServers,
+
+		features: {
+			image_generation:
+				$config?.features?.enable_image_generation &&
+				($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
+					? imageGenerationEnabled
+					: false,
+			code_interpreter:
+				$config?.features?.enable_code_interpreter &&
+				($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
+					? codeInterpreterEnabled
+					: false,
+			web_search:
+				$config?.features?.enable_web_search &&
+				($user?.role === 'admin' || $user?.permissions?.features?.web_search)
+					? webSearchEnabled || ($settings?.webSearch ?? false) === 'always'
+					: false,
+			memory: $settings?.memory ?? false
+		},
+		variables: {
+			...getPromptVariables($user?.name, $settings?.userLocation ? userLocation : undefined)
+		},
+		model_item: $models.find((m) => m.id === model.id),
+
+		session_id: $socket?.id,
+		chat_id: $chatId,
+		id: responseMessageId,
+
+		background_tasks: {
+			...(!$temporaryChatEnabled &&
+			(messages.length == 1 ||
+				(messages.length == 2 &&
+					messages.at(0)?.role === 'system' &&
+					messages.at(1)?.role === 'user')) &&
+			(selectedModels[0] === model.id || atSelectedModel !== undefined)
+				? {
+					title_generation: $settings?.title?.auto ?? true,
+					tags_generation: $settings?.autoTags ?? true
+				}
+				: {}),
+			follow_up_generation: $settings?.autoFollowUps ?? true
+		},
+
+		...(stream && (model.info?.meta?.capabilities?.usage ?? false)
+			? {
+				stream_options: {
+					include_usage: true
+				}
+			}
+			: {})
+	};
+
+	if (extrasPayload) {
+		bodyObj.extras = extrasPayload;
+	}
+
 	const res = await generateOpenAIChatCompletion(
 		localStorage.token,
-		{
-			stream: stream,
-			model: model.id,
-			messages: messages,
-			params: {
-				...$settings?.params,
-				...params,
-				stop:
-					(params?.stop ?? $settings?.params?.stop ?? undefined)
-						? (params?.stop.split(',').map((token) => token.trim()) ?? $settings.params.stop).map(
-							(str) => decodeURIComponent(JSON.parse('"' + str.replace(/\"/g, '\\"') + '"'))
-						)
-						: undefined
-			},
-
-			files: (files?.length ?? 0) > 0 ? files : undefined,
-
-			filter_ids: selectedFilterIds.length > 0 ? selectedFilterIds : undefined,
-			tool_ids: selectedToolIds.length > 0 ? selectedToolIds : undefined,
-			tool_servers: $toolServers,
-
-			features: {
-				image_generation:
-					$config?.features?.enable_image_generation &&
-					($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
-						? imageGenerationEnabled
-						: false,
-				code_interpreter:
-					$config?.features?.enable_code_interpreter &&
-					($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
-						? codeInterpreterEnabled
-						: false,
-				web_search:
-					$config?.features?.enable_web_search &&
-					($user?.role === 'admin' || $user?.permissions?.features?.web_search)
-						? webSearchEnabled || ($settings?.webSearch ?? false) === 'always'
-						: false,
-				memory: $settings?.memory ?? false
-			},
-			variables: {
-				...getPromptVariables($user?.name, $settings?.userLocation ? userLocation : undefined)
-			},
-			model_item: $models.find((m) => m.id === model.id),
-
-			session_id: $socket?.id,
-			chat_id: $chatId,
-			id: responseMessageId,
-
-			background_tasks: {
-				...(!$temporaryChatEnabled &&
-				(messages.length == 1 ||
-					(messages.length == 2 &&
-						messages.at(0)?.role === 'system' &&
-						messages.at(1)?.role === 'user')) &&
-				(selectedModels[0] === model.id || atSelectedModel !== undefined)
-					? {
-						title_generation: $settings?.title?.auto ?? true,
-						tags_generation: $settings?.autoTags ?? true
-					}
-					: {}),
-				follow_up_generation: $settings?.autoFollowUps ?? true
-			},
-
-			...(stream && (model.info?.meta?.capabilities?.usage ?? false)
-				? {
-					stream_options: {
-						include_usage: true
-					}
-				}
-				: {})
-		},
+		bodyObj,
 		`${WEBUI_BASE_URL}/api`
 	).catch(async (error) => {
 		console.log(error);
