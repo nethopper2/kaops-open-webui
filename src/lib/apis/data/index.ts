@@ -352,3 +352,67 @@ export const disconnectDataSync = async (
 
 	return res;
 };
+
+export const getJiraProjects = async (token: string) => {
+	let error = null;
+
+	const res = await fetch(`${DATA_API_BASE_URL}/atlassian/projects`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.log(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const syncSelectedJiraProjects = async (
+	token: string,
+	projectKeys: string[],
+	layer: string = 'jira'
+) => {
+	let error = null;
+
+	const res = await fetch(`${DATA_API_BASE_URL}/atlassian/sync-selected`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
+		},
+		body: JSON.stringify({
+			project_keys: projectKeys,
+			layer: layer
+		})
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.log(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};

@@ -101,21 +101,9 @@ onMounted(async () => {
 	loading.value = true;
 
 	const backendConfig = await getBackendConfig();
-	
-	// Check if we should use the new nh-pai-data-service
-	const useNewService = localStorage.getItem('use_nh_data_service') === 'true';
-	
-	let endpointUrl;
-	if (useNewService) {
-		// Use nh-pai-data-service
-		endpointUrl = `${backendConfig.nh_data_service.url}/api/v1/files/devextreme`;
-	} else {
-		// Use original private-ai-rest service
-		endpointUrl = `${backendConfig.private_ai.rest_api_base_url}/api/storage/file-manager`;
-	}
 
 	fileSystemProvider = new RemoteFileSystemProvider({
-		endpointUrl: endpointUrl,
+		endpointUrl: `${backendConfig.private_ai.nh_data_service_url}/files/devextreme`,
 		requestHeaders: {
 			Authorization: 'Bearer ' + localStorage.getItem('token')
 		}
@@ -132,7 +120,7 @@ onMounted(async () => {
 		:file-system-provider="fileSystemProvider"
 		:on-context-menu-item-click="handleContextMenuItemClick"
 		:on-context-menu-showing="handleContextMenuShowing"
-		:root-folder-name="(i18nRef?.t?.('Knowledge Data')) ?? 'Knowledge Data'"
+		:root-folder-name="i18nRef?.t?.('Knowledge Data') ?? 'Knowledge Data'"
 		v-bind="$attrs"
 	>
 		<dx-permissions
@@ -146,7 +134,10 @@ onMounted(async () => {
 		/>
 
 		<dx-context-menu>
-			<dx-item :text="(i18nRef?.t?.('Edit Metadata')) ?? 'Edit Metadata'" :options="{ action: 'editMetadata' }" />
+			<dx-item
+				:text="i18nRef?.t?.('Edit Metadata') ?? 'Edit Metadata'"
+				:options="{ action: 'editMetadata' }"
+			/>
 		</dx-context-menu>
 
 		<dx-item-view>
@@ -156,7 +147,7 @@ onMounted(async () => {
 				<dx-column
 					data-field="dateModified"
 					dataType="datetime"
-					:caption="(i18nRef?.t?.('Date Modified')) ?? 'Date Modified'"
+					:caption="i18nRef?.t?.('Date Modified') ?? 'Date Modified'"
 					width="auto"
 				/>
 				<dx-column data-field="size" />

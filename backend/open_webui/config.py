@@ -3382,13 +3382,19 @@ NH_ENABLE_UPSTREAM_UI = PersistentConfig(
     "private_ai.enable_upstream_ui",
     os.environ.get("NH_ENABLE_UPSTREAM_UI", "False").lower() == "true",
 )
-# The base url for the private-ai-rest dependency
-NH_API_BASE_URL = PersistentConfig(
-    "NH_API_BASE_URL", "private_ai.api_base_url", os.environ.get("NH_API_BASE_URL", "http://localhost:3000")
-)
 # The base url for the nh-pai-data-service
+if 'NH_DATA_SERVICE_URL' in os.environ:
+    base_url = os.environ.get('NH_DATA_SERVICE_URL')
+    # Remove trailing slash if present
+    base_url = base_url.rstrip('/')
+    # Add /api/v1 if not already present
+    if not base_url.endswith('/api/v1'):
+        base_url = f"{base_url}/api/v1"
+else:
+    # Default case - ensure it has /api/v1
+    base_url = 'http://localhost:4500/api/v1'
 NH_DATA_SERVICE_URL = PersistentConfig(
-    "NH_DATA_SERVICE_URL", "nh_data_service.url", os.environ.get("NH_DATA_SERVICE_URL", "http://localhost:4500")
+    "NH_DATA_SERVICE_URL", "private_ai.nh_data_service_url", base_url
 )
 # Custom NH settings for the WebUI model directly from environment variable
 NH_DOCKER_IMAGE = os.environ.get("DOCKER_IMAGE", "")

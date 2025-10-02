@@ -7,6 +7,7 @@
 	export let id = '';
 	export let ariaLabelledbyId = '';
 	export let tooltip = false;
+	export let disabled = false;
 
 	const i18n = getContext('i18n');
 	const dispatch = createEventDispatcher();
@@ -22,7 +23,9 @@
 		bind:checked={state}
 		{id}
 		aria-labelledby={ariaLabelledbyId}
-		class="flex h-5 min-h-5 w-9 shrink-0 cursor-pointer items-center rounded-full px-[3px] mx-[1px] transition  {($settings?.highContrastMode ??
+		disabled={disabled}
+		aria-disabled={disabled}
+		class="flex h-5 min-h-5 w-9 shrink-0 items-center rounded-full px-[3px] mx-[1px] transition {disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}  {($settings?.highContrastMode ??
 		false)
 			? 'focus:outline focus:outline-2 focus:outline-gray-800 focus:dark:outline-gray-200'
 			: 'outline outline-1 outline-gray-100 dark:outline-gray-800'} {state

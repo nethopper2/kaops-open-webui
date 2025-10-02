@@ -14,7 +14,7 @@ from open_webui.utils.auth import get_verified_user
 from open_webui.utils.access_control import has_permission
 from open_webui.utils.data.encryption import encrypt_data, decrypt_data
 from open_webui.models.datatokens import OAuthTokens, OAuthTokenModel
-from open_webui.utils.data.data_ingestion import update_data_source_sync_status, delete_gcs_folder
+from open_webui.utils.data.data_ingestion import update_data_source_sync_status, delete_folder_unified
 import time
 from uuid import uuid4
 
@@ -200,30 +200,22 @@ PROVIDER_CONFIGS = {
         'revoke_url': None,  # Atlassian doesn't have a direct revoke endpoint
         'scope_separator': ' ',
         'default_scopes': [
+            "read:me",           # Required for user identity
+            "read:account", 
             "read:user:jira",
-            "read:issue:jira",
+            "read:issue:jira", 
             "read:comment:jira",
             "read:attachment:jira",
             "read:project:jira",
             "read:issue-meta:jira",
-            "read:field:jira",
+            "read:field:jira", 
             "read:filter:jira",
             "read:jira-work",
             "read:jira-user",
             "read:me",
             "read:account",
             "report:personal-data",
-            "read:content:confluence",
-            "read:space:confluence",
-            "read:page:confluence",
-            "read:blogpost:confluence",
-            "read:attachment:confluence",
-            "read:comment:confluence",
-            "read:user:confluence",
-            "read:group:confluence",
-            "read:configuration:confluence",
-            "search:confluence",
-            "read:audit-log:confluence"
+            "offline_access"  # Add this for refresh tokens
         ],
         'layer_scopes': {
             'jira': [
@@ -409,21 +401,40 @@ def build_auth_url(provider: str, scopes: List[str], state: str, **extra_params)
     param_str = '&'.join(f"{k}={v}" for k, v in base_params.items())
     return f"{config['authorize_url']}?{param_str}"
 
-def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str) -> Dict[str, Any]:
-    """Exchange authorization code for tokens."""
+def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str):
     config = PROVIDER_CONFIGS[provider]
     
-    data = {
-        'client_id': config['client_id'],
-        'client_secret': config['client_secret'],
-        'code': code,
-        'redirect_uri': redirect_uri,
-        'grant_type': 'authorization_code'
-    }
-    
-    headers = {}
-    if provider == 'slack':
-        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    if provider == 'atlassian':
+        credentials = f"{config['client_id']}:{config['client_secret']}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        
+        log.info(f"Atlassian credentials length: client_id={len(config['client_id'])}, client_secret={len(config['client_secret'])}")
+        log.info(f"Encoded credentials: {encoded_credentials[:20]}...")  # Only log first 20 chars for security
+        
+        headers = {
+            'Authorization': f'Basic {encoded_credentials}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        
+        data = {
+            'grant_type': 'authorization_code',
+            'code': code,
+            'redirect_uri': redirect_uri
+        }
+    else:
+        # Standard OAuth flow for other providers
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        data = {
+            'grant_type': 'authorization_code',
+            'client_id': config['client_id'],
+            'client_secret': config['client_secret'],
+            'code': code,
+            'redirect_uri': redirect_uri
+        }
+
+    log.info(f"Making token request to: {config['token_url']}")
+    log.info(f"Request headers: {headers}")
+    log.info(f"Request data: {data}")
     
     response = requests.post(config['token_url'], data=data, headers=headers)
     response.raise_for_status()
@@ -537,7 +548,7 @@ async def create_background_sync_task(request: Request, provider: str, user_id: 
             return await loop.run_in_executor(
                 None,
                 lambda: asyncio.run(initiate_atlassian_sync(
-                    user_id, access_token, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME, layer
+                    user_id, access_token,  layer
                 ))
             )
         
@@ -556,7 +567,7 @@ async def create_background_sync_task(request: Request, provider: str, user_id: 
         await create_task(redis_connection, run_mineral_sync(), id=f"mineral_sync_{user_id}")
 
 async def create_background_delete_task(request: Request, provider: str, user_id: str, layer: str = None):
-    """Create background GCS cleanup task for any provider."""
+    """Create background storage cleanup task using unified delete function."""
     redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
     
     config = PROVIDER_CONFIGS[provider]
@@ -578,7 +589,7 @@ async def create_background_delete_task(request: Request, provider: str, user_id
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
-            lambda: asyncio.run(delete_gcs_folder(folder_path, GCS_SERVICE_ACCOUNT_BASE64, GCS_BUCKET_NAME))
+            lambda: asyncio.run(delete_folder_unified(folder_path, user_id))  # Using unified delete
         )
     
     await create_task(redis_connection, delete_sync(), id=f"delete_{provider}_sync_{user_id}")
@@ -987,6 +998,185 @@ async def mineral_auth(
     except Exception as e:
         log.error(f"Mineral auth error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
+
+@router.get("/atlassian/projects")
+async def get_available_jira_projects(
+    user=Depends(get_verified_user)
+):
+    """Get list of available Jira projects for user selection"""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    # Get token entry
+    token_entry = OAuthTokens.get_token_by_user_provider_details(
+        user_id=user.id,
+        provider_name='Atlassian'
+    )
+
+    if not token_entry:
+        raise HTTPException(
+            status_code=404,
+            detail="No Atlassian integration found. Please authorize first."
+        )
+
+    # Handle token refresh if needed
+    try:
+        access_token, needs_reauth = handle_token_refresh('atlassian', token_entry, user.id)
+        
+        if needs_reauth:
+            reauth_url = generate_reauth_url('atlassian', user.id, 'jira')
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": "token_expired_no_refresh",
+                    "reauth_url": reauth_url
+                }
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Token refresh failed for Atlassian user {user.id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to refresh Atlassian token.")
+
+    try:
+        # Get accessible sites
+        from open_webui.utils.data.atlassian import get_accessible_atlassian_sites, make_atlassian_request
+        
+        accessible_sites = get_accessible_atlassian_sites(access_token)
+        
+        if not accessible_sites:
+            raise HTTPException(status_code=404, detail="No accessible Atlassian sites found")
+        
+        all_projects = []
+        
+        for site in accessible_sites:
+            site_url = site.get('url')
+            cloud_id = site.get('id')
+            scopes = site.get('scopes', [])
+            
+            if not site_url or not cloud_id:
+                continue
+                
+            # Check if site has Jira access
+            if not any('jira' in scope for scope in scopes):
+                continue
+            
+            jira_base_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3"
+            
+            # Fetch projects from this site
+            start_at = 0
+            max_results = 50
+            
+            while True:
+                params = {
+                    'startAt': start_at,
+                    'maxResults': max_results,
+                    'query': ''
+                }
+                
+                response = make_atlassian_request(
+                    f"{jira_base_url}/project/search",
+                    params=params,
+                    bearer_token=access_token
+                )
+                
+                projects = response.get('values', [])
+                
+                for project in projects:
+                    all_projects.append({
+                        'id': project.get('id'),
+                        'key': project.get('key'),
+                        'name': project.get('name'),
+                        'description': project.get('description', ''),
+                        'avatarUrl': project.get('avatarUrls', {}).get('48x48', ''),
+                        'site_url': site_url,
+                        'cloud_id': cloud_id
+                    })
+                
+                if response.get('isLast', True):
+                    break
+                start_at = response.get('nextPage', start_at + max_results)
+        
+        return {
+            "projects": all_projects,
+            "total": len(all_projects)
+        }
+        
+    except Exception as e:
+        log.error(f"Failed to fetch Jira projects: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch projects: {str(e)}")
+
+
+class SelectedProjectsForm(BaseModel):
+    project_keys: List[str]
+    layer: str = 'jira'
+
+
+@router.post("/atlassian/sync-selected")
+async def sync_selected_jira_projects(
+    request: Request,
+    form_data: SelectedProjectsForm,
+    user=Depends(get_verified_user)
+):
+    """Sync only selected Jira projects"""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    if not form_data.project_keys:
+        raise HTTPException(status_code=400, detail="No projects selected")
+    
+    # Get token entry
+    token_entry = OAuthTokens.get_token_by_user_provider_details(
+        user_id=user.id,
+        provider_name='Atlassian'
+    )
+
+    if not token_entry:
+        raise HTTPException(
+            status_code=404,
+            detail="No Atlassian integration found."
+        )
+
+    # Handle token refresh
+    try:
+        access_token, needs_reauth = handle_token_refresh('atlassian', token_entry, user.id)
+        
+        if needs_reauth:
+            reauth_url = generate_reauth_url('atlassian', user.id, form_data.layer)
+            raise HTTPException(status_code=401, detail={"reauth_url": reauth_url})
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Token refresh failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to refresh token.")
+
+    try:
+        # Create background task for selected projects sync
+        from open_webui.utils.data.atlassian import initiate_atlassian_sync_selected
+        
+        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+        
+        async def run_selected_sync():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(initiate_atlassian_sync_selected(
+                    user.id, access_token, form_data.project_keys, form_data.layer
+                ))
+            )
+        
+        await create_task(redis_connection, run_selected_sync(), id=f"atlassian_sync_{user.id}")
+        
+        return {
+            "status": "started",
+            "message": f"Syncing {len(form_data.project_keys)} selected projects",
+            "project_count": len(form_data.project_keys)
+        }
+        
+    except Exception as e:
+        log.error(f"Failed to start selected projects sync: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
 ############################
 # Universal OAuth Endpoints
 ############################
@@ -1008,6 +1198,8 @@ def create_universal_initialize_endpoint(provider: str):
         scopes = get_provider_scopes(provider, layer)
         state = create_oauth_state(user.id, layer)
         auth_url = build_auth_url(provider, scopes, state)
+
+        log.info(f"{auth_url}")
         
         return {
             "url": auth_url,
@@ -1097,91 +1289,168 @@ def create_universal_callback_endpoint(provider: str):
                 log.error(f"Failed to store {provider.title()} OAuth tokens in DB for user {user_id}: {db_error}")
                 raise HTTPException(status_code=500, detail=f"Failed to store {provider.title()} tokens securely.")
 
-            # Validate GCS configuration
-            if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-                raise HTTPException(
-                    status_code=500,
-                    detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-                )
 
             # Initiate sync
             try:
-                log.info(f"Starting {provider.title()} sync for user {user_id}")
-                await create_background_sync_task(request, provider, user_id, access_token, layer)
-                
-                # Return success popup instead of redirect
-                layer_text = f" ({layer})" if layer else ""
-                return HTMLResponse(
-                    content=f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <title>{provider.title()} Connected Successfully</title>
-                        <style>
-                            body {{ 
-                                font-family: Arial, sans-serif; 
-                                display: flex; 
-                                justify-content: center; 
-                                align-items: center; 
-                                height: 100vh; 
-                                margin: 0; 
-                                background-color: #f5f5f5; 
-                            }}
-                            .popup {{ 
-                                background: white; 
-                                padding: 30px; 
-                                border-radius: 8px; 
-                                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
-                                text-align: center; 
-                                max-width: 400px; 
-                            }}
-                            .success {{ 
-                                color: #28a745; 
-                                margin-bottom: 20px; 
-                            }}
-                            .checkmark {{ 
-                                font-size: 48px; 
-                                color: #28a745; 
-                                margin-bottom: 10px; 
-                            }}
-                            .countdown {{ 
-                                font-size: 14px; 
-                                color: #666; 
-                                margin-top: 15px; 
-                            }}
-                            .sync-status {{ 
-                                font-size: 14px; 
-                                color: #007bff; 
-                                margin-top: 10px; 
-                                font-style: italic; 
-                            }}
-                        </style>
-                    </head>
-                    <body>
-                        <div class="popup">
-                            <div class="checkmark">✓</div>
-                            <h2 class="success">{provider.title()} Connected Successfully!</h2>
-                            <p>Your {provider.title()}{layer_text} integration has been set up and sync has started.</p>
-                            <div class="sync-status">Syncing your data in the background...</div>
-                            <div class="countdown">This window will close in <span id="countdown">5</span> seconds</div>
-                        </div>
-                        <script>
-                            let countdown = 5;
-                            const countdownElement = document.getElementById('countdown');
-                            const timer = setInterval(() => {{
-                                countdown--;
-                                countdownElement.textContent = countdown;
-                                if (countdown <= 0) {{
-                                    clearInterval(timer);
-                                    window.close();
+
+                if layer == 'jira':
+                    layer_text = " (Jira)"
+                    return HTMLResponse(
+                        content=f"""
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>Atlassian Connected Successfully</title>
+                            <style>
+                                body {{ 
+                                    font-family: Arial, sans-serif; 
+                                    display: flex; 
+                                    justify-content: center; 
+                                    align-items: center; 
+                                    height: 100vh; 
+                                    margin: 0; 
+                                    background-color: #f5f5f5; 
                                 }}
-                            }}, 1000);
-                        </script>
-                    </body>
-                    </html>
-                    """,
-                    status_code=200
-                )
+                                .popup {{ 
+                                    background: white; 
+                                    padding: 30px; 
+                                    border-radius: 8px; 
+                                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+                                    text-align: center; 
+                                    max-width: 400px; 
+                                }}
+                                .success {{ 
+                                    color: #28a745; 
+                                    margin-bottom: 20px; 
+                                }}
+                                .checkmark {{ 
+                                    font-size: 48px; 
+                                    color: #28a745; 
+                                    margin-bottom: 10px; 
+                                }}
+                                .countdown {{ 
+                                    font-size: 14px; 
+                                    color: #666; 
+                                    margin-top: 15px; 
+                                }}
+                                .instruction {{ 
+                                    font-size: 14px; 
+                                    color: #007bff; 
+                                    margin-top: 10px; 
+                                    font-weight: 500;
+                                }}
+                            </style>
+                        </head>
+                        <body>
+                            <div class="popup">
+                                <div class="checkmark">✓</div>
+                                <h2 class="success">Atlassian Connected Successfully!</h2>
+                                <p>Your Atlassian{layer_text} integration has been set up.</p>
+                                <div class="instruction">Please select which projects to sync on the next screen.</div>
+                                <div class="countdown">This window will close in <span id="countdown">3</span> seconds</div>
+                            </div>
+                            <script>
+                                let countdown = 3;
+                                const countdownElement = document.getElementById('countdown');
+                                const timer = setInterval(() => {{
+                                    countdown--;
+                                    countdownElement.textContent = countdown;
+                                    if (countdown <= 0) {{
+                                        clearInterval(timer);
+                                        // Signal parent window to show project selection
+                                        if (window.opener) {{
+                                            window.opener.postMessage({{
+                                                type: 'atlassian_connected',
+                                                layer: 'jira'
+                                            }}, '*');
+                                        }}
+                                        window.close();
+                                    }}
+                                }}, 1000);
+                            </script>
+                        </body>
+                        </html>
+                        """,
+                        status_code=200
+                    )
+
+                else:
+                    log.info(f"Starting {provider.title()} sync for user {user_id}")
+                    await create_background_sync_task(request, provider, user_id, access_token, layer)
+                    
+                    # Return success popup instead of redirect
+                    layer_text = f" ({layer})" if layer else ""
+                    return HTMLResponse(
+                        content=f"""
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>{provider.title()} Connected Successfully</title>
+                            <style>
+                                body {{ 
+                                    font-family: Arial, sans-serif; 
+                                    display: flex; 
+                                    justify-content: center; 
+                                    align-items: center; 
+                                    height: 100vh; 
+                                    margin: 0; 
+                                    background-color: #f5f5f5; 
+                                }}
+                                .popup {{ 
+                                    background: white; 
+                                    padding: 30px; 
+                                    border-radius: 8px; 
+                                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+                                    text-align: center; 
+                                    max-width: 400px; 
+                                }}
+                                .success {{ 
+                                    color: #28a745; 
+                                    margin-bottom: 20px; 
+                                }}
+                                .checkmark {{ 
+                                    font-size: 48px; 
+                                    color: #28a745; 
+                                    margin-bottom: 10px; 
+                                }}
+                                .countdown {{ 
+                                    font-size: 14px; 
+                                    color: #666; 
+                                    margin-top: 15px; 
+                                }}
+                                .sync-status {{ 
+                                    font-size: 14px; 
+                                    color: #007bff; 
+                                    margin-top: 10px; 
+                                    font-style: italic; 
+                                }}
+                            </style>
+                        </head>
+                        <body>
+                            <div class="popup">
+                                <div class="checkmark">✓</div>
+                                <h2 class="success">{provider.title()} Connected Successfully!</h2>
+                                <p>Your {provider.title()}{layer_text} integration has been set up and sync has started.</p>
+                                <div class="sync-status">Syncing your data in the background...</div>
+                                <div class="countdown">This window will close in <span id="countdown">5</span> seconds</div>
+                            </div>
+                            <script>
+                                let countdown = 5;
+                                const countdownElement = document.getElementById('countdown');
+                                const timer = setInterval(() => {{
+                                    countdown--;
+                                    countdownElement.textContent = countdown;
+                                    if (countdown <= 0) {{
+                                        clearInterval(timer);
+                                        window.close();
+                                    }}
+                                }}, 1000);
+                            </script>
+                        </body>
+                        </html>
+                        """,
+                        status_code=200
+                    )
 
             except Exception as sync_error:
                 log.error(f"{provider.title()} sync failed for user {user_id}: {str(sync_error)}")
@@ -1208,8 +1477,6 @@ def create_universal_status_endpoint(provider: str):
 
         config = PROVIDER_CONFIGS[provider]
         config_status = {
-            "gcs_bucket_configured": bool(GCS_BUCKET_NAME),
-            "gcs_credentials_configured": bool(GCS_SERVICE_ACCOUNT_BASE64),
             f"{provider}_client_configured": bool(config['client_id'] and config['client_secret'] and config['redirect_uri']),
         }
 
@@ -1282,13 +1549,6 @@ def create_universal_sync_endpoint(provider: str):
         except Exception as e:
             log.error(f"Token refresh failed for {provider} user {user.id}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to refresh {provider.title()} token.")
-
-        # Validate GCS configuration
-        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-            raise HTTPException(
-                status_code=500,
-                detail="GCS configuration missing. Please configure GCS_BUCKET_NAME and GCS_SERVICE_ACCOUNT_BASE64."
-            )
     
         log.info(f"""Manually trigger {provider.title()} sync for the authenticated user.""")
 

@@ -12,7 +12,14 @@ import traceback
 
 from open_webui.env import SRC_LOG_LEVELS
 
-from open_webui.utils.data.data_ingestion import upload_to_gcs, download_from_gcs, list_gcs_files, delete_gcs_file, make_api_request, parse_date, format_bytes, update_data_source_sync_status
+from open_webui.utils.data.data_ingestion import (
+    # Unified storage functions
+    list_files_unified, upload_file_unified, delete_file_unified, download_file_unified,
+    # Utility functions
+    parse_date, format_bytes, validate_config, make_api_request, update_data_source_sync_status,
+    # Backend configuration
+    configure_storage_backend, get_current_backend
+)
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
@@ -20,10 +27,10 @@ log.setLevel(SRC_LOG_LEVELS["MAIN"])
 # Metrics tracking
 total_api_calls = 0
 script_start_time = time.time()
+existing_files_cache = set()
 
 # Load environment variables
 USER_ID = ""
-GCS_BUCKET_NAME = ""
 MAX_WORKERS = int(os.environ.get('MAX_WORKERS', '4'))  # Parallel processing workers
 
 # Slack API endpoints
@@ -57,6 +64,44 @@ LAYER_CONFIG = {
         'include_files': True
     }
 }
+
+def initialize_globals(user_id):
+    """Initialize global variables properly"""
+    global USER_ID, existing_files_cache
+    
+    if not user_id:
+        raise ValueError("user_id is required")
+    
+    USER_ID = user_id
+    existing_files_cache = set()
+
+def load_existing_files(user_id):
+    """Load existing files into memory for duplicate checking using unified interface"""
+    global existing_files_cache, USER_ID
+    
+    try:
+        current_backend = get_current_backend()
+        print(f"Loading existing files from {current_backend} storage for duplicate checking...")
+        user_prefix = f"userResources/{USER_ID}/Slack/"
+        
+        existing_files = list_files_unified(prefix=user_prefix, user_id=user_id)
+        
+        existing_files_cache = set()
+        for file in existing_files:
+            file_name = file.get('name') or file.get('key', '')
+            if file_name and file_name.startswith(user_prefix):
+                existing_files_cache.add(file_name)
+        
+        print(f"Found {len(existing_files_cache)} existing files in {current_backend} storage for user {USER_ID}")
+    except Exception as e:
+        print(f"Error loading existing files: {str(e)}")
+        log.error("Error loading existing files:", exc_info=True)
+        existing_files_cache = set()
+
+def file_exists_in_storage(file_path):
+    """Check if file already exists in storage"""
+    global existing_files_cache
+    return file_path in existing_files_cache
 
 def safe_parse_date(timestamp):
     """Safely parse various timestamp formats from Slack"""
@@ -408,17 +453,20 @@ def get_conversations_list(auth_token, layer=None):
         print(f"Error getting conversations: {str(error)}")
         return []
     
-def download_existing_conversation_from_gcs(conversation_path, service_account_base64, gcs_bucket_name):
-    """Download existing conversation data from GCS"""
+def download_existing_conversation_from_storage(conversation_path, user_id):
+    """Download existing conversation data from unified storage"""
     try:
-        # This function needs to be implemented - it should download the JSON file from GCS
-        # and return the parsed conversation data
-        file_content = download_from_gcs(conversation_path, service_account_base64, gcs_bucket_name)
+        # Download the file content
+        file_content = download_file_unified(conversation_path, user_id)
+        
         if file_content:
+            # Parse JSON content and return
             return json.loads(file_content.decode('utf-8'))
+        
         return None
+        
     except Exception as error:
-        print(f"Error downloading existing conversation from GCS: {str(error)}")
+        print(f"Error downloading existing conversation from storage: {str(error)}")
         return None
 
 def get_conversation_history_incremental(conversation_id, auth_token, conversation_name="", last_message_ts=None):
@@ -499,11 +547,6 @@ def merge_conversation_messages(existing_messages, new_messages):
         # Sort messages by timestamp
         all_messages.sort(key=lambda x: float(x.get('ts', 0)))
         
-        # Handle deleted messages - this is tricky because Slack doesn't explicitly tell us
-        # about deletions in the API. For now, we'll keep all messages we have.
-        # A more sophisticated approach would be to periodically do a full sync
-        # to catch deletions, or implement a separate deletion detection mechanism.
-        
         return all_messages
         
     except Exception as error:
@@ -523,24 +566,25 @@ def get_latest_message_timestamp(messages):
         print(f"Error getting latest message timestamp: {str(error)}")
         return None
     
-def check_file_exists_in_gcs(file_id, service_account_base64, gcs_bucket_name):
-    """Check if a file with the given Slack file ID already exists in GCS"""
+def check_file_exists_in_storage(file_id, user_id):
+    """Check if a file with the given Slack file ID already exists in storage using unified interface"""
     try:
         # List all files in the user's Slack files directory
         user_prefix = f"userResources/{USER_ID}/Slack/Files/"
-        gcs_files = list_gcs_files(service_account_base64, gcs_bucket_name, prefix=user_prefix)
+        storage_files = list_files_unified(prefix=user_prefix, user_id=user_id)
         
         # Check if any file has this file ID in its metadata or path
-        for gcs_file in gcs_files:
+        for storage_file in storage_files:
+            file_name = storage_file.get('name') or storage_file.get('key', '')
             # We'll need to store the Slack file ID in the file path or metadata
             # For now, let's assume we include it in the filename
-            if f"_{file_id}" in gcs_file['name'] or gcs_file['name'].endswith(f"_{file_id}"):
-                return gcs_file
+            if f"_{file_id}" in file_name or file_name.endswith(f"_{file_id}"):
+                return storage_file
         
         return None
         
     except Exception as error:
-        print(f"Error checking if file exists in GCS: {str(error)}")
+        print(f"Error checking if file exists in storage: {str(error)}")
         return None
 
 def get_user_direct_messages(auth_token, user_id):
@@ -570,8 +614,6 @@ def get_user_direct_messages(auth_token, user_id):
 def get_conversation_history(conversation_id, auth_token, conversation_name="", target_user_id=""):
     """Get message history for a specific conversation"""
     try:
-        # ... existing code until the while loop ...
-        
         all_messages = []
         cursor = None
         
@@ -719,10 +761,6 @@ def download_slack_file(file_info, auth_token):
         headers = {"Authorization": f"Bearer {auth_token}"}
         
         with make_request(file_url, headers=headers, stream=True, auth_token=auth_token) as response:
-            # make_request (which internally calls make_api_request) already calls response.raise_for_status()
-            # If make_api_request is robust, this check might be redundant but doesn't hurt.
-            # response.raise_for_status() 
-            
             file_content = io.BytesIO()
             for chunk in response.iter_content(chunk_size=1024 * 1024):  # 1MB chunks
                 if chunk:
@@ -733,12 +771,10 @@ def download_slack_file(file_info, auth_token):
         
     except Exception as error:
         print(f"Error downloading file {file_info.get('name', 'unknown')}: {str(error)}")
-        # For a production application, use `log.error(..., exc_info=True)` here
-        # log.error(f"Error downloading file {file_info.get('name', 'unknown')}:", exc_info=True)
-        return None # Return None as stated in the original function's error path
+        return None
 
-def process_conversation(conversation, auth_token, slack_user_id, user_info_map, service_account_base64, gcs_bucket_name, layer=None):
-    """Process a single conversation with incremental updates"""
+def process_conversation(conversation, auth_token, slack_user_id, user_info_map, layer=None):
+    """Process a single conversation with incremental updates using unified storage"""
     try:
         conversation_id = conversation['id']
         conversation_name = conversation.get('name', conversation_id)
@@ -768,9 +804,9 @@ def process_conversation(conversation, auth_token, slack_user_id, user_info_map,
         else:
             file_path = f"userResources/{USER_ID}/Slack/{folder_name}/{conversation_name}.json"
         
-        # Check if conversation already exists in GCS
-        existing_conversation_data = download_existing_conversation_from_gcs(
-            file_path, service_account_base64, gcs_bucket_name
+        # Check if conversation already exists in storage
+        existing_conversation_data = download_existing_conversation_from_storage(
+            file_path, USER_ID
         )
         
         existing_messages = []
@@ -843,8 +879,8 @@ def process_conversation(conversation, auth_token, slack_user_id, user_info_map,
         print(f"Error processing conversation {conversation.get('name', conversation.get('id'))}: {str(error)}")
         return None
 
-def process_file(file_info, auth_token, service_account_base64, gcs_bucket_name, layer=None):
-    """Process a single file, skipping if already exists in GCS"""
+def process_file(file_info, auth_token, layer=None):
+    """Process a single file, skipping if already exists in storage using unified interface"""
     try:
         file_id = file_info['id']
         file_name = file_info.get('name', f"file_{file_id}")
@@ -852,15 +888,15 @@ def process_file(file_info, auth_token, service_account_base64, gcs_bucket_name,
         
         print(f"Processing file: {file_name} ({format_bytes(file_size)})")
         
-        # Check if file already exists in GCS
-        existing_gcs_file = check_file_exists_in_gcs(file_id, service_account_base64, gcs_bucket_name)
+        # Check if file already exists in storage
+        existing_storage_file = check_file_exists_in_storage(file_id, USER_ID)
         
-        if existing_gcs_file:
-            print(f"⏭️  File {file_name} already exists in GCS, skipping...")
+        if existing_storage_file:
+            print(f"⏭️  File {file_name} already exists in storage, skipping...")
             return {
                 'skipped': True,
-                'path': existing_gcs_file['name'],
-                'reason': 'Already exists in GCS'
+                'path': existing_storage_file.get('name') or existing_storage_file.get('key', ''),
+                'reason': 'Already exists in storage'
             }
         
         # Download file content
@@ -896,47 +932,49 @@ def process_file(file_info, auth_token, service_account_base64, gcs_bucket_name,
         print(f"Error processing file {file_info.get('name', 'unknown')}: {str(error)}")
         return None
 
-def upload_conversation_to_gcs(conversation_data, service_account_base64, gcs_bucket_name):
-    """Upload conversation JSON to GCS"""
+def upload_conversation_to_storage(conversation_data):
+    """Upload conversation JSON to unified storage"""
     try:
         json_content = json.dumps(conversation_data['data'], indent=2, default=str)
-        json_bytes = io.BytesIO(json_content.encode('utf-8'))
         
-        result = upload_to_gcs(
-            json_bytes,
+        success = upload_file_unified(
+            json_content.encode('utf-8'),
             conversation_data['path'],
             'application/json',
-            service_account_base64,
-            gcs_bucket_name
+            USER_ID
         )
         
-        return result
+        if success:
+            existing_files_cache.add(conversation_data['path'])
+        
+        return success
         
     except Exception as error:
         print(f"Error uploading conversation {conversation_data['path']}: {str(error)}")
-        return None
+        return False
 
-def upload_file_to_gcs(file_data, service_account_base64, gcs_bucket_name):
-    """Upload file to GCS"""
+def upload_file_to_storage(file_data):
+    """Upload file to unified storage"""
     try:
-        result = upload_to_gcs(
-            file_data['content'],
+        success = upload_file_unified(
+            file_data['content'].getvalue(),
             file_data['path'],
             file_data['mime_type'],
-            service_account_base64,
-            gcs_bucket_name
+            USER_ID
         )
         
-        return result
+        if success:
+            existing_files_cache.add(file_data['path'])
+        
+        return success
         
     except Exception as error:
         print(f"Error uploading file {file_data['path']}: {str(error)}")
-        return None
+        return False
 
-async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
-    """Main function to sync Slack data to Google Cloud Storage with incremental updates and layer filtering"""
+async def sync_slack_to_storage(auth_token, layer=None):
+    """Main function to sync Slack data to unified storage with incremental updates and layer filtering"""
     global total_api_calls
-    global GCS_BUCKET_NAME
     
     layer_display = f" ({layer})" if layer else ""
     print(f'🔄 Starting Slack sync process{layer_display}...')
@@ -1018,8 +1056,6 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
                         auth_token, 
                         slack_user_id, 
                         user_info_map,
-                        service_account_base64,
-                        GCS_BUCKET_NAME,
                         layer
                     ): conv
                     for conv in unique_conversations
@@ -1034,7 +1070,7 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
                             
                             # Always upload conversations (they handle their own incremental logic)
                             start_time = time.time()
-                            result = upload_conversation_to_gcs(conv_data, service_account_base64, GCS_BUCKET_NAME)
+                            result = upload_conversation_to_storage(conv_data)
                             
                             if result:
                                 uploaded_files.append({
@@ -1042,7 +1078,8 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
                                     'type': 'updated' if conv_data['is_update'] else 'new',
                                     'size': conv_data['size'],
                                     'durationMs': int((time.time() - start_time) * 1000),
-                                    'reason': f"{'Incremental update' if conv_data['is_update'] else 'New conversation'} - {conv_data['new_messages_count']} new messages"
+                                    'reason': f"{'Incremental update' if conv_data['is_update'] else 'New conversation'} - {conv_data['new_messages_count']} new messages",
+                                    'backend': get_current_backend()
                                 })
                                 print(f"[{datetime.now().isoformat()}] {'Updated' if conv_data['is_update'] else 'Uploaded'} {conv_data['path']}")
                                 
@@ -1061,8 +1098,6 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
                         process_file, 
                         file_info, 
                         auth_token,
-                        service_account_base64,
-                        GCS_BUCKET_NAME,
                         layer
                     ): file_info
                     for file_info in files
@@ -1080,7 +1115,7 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
                                 file_paths.add(file_data['path'])
                                 
                                 start_time = time.time()
-                                result = upload_file_to_gcs(file_data, service_account_base64, GCS_BUCKET_NAME)
+                                result = upload_file_to_storage(file_data)
                                 
                                 if result:
                                     uploaded_files.append({
@@ -1088,7 +1123,8 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
                                         'type': 'new',
                                         'size': file_data['size'],
                                         'durationMs': int((time.time() - start_time) * 1000),
-                                        'reason': 'New file'
+                                        'reason': 'New file',
+                                        'backend': get_current_backend()
                                     })
                                     print(f"[{datetime.now().isoformat()}] Uploaded {file_data['path']}")
                                 
@@ -1096,6 +1132,7 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
                         file_info = file_futures[future]
                         print(f"Error processing file {file_info.get('name', 'unknown')}: {str(e)}")
         
+        # Clean up orphaned files using unified interface
         if layer and layer in LAYER_CONFIG:
             # Only clean up files in this specific layer's folder
             layer_folder = LAYER_CONFIG[layer]['folder']
@@ -1104,29 +1141,33 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
             # Clean up all Slack files
             user_prefix = f"userResources/{USER_ID}/Slack/"
 
-        # Clean up orphaned files - only for the specific layer if provided
-        gcs_files = list_gcs_files(service_account_base64, GCS_BUCKET_NAME, prefix=user_prefix)
-        gcs_file_map = {gcs_file['name']: gcs_file for gcs_file in gcs_files}
+        storage_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
+        storage_file_map = {}
+        for file in storage_files:
+            file_name = file.get('name') or file.get('key', '')
+            if file_name:
+                storage_file_map[file_name] = file
         
         all_current_paths = conversation_paths | file_paths
         
-        for gcs_name, gcs_file in gcs_file_map.items():
-            if gcs_name.startswith(user_prefix) and gcs_name not in all_current_paths:
-                delete_gcs_file(gcs_name, service_account_base64, GCS_BUCKET_NAME)
+        for storage_name, storage_file in storage_file_map.items():
+            if storage_name.startswith(user_prefix) and storage_name not in all_current_paths:
+                delete_file_unified(storage_name, USER_ID)
                 
                 deleted_files.append({
-                    'name': gcs_name,
-                    'size': gcs_file.get('size'),
-                    'timeCreated': gcs_file.get('timeCreated')
+                    'name': storage_name,
+                    'size': storage_file.get('size'),
+                    'timeCreated': storage_file.get('timeCreated')
                 })
-                print(f"[{datetime.now().isoformat()}] Deleted orphan: {gcs_name}")
+                print(f"[{datetime.now().isoformat()}] Deleted orphan: {storage_name}")
         
         # Enhanced summary
+        current_backend = get_current_backend()
         print('\nSync Summary:')
         for file in uploaded_files:
             symbol = '+' if file['type'] == 'new' else '^'
             print(
-                f" {symbol} {file['path']} | {format_bytes(file['size'])} | {file['durationMs']}ms | {file['reason']}"
+                f" {symbol} {file['path']} | {format_bytes(file['size'])} | {file['durationMs']}ms | {file['reason']} | {file['backend']}"
             )
         
         for file in deleted_files:
@@ -1144,6 +1185,7 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
         print(f"🗑️  Orphans Removed: {len(deleted_files)}")
         print(f"⏭️  Files Skipped (already exist): {skipped_files}")
         print(f"📂 Layer: {layer if layer else 'All layers'}")
+        print(f"💾 Storage Backend: {current_backend}")
         
         print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
@@ -1157,29 +1199,36 @@ async def sync_slack_to_gcs(auth_token, service_account_base64, layer=None):
         raise
 
 # Main Execution Function
-async def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_name: str, layer: str = None):
+async def initiate_slack_sync(
+    user_id: str, 
+    token: str, 
+    service_account_base64: str = None, 
+    gcs_bucket_name: str = None, 
+    layer: str = None,
+    storage_backend: str = None
+):
     """
-    Main execution function for Slack to GCS sync with layer support
+    Main execution function for Slack to unified storage sync with layer support
     
     Args:
         user_id (str): User ID from your app
         token (str): Slack OAuth token
-        creds (str): Base64 encoded GCS service account credentials
-        gcs_bucket_name (str): Name of the GCS bucket
+        service_account_base64 (str, optional): Base64 encoded GCS service account credentials
+        gcs_bucket_name (str, optional): Name of the GCS bucket
         layer (str, optional): Specific Slack layer to sync (direct_messages, channels, group_chats, files)
+        storage_backend (str, optional): Storage backend to use ('gcs', 'local', etc.)
     """
-    log.info(f'Sync Slack to Google Cloud Storage')
+    log.info(f'Sync Slack to unified storage')
     log.info(f'User Open WebUI ID: {user_id}')
-    log.info(f'GCS Bucket Name: {gcs_bucket_name}')
     log.info(f'Layer: {layer if layer else "All layers"}')
 
-    global USER_ID 
-    global GCS_BUCKET_NAME
-    global script_start_time
-    global total_api_calls
+    # Initialize globals first
+    initialize_globals(user_id)
+    
+    current_backend = get_current_backend()
+    log.info(f"Using storage backend: {current_backend}")
 
-    USER_ID = user_id
-    GCS_BUCKET_NAME = gcs_bucket_name
+    global script_start_time, total_api_calls
     total_api_calls = 0
     script_start_time = time.time()
 
@@ -1192,15 +1241,19 @@ async def initiate_slack_sync(user_id: str, token: str, creds: str, gcs_bucket_n
     if not user_info:
         raise ValueError("Invalid Slack token or could not retrieve user information")
 
+    # Load existing files for duplicate checking
+    load_existing_files(user_id)
+
     await update_data_source_sync_status(USER_ID, 'slack', layer, 'syncing')
 
-    await sync_slack_to_gcs(token, creds, layer)
+    await sync_slack_to_storage(token, layer)
     
     # Return immediate response
     return {
-        "status": "started",
-        "message": f"Slack sync process has been initiated successfully for {layer if layer else 'all layers'}",
+        "status": "completed",
+        "message": f"Slack sync process completed successfully for {layer if layer else 'all layers'}",
         "user_id": user_id,
         "slack_user": user_info.get('user', 'unknown'),
-        "layer": layer
+        "layer": layer,
+        "backend": current_backend
     }

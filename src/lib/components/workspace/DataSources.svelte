@@ -24,6 +24,7 @@
 	import Jira from '../icons/Jira.svelte';
 	import Confluence from '../icons/Confluence.svelte';
 	import Mineral from '../icons/Mineral.svelte';
+	import JiraProjectSelector from './JiraProjectSelector.svelte'; // Import the new component
 
 	const i18n: any = getContext('i18n');
 
@@ -31,7 +32,11 @@
 	let query = '';
 
 	let dataSources: Array<DataSource> = [];
-	let processingActions = new Set<string>(); // Track processing actions to prevent double clicks
+	let processingActions = new Set<string>();
+
+	// Project selector state
+	let showProjectSelector = false;
+	let projectSelectorDataSource: DataSource | null = null;
 
 	// Sort data sources by action, then by name
 	$: sortedDataSources = [...dataSources].sort((a, b) => {
@@ -97,7 +102,7 @@
 			OneNote: OneNote,
 			JIRA: Jira,
 			Confluence: Confluence,
-			Mineral: Mineral // Using Microsoft icon as placeholder for Mineral
+			Mineral: Mineral
 		} as const;
 		return iconMap[iconName as keyof typeof iconMap];
 	};
@@ -109,13 +114,12 @@
 	const handleSync = async (dataSource: DataSource) => {
 		const actionKey = getActionKey(dataSource);
 
-		// Prevent double clicks
 		if (processingActions.has(actionKey)) {
 			return;
 		}
 
 		processingActions.add(actionKey);
-		processingActions = processingActions; // Trigger reactivity
+		processingActions = processingActions;
 
 		try {
 			console.log('Syncing:', dataSource.name);
@@ -123,6 +127,16 @@
 			// Special handling for Mineral
 			if (dataSource.action === 'mineral') {
 				await handleMineralSync(dataSource);
+				return;
+			}
+
+			// Special handling for Jira when unsynced - show project selector
+			if (
+				dataSource.action === 'atlassian' &&
+				dataSource.layer === 'jira' &&
+				dataSource.sync_status === 'unsynced'
+			) {
+				await initializeJiraSync(dataSource);
 				return;
 			}
 
@@ -139,16 +153,56 @@
 			}
 		} finally {
 			processingActions.delete(actionKey);
-			processingActions = processingActions; // Trigger reactivity
+			processingActions = processingActions;
+		}
+	};
+
+	const initializeJiraSync = async (dataSource: DataSource) => {
+		console.log('Initializing Jira sync - opening OAuth...');
+
+		// First, open OAuth window
+		let syncDetails = await initializeDataSync(
+			localStorage.token,
+			dataSource.action as string,
+			dataSource.layer as string
+		);
+
+		if (syncDetails.url) {
+			const authWindow = window.open(syncDetails.url, '_blank', 'width=600,height=700');
+
+			// Listen for OAuth completion message
+			const messageHandler = async (event: MessageEvent) => {
+				if (event.data?.type === 'atlassian_connected' && event.data?.layer === 'jira') {
+					console.log('Atlassian OAuth completed, showing project selector');
+
+					// Remove the message listener
+					window.removeEventListener('message', messageHandler);
+
+					// Refresh data sources to get updated status
+					dataSources = await getDataSources(localStorage.token);
+
+					// Show project selector
+					projectSelectorDataSource = dataSource;
+					showProjectSelector = true;
+				}
+			};
+
+			window.addEventListener('message', messageHandler);
+
+			// Cleanup listener if window is closed without completing auth
+			const checkWindowClosed = setInterval(() => {
+				if (authWindow && authWindow.closed) {
+					window.removeEventListener('message', messageHandler);
+					clearInterval(checkWindowClosed);
+				}
+			}, 500);
 		}
 	};
 
 	const handleMineralSync = async (dataSource: DataSource) => {
 		if (dataSource.sync_status === 'unsynced') {
-			// Show Mineral auth popup for initialization
 			showMineralAuthPopup();
 		} else {
-			// Regular sync for already connected Mineral
 			await updateSync(dataSource.action as string, dataSource.layer as string);
 		}
 	};
@@ -185,7 +239,6 @@
 			popup.document.write('</form></div></body></html>');
 			popup.document.close();
 
-			// Add JavaScript functionality after document is ready
 			popup.addEventListener('load', () => {
 				const form = popup.document.getElementById('mineralForm');
 				form?.addEventListener('submit', async (e) => {
@@ -281,13 +334,12 @@
 	const handleDelete = async (dataSource: DataSource) => {
 		const actionKey = getActionKey(dataSource);
 
-		// Prevent double clicks
 		if (processingActions.has(actionKey)) {
 			return;
 		}
 
 		processingActions.add(actionKey);
-		processingActions = processingActions; // Trigger reactivity
+		processingActions = processingActions;
 
 		try {
 			const action = dataSource.action;
@@ -299,7 +351,7 @@
 			dataSources = await getDataSources(localStorage.token);
 		} finally {
 			processingActions.delete(actionKey);
-			processingActions = processingActions; // Trigger reactivity
+			processingActions = processingActions;
 		}
 	};
 
@@ -325,6 +377,20 @@
 	const isProcessing = (dataSource: DataSource) => {
 		const actionKey = getActionKey(dataSource);
 		return processingActions.has(actionKey) || dataSource.sync_status === 'syncing';
+	};
+
+	const handleProjectSyncStarted = async (event: CustomEvent) => {
+		console.log('Project sync started:', event.detail);
+		showProjectSelector = false;
+		projectSelectorDataSource = null;
+
+		// Refresh data sources
+		dataSources = await getDataSources(localStorage.token);
+	};
+
+	const handleProjectSelectorClose = () => {
+		showProjectSelector = false;
+		projectSelectorDataSource = null;
 	};
 
 	export const getBackendConfig = async () => {
@@ -362,7 +428,7 @@
 
 	onDestroy(() => {
 		if ($socket) {
-			$socket.off('data-source-updated'); // Remove the listener
+			$socket.off('data-source-updated');
 		}
 	});
 </script>
@@ -372,6 +438,13 @@
 		{$i18n.t('Data Sources')} | {$WEBUI_NAME}
 	</title>
 </svelte:head>
+
+<!-- Project Selector Modal -->
+<JiraProjectSelector
+	bind:show={showProjectSelector}
+	on:syncStarted={handleProjectSyncStarted}
+	on:close={handleProjectSelectorClose}
+/>
 
 {#if loaded}
 	<div class="flex flex-col gap-1 my-1.5">
