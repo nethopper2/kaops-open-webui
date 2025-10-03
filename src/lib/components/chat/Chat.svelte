@@ -95,6 +95,7 @@ import { fade } from 'svelte/transition';
 import Tooltip from '../common/Tooltip.svelte';
 import Sidebar from '../icons/Sidebar.svelte';
 import { uploadFile } from '$lib/apis/files';
+import { PRIVATE_AI_MODEL_PREFIX } from '$lib/shared/private_ai';
 
 export let chatIdProp = '';
 
@@ -139,7 +140,7 @@ $: {
 }
 
 // Auto open/close of Private AI sidekick is now handled via appHooks 'model.changed' in onMount.
-import { appHooks } from '$lib/utils/hooks';
+import { appHooks, type PrivateAiExtras } from '$lib/utils/hooks';
 import { apiFetch } from '$lib/apis/private-ai/fetchClients';
 
 let __unhookModelChanged: (() => void) | undefined;
@@ -410,8 +411,8 @@ onMount(() => {
 	})();
 
 	// Allow external components (e.g., Private AI sidekicks) to submit a prompt
-	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt, title }) => {
-		await submitPrompt(prompt, { title });
+	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt, title, privateAi }) => {
+		await submitPrompt(prompt, { title, privateAi });
 	});
 
 	// Hook for chat-level overlay control
@@ -633,25 +634,6 @@ const showMessage = async (message) => {
 
 	await tick();
 	saveChatHandler(_chatId, history);
-};
-
-// Helper: parse directive envelope from a string; returns object or null
-const parseDirectiveEnvelope = (text: string) => {
-	if (typeof text !== 'string') return null;
-	try {
-		const data = JSON.parse(text);
-		if (
-			data &&
-			typeof data === 'object' &&
-			data._kind === 'openwebui.directive' &&
-			(data.version === 1 || data.version === '1') &&
-			typeof data.name === 'string' && data.name
-		) {
-			return data;
-		}
-	} catch {
-	}
-	return null;
 };
 
 // Helper: delete a message by id, re-parent its children, and persist
@@ -1819,7 +1801,10 @@ const chatCompletionEventHandler = async (data, message, chatId) => {
 // Chat functions
 //////////////////////////
 
-const submitPrompt = async (userPrompt, { _raw = false, title }: { _raw?: boolean; title?: string } = {}) => {
+const submitPrompt = async (
+	userPrompt,
+	{ _raw = false, title, privateAi }: { _raw?: boolean; title?: string; privateAi?: PrivateAiExtras } = {}
+) => {
 	console.log('submitPrompt', userPrompt, $chatId);
 
 	const messages = createMessagesList(history, history.currentId);
@@ -1895,8 +1880,6 @@ const submitPrompt = async (userPrompt, { _raw = false, title }: { _raw?: boolea
 
 	// Create user message
 	let userMessageId = uuidv4();
-	const directive = parseDirectiveEnvelope(userPrompt);
-	const isAssistantOnlyDirective = Boolean(directive?.assistant_only === true);
 	let userMessage = {
 		id: userMessageId,
 		parentId: messages.length !== 0 ? messages.at(-1).id : null,
@@ -1906,7 +1889,6 @@ const submitPrompt = async (userPrompt, { _raw = false, title }: { _raw?: boolea
 		files: _files.length > 0 ? _files : undefined,
 		timestamp: Math.floor(Date.now() / 1000), // Unix epoch
 		models: selectedModels,
-		...(isAssistantOnlyDirective ? { hidden: true } : {})
 	};
 
 	// Add message to history and Set currentId to messageId
@@ -1924,12 +1906,7 @@ const submitPrompt = async (userPrompt, { _raw = false, title }: { _raw?: boolea
 
 	saveSessionSelectedModels();
 
-	await sendMessage(history, userMessageId, { newChat: true, title });
-
-	// If this was an assistant-only directive, remove the user message immediately on the client
-	if (isAssistantOnlyDirective) {
-		await deleteMessageById(userMessageId);
-	}
+	await sendMessage(history, userMessageId, { newChat: true, title, privateAi });
 };
 
 const sendMessage = async (
@@ -1940,13 +1917,15 @@ const sendMessage = async (
 		modelId = null,
 		modelIdx = null,
 		newChat = false,
-		title
+		title,
+		privateAi
 	}: {
 		messages?: any[] | null;
 		modelId?: string | null;
 		modelIdx?: number | null;
 		newChat?: boolean;
 		title?: string;
+		privateAi?: PrivateAiExtras | undefined;
 	} = {}
 ) => {
 	if (autoScroll) {
@@ -2042,7 +2021,8 @@ const sendMessage = async (
 						: createMessagesList(_history, responseMessageId),
 					_history,
 					responseMessageId,
-					_chatId
+					_chatId,
+					privateAi
 				);
 
 				if (chatEventEmitter) clearInterval(chatEventEmitter);
@@ -2056,7 +2036,7 @@ const sendMessage = async (
 	chats.set(await getChatList(localStorage.token, $currentChatPage));
 };
 
-const sendMessageSocket = async (model, _messages, _history, responseMessageId, _chatId) => {
+const sendMessageSocket = async (model, _messages, _history, responseMessageId, _chatId, privateAi?: { directive?: Record<string, unknown>; metadata?: Record<string, unknown> }) => {
 	const responseMessage = _history.messages[responseMessageId];
 	const userMessage = _history.messages[responseMessage.parentId];
 
@@ -2146,79 +2126,96 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 		}))
 		.filter((message) => message?.role === 'user' || message?.content?.trim());
 
+ // Build privateAi payload for pipelines (optional)
+	const modelIsPrivate = typeof model?.id === 'string' && model.id.startsWith(PRIVATE_AI_MODEL_PREFIX);
+	let privateAiPayload: any = privateAi ? { ...privateAi } : undefined;
+	if (modelIsPrivate) {
+		// TODO: consider other options and remove this.
+		privateAiPayload = privateAiPayload ?? {};
+		privateAiPayload.auth = {
+			authorization: `Bearer ${localStorage.token}`
+		};
+	}
+
+ const bodyObj: any = {
+		stream: stream,
+		model: model.id,
+		messages: messages,
+		params: {
+			...$settings?.params,
+			...params,
+			stop:
+				(params?.stop ?? $settings?.params?.stop ?? undefined)
+					? (params?.stop.split(',').map((token) => token.trim()) ?? $settings.params.stop).map(
+						(str) => decodeURIComponent(JSON.parse('"' + str.replace(/\"/g, '\\"') + '"'))
+					)
+					: undefined
+		},
+
+		files: (files?.length ?? 0) > 0 ? files : undefined,
+
+		filter_ids: selectedFilterIds.length > 0 ? selectedFilterIds : undefined,
+		tool_ids: selectedToolIds.length > 0 ? selectedToolIds : undefined,
+		tool_servers: $toolServers,
+
+		features: {
+			image_generation:
+				$config?.features?.enable_image_generation &&
+				($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
+					? imageGenerationEnabled
+					: false,
+			code_interpreter:
+				$config?.features?.enable_code_interpreter &&
+				($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
+					? codeInterpreterEnabled
+					: false,
+			web_search:
+				$config?.features?.enable_web_search &&
+				($user?.role === 'admin' || $user?.permissions?.features?.web_search)
+					? webSearchEnabled || ($settings?.webSearch ?? false) === 'always'
+					: false,
+			memory: $settings?.memory ?? false
+		},
+		variables: {
+			...getPromptVariables($user?.name, $settings?.userLocation ? userLocation : undefined)
+		},
+		model_item: $models.find((m) => m.id === model.id),
+
+		session_id: $socket?.id,
+		chat_id: $chatId,
+		id: responseMessageId,
+
+		background_tasks: {
+			...(!$temporaryChatEnabled &&
+			(messages.length == 1 ||
+				(messages.length == 2 &&
+					messages.at(0)?.role === 'system' &&
+					messages.at(1)?.role === 'user')) &&
+			(selectedModels[0] === model.id || atSelectedModel !== undefined)
+				? {
+					title_generation: $settings?.title?.auto ?? true,
+					tags_generation: $settings?.autoTags ?? true
+				}
+				: {}),
+			follow_up_generation: $settings?.autoFollowUps ?? true
+		},
+
+		...(stream && (model.info?.meta?.capabilities?.usage ?? false)
+			? {
+				stream_options: {
+					include_usage: true
+				}
+			}
+			: {})
+	};
+
+	if (privateAiPayload) {
+		bodyObj.privateAi = privateAiPayload;
+	}
+
 	const res = await generateOpenAIChatCompletion(
 		localStorage.token,
-		{
-			stream: stream,
-			model: model.id,
-			messages: messages,
-			params: {
-				...$settings?.params,
-				...params,
-				stop:
-					(params?.stop ?? $settings?.params?.stop ?? undefined)
-						? (params?.stop.split(',').map((token) => token.trim()) ?? $settings.params.stop).map(
-							(str) => decodeURIComponent(JSON.parse('"' + str.replace(/\"/g, '\\"') + '"'))
-						)
-						: undefined
-			},
-
-			files: (files?.length ?? 0) > 0 ? files : undefined,
-
-			filter_ids: selectedFilterIds.length > 0 ? selectedFilterIds : undefined,
-			tool_ids: selectedToolIds.length > 0 ? selectedToolIds : undefined,
-			tool_servers: $toolServers,
-
-			features: {
-				image_generation:
-					$config?.features?.enable_image_generation &&
-					($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
-						? imageGenerationEnabled
-						: false,
-				code_interpreter:
-					$config?.features?.enable_code_interpreter &&
-					($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
-						? codeInterpreterEnabled
-						: false,
-				web_search:
-					$config?.features?.enable_web_search &&
-					($user?.role === 'admin' || $user?.permissions?.features?.web_search)
-						? webSearchEnabled || ($settings?.webSearch ?? false) === 'always'
-						: false,
-				memory: $settings?.memory ?? false
-			},
-			variables: {
-				...getPromptVariables($user?.name, $settings?.userLocation ? userLocation : undefined)
-			},
-			model_item: $models.find((m) => m.id === model.id),
-
-			session_id: $socket?.id,
-			chat_id: $chatId,
-			id: responseMessageId,
-
-			background_tasks: {
-				...(!$temporaryChatEnabled &&
-				(messages.length == 1 ||
-					(messages.length == 2 &&
-						messages.at(0)?.role === 'system' &&
-						messages.at(1)?.role === 'user')) &&
-				(selectedModels[0] === model.id || atSelectedModel !== undefined)
-					? {
-						title_generation: $settings?.title?.auto ?? true,
-						tags_generation: $settings?.autoTags ?? true
-					}
-					: {}),
-				follow_up_generation: $settings?.autoFollowUps ?? true
-			},
-
-			...(stream && (model.info?.meta?.capabilities?.usage ?? false)
-				? {
-					stream_options: {
-						include_usage: true
-					}
-				}
-				: {})
-		},
+		bodyObj,
 		`${WEBUI_BASE_URL}/api`
 	).catch(async (error) => {
 		console.log(error);
