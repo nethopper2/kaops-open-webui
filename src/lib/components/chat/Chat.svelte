@@ -140,7 +140,7 @@ $: {
 }
 
 // Auto open/close of Private AI sidekick is now handled via appHooks 'model.changed' in onMount.
-import { appHooks } from '$lib/utils/hooks';
+import { appHooks, type PrivateAiExtras } from '$lib/utils/hooks';
 import { apiFetch } from '$lib/apis/private-ai/fetchClients';
 
 let __unhookModelChanged: (() => void) | undefined;
@@ -411,8 +411,8 @@ onMount(() => {
 	})();
 
 	// Allow external components (e.g., Private AI sidekicks) to submit a prompt
-	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt, title, extras }) => {
-		await submitPrompt(prompt, { title, extras });
+	__unhookChatSubmit = appHooks.hook('chat.submit', async ({ prompt, title, privateAi }) => {
+		await submitPrompt(prompt, { title, privateAi });
 	});
 
 	// Hook for chat-level overlay control
@@ -634,25 +634,6 @@ const showMessage = async (message) => {
 
 	await tick();
 	saveChatHandler(_chatId, history);
-};
-
-// Helper: parse directive envelope from a string; returns object or null
-const parseDirectiveEnvelope = (text: string) => {
-	if (typeof text !== 'string') return null;
-	try {
-		const data = JSON.parse(text);
-		if (
-			data &&
-			typeof data === 'object' &&
-			data._kind === 'openwebui.directive' &&
-			(data.version === 1 || data.version === '1') &&
-			typeof data.name === 'string' && data.name
-		) {
-			return data;
-		}
-	} catch {
-	}
-	return null;
 };
 
 // Helper: delete a message by id, re-parent its children, and persist
@@ -1822,7 +1803,7 @@ const chatCompletionEventHandler = async (data, message, chatId) => {
 
 const submitPrompt = async (
 	userPrompt,
-	{ _raw = false, title, extras }: { _raw?: boolean; title?: string; extras?: { directive?: Record<string, unknown>; metadata?: Record<string, unknown> } } = {}
+	{ _raw = false, title, privateAi }: { _raw?: boolean; title?: string; privateAi?: PrivateAiExtras } = {}
 ) => {
 	console.log('submitPrompt', userPrompt, $chatId);
 
@@ -1899,7 +1880,7 @@ const submitPrompt = async (
 
 	// Create user message
 	let userMessageId = uuidv4();
-	const isAssistantOnlyDirective = Boolean((extras as any)?.directive && (extras as any)?.directive?.assistant_only === true);
+	const isAssistantOnlyDirective = Boolean((privateAi as any)?.directive && (privateAi as any)?.directive?.assistant_only === true);
 	let userMessage = {
 		id: userMessageId,
 		parentId: messages.length !== 0 ? messages.at(-1).id : null,
@@ -1927,7 +1908,7 @@ const submitPrompt = async (
 
 	saveSessionSelectedModels();
 
-	await sendMessage(history, userMessageId, { newChat: true, title, extras });
+	await sendMessage(history, userMessageId, { newChat: true, title, privateAi });
 
 	// If this was an assistant-only directive, remove the user message immediately on the client
 	if (isAssistantOnlyDirective) {
@@ -1944,14 +1925,14 @@ const sendMessage = async (
 		modelIdx = null,
 		newChat = false,
 		title,
-		extras
+		privateAi
 	}: {
 		messages?: any[] | null;
 		modelId?: string | null;
 		modelIdx?: number | null;
 		newChat?: boolean;
 		title?: string;
-		extras?: { directive?: Record<string, unknown>; metadata?: Record<string, unknown> } | undefined;
+		privateAi?: PrivateAiExtras | undefined;
 	} = {}
 ) => {
 	if (autoScroll) {
@@ -2048,7 +2029,7 @@ const sendMessage = async (
 					_history,
 					responseMessageId,
 					_chatId,
-					extras
+					privateAi
 				);
 
 				if (chatEventEmitter) clearInterval(chatEventEmitter);
@@ -2062,7 +2043,7 @@ const sendMessage = async (
 	chats.set(await getChatList(localStorage.token, $currentChatPage));
 };
 
-const sendMessageSocket = async (model, _messages, _history, responseMessageId, _chatId, extras?: { directive?: Record<string, unknown>; metadata?: Record<string, unknown> }) => {
+const sendMessageSocket = async (model, _messages, _history, responseMessageId, _chatId, privateAi?: { directive?: Record<string, unknown>; metadata?: Record<string, unknown> }) => {
 	const responseMessage = _history.messages[responseMessageId];
 	const userMessage = _history.messages[responseMessage.parentId];
 
@@ -2152,13 +2133,13 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 		}))
 		.filter((message) => message?.role === 'user' || message?.content?.trim());
 
- // Build extras payload for pipelines (optional)
+ // Build privateAi payload for pipelines (optional)
 	const modelIsPrivate = typeof model?.id === 'string' && model.id.startsWith(PRIVATE_AI_MODEL_PREFIX);
-	let extrasPayload: any = extras ? { ...extras } : undefined;
+	let privateAiPayload: any = privateAi ? { ...privateAi } : undefined;
 	if (modelIsPrivate) {
 		// TODO: consider other options and remove this.
-		extrasPayload = extrasPayload ?? {};
-		extrasPayload.auth = {
+		privateAiPayload = privateAiPayload ?? {};
+		privateAiPayload.auth = {
 			authorization: `Bearer ${localStorage.token}`
 		};
 	}
@@ -2235,8 +2216,8 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 			: {})
 	};
 
-	if (extrasPayload) {
-		bodyObj.extras = extrasPayload;
+	if (privateAiPayload) {
+		bodyObj.privateAi = privateAiPayload;
 	}
 
 	const res = await generateOpenAIChatCompletion(

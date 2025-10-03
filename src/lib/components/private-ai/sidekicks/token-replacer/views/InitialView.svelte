@@ -119,7 +119,7 @@ onMount(() => {
 						on:click={() => {
 							const file = $selectedTokenizedDoc;
 							const fullPath = $selectedTokenizedDocPath;
-							// Send a normal prompt with directive metadata via extras
+							// Send a normal prompt with directive metadata via privateAi
 							const directive = {
 								name: 'token_replacer.begin',
 								assistant_only: false,
@@ -127,7 +127,7 @@ onMount(() => {
 							};
 							const prompt = 'Let\'s begin token replacement.';
 							const title = `🔁 ${String(file?.name ?? '').trim()}`;
-							appHooks.callHook('chat.submit', { prompt, title, extras: { directive } });
+							appHooks.callHook('chat.submit', { prompt, title, privateAi: { directive } });
 							// Switch to the edit values sub-view after the beginning
 							currentTokenReplacerSubView.set('editValues');
 							// Persist sidekick UI state (selected document) for this chat+sidekick

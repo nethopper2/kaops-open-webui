@@ -8,7 +8,6 @@ import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelt
 import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 import { chatId, currentSelectedModelId } from '$lib/stores';
 	import {
-		type GenerateDocumentResult,
 		getTokenReplacementValues,
 		putTokenReplacementValues,
 		type TokenReplacementValue
@@ -20,7 +19,6 @@ import {
 	type TokenReplacerDraft
 } from '../drafts';
 import Spinner from '$lib/components/common/Spinner.svelte';
-import Eye from '$lib/components/icons/Eye.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import DOMPurify from 'dompurify';
 import ListBullet from '$lib/components/icons/ListBullet.svelte';
@@ -520,7 +518,7 @@ async function handleGenerate() {
 			name: 'token_replacer.generate',
 			assistant_only: false
 		};
-		await appHooks.callHook('chat.submit', { prompt: $i18n.t('Generate document now.'), extras: { directive } });
+		await appHooks.callHook('chat.submit', { prompt: $i18n.t('Generate document now.'), privateAi: { directive } });
 	} catch (e) {
 		console.error(e);
 		toast.error($i18n.t('Failed to generate document.'));
