@@ -483,9 +483,10 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         # Fetch the Authorization headers added to request
         # This will be used when using SSO to extract user profile and file data
         sso_provider = str(SSO_PROVIDER_NAME).lower()
-        auth_token = request.headers.get(
-                'X-Forwarded-Access-Token', None
-            )
+        auth_token = (
+            request.headers.get('X-Forwarded-Access-Token') or 
+            request.headers.get('X-Auth-Request-Access-Token', None)
+        )
 
         #Retrieve the trusted email from the headers and set trusted name and profile image URL to default values
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
