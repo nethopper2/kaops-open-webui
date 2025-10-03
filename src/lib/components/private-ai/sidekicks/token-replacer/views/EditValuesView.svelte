@@ -516,7 +516,6 @@ async function handleGenerate() {
 		// Send a directive to pipeline to perform generation
 		const directive = {
 			name: 'token_replacer.generate',
-			assistant_only: false
 		};
 		await appHooks.callHook('chat.submit', { prompt: $i18n.t('Generate document now.'), privateAi: { directive } });
 	} catch (e) {

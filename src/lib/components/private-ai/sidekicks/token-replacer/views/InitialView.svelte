@@ -122,8 +122,7 @@ onMount(() => {
 							// Send a normal prompt with directive metadata via privateAi
 							const directive = {
 								name: 'token_replacer.begin',
-								assistant_only: false,
-								payload: { file_path: String(fullPath || '') }
+								payload: { filePath: String(fullPath || '') }
 							};
 							const prompt = 'Let\'s begin token replacement.';
 							const title = `🔁 ${String(file?.name ?? '').trim()}`;

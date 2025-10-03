@@ -1880,7 +1880,6 @@ const submitPrompt = async (
 
 	// Create user message
 	let userMessageId = uuidv4();
-	const isAssistantOnlyDirective = Boolean((privateAi as any)?.directive && (privateAi as any)?.directive?.assistant_only === true);
 	let userMessage = {
 		id: userMessageId,
 		parentId: messages.length !== 0 ? messages.at(-1).id : null,
@@ -1890,7 +1889,6 @@ const submitPrompt = async (
 		files: _files.length > 0 ? _files : undefined,
 		timestamp: Math.floor(Date.now() / 1000), // Unix epoch
 		models: selectedModels,
-		...(isAssistantOnlyDirective ? { hidden: true } : {})
 	};
 
 	// Add message to history and Set currentId to messageId
@@ -1909,11 +1907,6 @@ const submitPrompt = async (
 	saveSessionSelectedModels();
 
 	await sendMessage(history, userMessageId, { newChat: true, title, privateAi });
-
-	// If this was an assistant-only directive, remove the user message immediately on the client
-	if (isAssistantOnlyDirective) {
-		await deleteMessageById(userMessageId);
-	}
 };
 
 const sendMessage = async (

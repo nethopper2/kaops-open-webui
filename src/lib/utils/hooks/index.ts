@@ -4,7 +4,10 @@
 import { createHooks } from 'hookable';
 
 export type PrivateAiExtras = {
-	directive?: Record<string, unknown>;
+	directive?: {
+		name: string
+		payload?: Record<string, unknown>;
+	}
 	metadata?: Record<string, unknown>;
 };
 
