@@ -421,6 +421,9 @@ class UsersTable:
 
     def get_user_profile_data_from_sso_provider(self, provider: str, token: str):
         try:
+            log.info("Getting user profile data from SSO provider")
+            log.info(f"Fetching user profile data from {provider} provider")
+            log.info(f"Token: {token}")
             match provider:
                 case 'google':
                     response = requests.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
@@ -457,7 +460,7 @@ class UsersTable:
                     'trusted_profile_image_url': trusted_profile_image_url
                 }
             else:
-                log.error(f"Failed to fetch user data: {response.status_code} {response}")
+                log.error(f"Failed to fetch user data: {response.status_code} {response.json()}")
                 return None
         except Exception as e:
             log.error(f"Error fetching user data: {e}")
