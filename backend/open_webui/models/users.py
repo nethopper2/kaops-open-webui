@@ -430,7 +430,6 @@ class UsersTable:
             Dictionary with trusted_email, trusted_name, trusted_profile_image_url or None on error
         """
         log.info(f"[SSO] Fetching user profile data from provider: {provider}")
-        log.debug(f"[SSO] Token (masked): {token}")
         
         response = None
         user_image = "/user.png"  # Default fallback
@@ -536,7 +535,6 @@ class UsersTable:
                         
                     except jwt.DecodeError as e:
                         log.error(f"[SSO:Okta] Failed to decode JWT token: {str(e)}")
-                        log.debug(f"[SSO:Okta] Token (masked): {token}")
                         return None
                     except requests.exceptions.Timeout:
                         log.error(f"[SSO:Okta] Request timeout after 10s to {api_url}")
@@ -612,7 +610,6 @@ class UsersTable:
                 # Log specific error details based on status code
                 if response.status_code == 401:
                     log.error(f"[SSO:{provider.title()}] Unauthorized - Token may be expired or invalid")
-                    log.debug(f"[SSO:{provider.title()}] Token (masked): {token}")
                 elif response.status_code == 403:
                     log.error(f"[SSO:{provider.title()}] Forbidden - Check OAuth scopes/permissions")
                 elif response.status_code == 404:
@@ -623,10 +620,6 @@ class UsersTable:
                 return None
                 
         except Exception as e:
-            log.error(f"[SSO:{provider.title()}] Unexpected error fetching user data: {type(e).__name__}: {str(e)}", exc_info=True)
-            log.error(f"[SSO:{provider.title()}] Provider: {provider}")
-            log.error(f"[SSO:{provider.title()}] API URL: {api_url}")
-            log.debug(f"[SSO:{provider.title()}] Token (masked): {token}")
             return None
 
     def fetch_and_save_user_oauth_tokens(self, user_id: str, provider: str, token: str):
