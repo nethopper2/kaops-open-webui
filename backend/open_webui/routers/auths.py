@@ -483,6 +483,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         # Fetch the Authorization headers added to request
         # This will be used when using SSO to extract user profile and file data
         log.info(f"Request headers: {request.headers}")
+        log.info(f"================================================")
         sso_provider = str(SSO_PROVIDER_NAME).lower()
         auth_token = request.headers.get(
                 'X-Forwarded-Access-Token', None
