@@ -121,16 +121,16 @@ PROVIDER_CONFIGS = {
         'scope_separator': ' ',
         'default_scopes': [
             "User.Read",
-            "Files.Read.All",
-            "Sites.Read.All",
+            "Files.Read",
+            "Sites.Read",
             "Notes.Read",
             "Mail.Read",
             "MailboxSettings.Read",
             "offline_access"
         ],
         'layer_scopes': {
-            'onedrive': 'Files.Read.All',
-            'sharepoint': 'Sites.Read.All',
+            'onedrive': 'Files.Read',
+            'sharepoint': 'Sites.Read',
             'onenote': 'Notes.Read',
             'outlook': 'Mail.Read'
         },
