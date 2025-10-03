@@ -80,10 +80,35 @@ async function handleContextMenuItemClick(e: ContextMenuItemClickEvent) {
 function handleContextMenuShowing(e: ContextMenuShowingEvent) {
 	if (!e.fileSystemItem?.path.length) {
 		e.cancel = true; // Prevent the context menu from showing
+		return;
 	}
+	
+	// Cancel context menu for directories
+	if (e.fileSystemItem.isDirectory) {
+		e.cancel = true;
+		return;
+	}
+	
+	// Store the current file item for files
+	currentFileItem.value = e.fileSystemItem;
 }
 
 const showEditMetadataPopup = ref(false);
+
+// Computed property for context menu items
+const contextMenuItems = computed(() => {
+	const items = [];
+	
+	// Add "Edit Metadata" for files
+	if (currentFileItem.value && !currentFileItem.value.isDirectory) {
+		items.push({
+			text: i18nRef.value?.t?.('Edit Metadata') ?? 'Edit Metadata',
+			options: { action: 'editMetadata' }
+		});
+	}
+	
+	return items;
+});
 
 // Use the theme composable
 const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme({
@@ -133,12 +158,9 @@ onMounted(async () => {
 			:download="false"
 		/>
 
-		<dx-context-menu>
-			<dx-item
-				:text="i18nRef?.t?.('Edit Metadata') ?? 'Edit Metadata'"
-				:options="{ action: 'editMetadata' }"
-			/>
-		</dx-context-menu>
+		<dx-context-menu
+			:items="contextMenuItems"
+		/>
 
 		<dx-item-view>
 			<dx-details>
