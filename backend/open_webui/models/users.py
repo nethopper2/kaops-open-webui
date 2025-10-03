@@ -2,7 +2,7 @@ import requests
 import time
 import logging
 
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import jwt
 
@@ -30,7 +30,6 @@ from open_webui.env import SRC_LOG_LEVELS
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
-
 ####################
 # User DB Schema
 ####################
@@ -418,49 +417,216 @@ class UsersTable:
                     user_ids=user_ids,
                 )
                 Groups.update_group_by_id(id=group_model.id, form_data=update_form, overwrite=False)
-
-    def get_user_profile_data_from_sso_provider(self, provider: str, token: str):
+    
+    def get_user_profile_data_from_sso_provider(self, provider: str, token: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch user profile data from SSO provider.
+        
+        Args:
+            provider: SSO provider name (google, microsoft, okta)
+            token: OAuth2 access token
+            
+        Returns:
+            Dictionary with trusted_email, trusted_name, trusted_profile_image_url or None on error
+        """
+        log.info(f"[SSO] Fetching user profile data from provider: {provider}")
+        log.debug(f"[SSO] Token (masked): {token}")
+        
+        response = None
+        user_image = "/user.png"  # Default fallback
+        api_url = None
+        
         try:
             match provider:
                 case 'google':
-                    response = requests.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
+                    api_url = "https://openidconnect.googleapis.com/v1/userinfo"
+                    log.info(f"[SSO:Google] Making request to: {api_url}")
+                    
+                    try:
+                        response = requests.get(
+                            api_url,
+                            headers={"Authorization": f"Bearer {token}"},
+                            timeout=10
+                        )
+                        log.info(f"[SSO:Google] Response status: {response.status_code}")
+                        log.debug(f"[SSO:Google] Response headers: {dict(response.headers)}")
+                        
+                    except requests.exceptions.Timeout:
+                        log.error(f"[SSO:Google] Request timeout after 10s to {api_url}")
+                        return None
+                    except requests.exceptions.RequestException as e:
+                        log.error(f"[SSO:Google] Request failed to {api_url}: {type(e).__name__}: {str(e)}")
+                        return None
 
                 case 'microsoft':
-                    response = requests.get("https://graph.microsoft.com/v1.0/me", headers={"Authorization": f"Bearer {token}"})
-                    photo_response = requests.get("https://graph.microsoft.com/v1.0/me/photo/$value", headers={"Authorization": f"Bearer {token}"})
-
-                    if photo_response.status_code == 200:
-                        encoded_image = base64.b64encode(photo_response.content).decode('utf-8')
-                        user_image = f"data:image/jpeg;base64,{encoded_image}"
-                    else:
-                        user_image = "/user.png"  # Default image if fetching fails
+                    api_url = "https://graph.microsoft.com/v1.0/me"
+                    photo_url = "https://graph.microsoft.com/v1.0/me/photo/$value"
+                    
+                    log.info(f"[SSO:Microsoft] Making request to: {api_url}")
+                    
+                    try:
+                        response = requests.get(
+                            api_url,
+                            headers={"Authorization": f"Bearer {token}"},
+                            timeout=10
+                        )
+                        log.info(f"[SSO:Microsoft] Profile response status: {response.status_code}")
+                        log.debug(f"[SSO:Microsoft] Profile response headers: {dict(response.headers)}")
+                        
+                        if response.status_code != 200:
+                            log.error(f"[SSO:Microsoft] Failed to fetch profile: {response.status_code}")
+                            log.error(f"[SSO:Microsoft] Response body: {response.text[:500]}")
+                        
+                    except requests.exceptions.Timeout:
+                        log.error(f"[SSO:Microsoft] Profile request timeout after 10s to {api_url}")
+                        return None
+                    except requests.exceptions.RequestException as e:
+                        log.error(f"[SSO:Microsoft] Profile request failed to {api_url}: {type(e).__name__}: {str(e)}")
+                        return None
+                    
+                    # Fetch profile photo (non-critical)
+                    log.info(f"[SSO:Microsoft] Fetching profile photo from: {photo_url}")
+                    try:
+                        photo_response = requests.get(
+                            photo_url,
+                            headers={"Authorization": f"Bearer {token}"},
+                            timeout=10
+                        )
+                        log.info(f"[SSO:Microsoft] Photo response status: {photo_response.status_code}")
+                        
+                        if photo_response.status_code == 200:
+                            content_type = photo_response.headers.get('Content-Type', 'image/jpeg')
+                            image_format = content_type.split('/')[-1] if '/' in content_type else 'jpeg'
+                            encoded_image = base64.b64encode(photo_response.content).decode('utf-8')
+                            user_image = f"data:image/{image_format};base64,{encoded_image}"
+                            log.info(f"[SSO:Microsoft] Successfully fetched profile photo ({len(photo_response.content)} bytes)")
+                        elif photo_response.status_code == 404:
+                            log.info("[SSO:Microsoft] User has no profile photo set")
+                        else:
+                            log.warning(f"[SSO:Microsoft] Failed to fetch photo: {photo_response.status_code}")
+                            log.debug(f"[SSO:Microsoft] Photo response body: {photo_response.text[:200]}")
+                            
+                    except requests.exceptions.Timeout:
+                        log.warning(f"[SSO:Microsoft] Photo request timeout, using default image")
+                    except requests.exceptions.RequestException as e:
+                        log.warning(f"[SSO:Microsoft] Photo request failed: {type(e).__name__}: {str(e)}, using default image")
 
                 case 'okta':
-                    decoded = jwt.decode(token, options={"verify_signature": False})
-                    oktaDomain = decoded["iss"]
-                    response = requests.get(f"{oktaDomain}/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
+                    try:
+                        log.info("[SSO:Okta] Decoding JWT token to extract issuer")
+                        decoded = jwt.decode(token, options={"verify_signature": False})
+                        okta_domain = decoded.get("iss")
+                        
+                        if not okta_domain:
+                            log.error("[SSO:Okta] No 'iss' (issuer) claim found in token")
+                            log.debug(f"[SSO:Okta] Token claims: {list(decoded.keys())}")
+                            return None
+                        
+                        api_url = f"{okta_domain}/oauth2/v1/userinfo"
+                        log.info(f"[SSO:Okta] Okta domain: {okta_domain}")
+                        log.info(f"[SSO:Okta] Making request to: {api_url}")
+                        
+                        response = requests.get(
+                            api_url,
+                            headers={"Authorization": f"Bearer {token}"},
+                            timeout=10
+                        )
+                        log.info(f"[SSO:Okta] Response status: {response.status_code}")
+                        log.debug(f"[SSO:Okta] Response headers: {dict(response.headers)}")
+                        
+                    except jwt.DecodeError as e:
+                        log.error(f"[SSO:Okta] Failed to decode JWT token: {str(e)}")
+                        log.debug(f"[SSO:Okta] Token (masked): {mask_token(token)}")
+                        return None
+                    except requests.exceptions.Timeout:
+                        log.error(f"[SSO:Okta] Request timeout after 10s to {api_url}")
+                        return None
+                    except requests.exceptions.RequestException as e:
+                        log.error(f"[SSO:Okta] Request failed to {api_url}: {type(e).__name__}: {str(e)}")
+                        return None
+                        
+                case _:
+                    log.error(f"[SSO] Unsupported provider: {provider}")
+                    return None
 
+            # Process response
+            if response is None:
+                log.error(f"[SSO:{provider.title()}] No response object available")
+                return None
+                
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                    log.info(f"[SSO:{provider.title()}] Successfully parsed JSON response")
+                    log.debug(f"[SSO:{provider.title()}] Response data keys: {list(data.keys())}")
+                    
+                except ValueError as e:
+                    log.error(f"[SSO:{provider.title()}] Failed to parse JSON response: {str(e)}")
+                    log.error(f"[SSO:{provider.title()}] Response body: {response.text[:500]}")
+                    return None
+                
+                # Extract user data based on provider
                 if provider == 'microsoft':
-                    trusted_email =  data.get('mail', None)
-                    trusted_name =  data.get('displayName', None)
+                    trusted_email = data.get('mail') or data.get('userPrincipalName')
+                    trusted_name = data.get('displayName')
                     trusted_profile_image_url = user_image
-                else:
-                    trusted_email = data.get('email', None)
-                    trusted_name = data.get('name', None)
+                    
+                    log.info(f"[SSO:Microsoft] Extracted email: {trusted_email}")
+                    log.info(f"[SSO:Microsoft] Extracted name: {trusted_name}")
+                    log.debug(f"[SSO:Microsoft] Available fields: {list(data.keys())}")
+                    
+                    if not trusted_email:
+                        log.warning("[SSO:Microsoft] No 'mail' or 'userPrincipalName' found in response")
+                        
+                else:  # google, okta
+                    trusted_email = data.get('email')
+                    trusted_name = data.get('name')
                     trusted_profile_image_url = data.get('picture')
+                    
+                    log.info(f"[SSO:{provider.title()}] Extracted email: {trusted_email}")
+                    log.info(f"[SSO:{provider.title()}] Extracted name: {trusted_name}")
+                    log.info(f"[SSO:{provider.title()}] Profile image URL: {trusted_profile_image_url or 'None'}")
 
-                return {
+                # Validate required fields
+                if not trusted_email:
+                    log.error(f"[SSO:{provider.title()}] No email found in user data")
+                    log.error(f"[SSO:{provider.title()}] Full response data: {data}")
+                    return None
+
+                result = {
                     'trusted_email': trusted_email,
                     'trusted_name': trusted_name,
                     'trusted_profile_image_url': trusted_profile_image_url
                 }
+                
+                log.info(f"[SSO:{provider.title()}] Successfully extracted user profile data")
+                return result
+                
             else:
-                log.error(f"Failed to fetch user data: {response.status_code} {response}")
+                # Non-200 status code
+                log.error(f"[SSO:{provider.title()}] Failed to fetch user data: HTTP {response.status_code}")
+                log.error(f"[SSO:{provider.title()}] Request URL: {api_url}")
+                log.error(f"[SSO:{provider.title()}] Response headers: {dict(response.headers)}")
+                log.error(f"[SSO:{provider.title()}] Response body: {response.text[:1000]}")
+                
+                # Log specific error details based on status code
+                if response.status_code == 401:
+                    log.error(f"[SSO:{provider.title()}] Unauthorized - Token may be expired or invalid")
+                    log.debug(f"[SSO:{provider.title()}] Token (masked): {mask_token(token)}")
+                elif response.status_code == 403:
+                    log.error(f"[SSO:{provider.title()}] Forbidden - Check OAuth scopes/permissions")
+                elif response.status_code == 404:
+                    log.error(f"[SSO:{provider.title()}] Not Found - Check API endpoint URL")
+                elif response.status_code >= 500:
+                    log.error(f"[SSO:{provider.title()}] Server error - Provider may be experiencing issues")
+                    
                 return None
+                
         except Exception as e:
-            log.error(f"Error fetching user data: {e}")
+            log.error(f"[SSO:{provider.title()}] Unexpected error fetching user data: {type(e).__name__}: {str(e)}", exc_info=True)
+            log.error(f"[SSO:{provider.title()}] Provider: {provider}")
+            log.error(f"[SSO:{provider.title()}] API URL: {api_url}")
+            log.debug(f"[SSO:{provider.title()}] Token (masked): {mask_token(token)}")
             return None
 
     def fetch_and_save_user_oauth_tokens(self, user_id: str, provider: str, token: str):
