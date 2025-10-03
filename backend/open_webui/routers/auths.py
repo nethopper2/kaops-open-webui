@@ -517,7 +517,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
             sso_response = Users.get_user_profile_data_from_sso_provider(sso_provider, auth_token)
             if sso_response:
                 print("sso_response", sso_response)
-                trusted_email = sso_response.get('trusted_email', trusted_email)
+                trusted_email = sso_response.get('trusted_email', trusted_email).lower()
                 trusted_name = sso_response.get('trusted_name', trusted_name)
                 trusted_profile_image_url = sso_response.get('trusted_profile_image_url', trusted_profile_image_url)
                 update_user_details = True
