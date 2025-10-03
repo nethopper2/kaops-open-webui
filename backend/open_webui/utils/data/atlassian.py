@@ -256,74 +256,75 @@ def list_jira_selected_projects_and_issues(site_url, cloud_id, bearer_token: str
             start_at_issue = 0
             max_results_issue = 100
             
-            while True:
-                jql_query = f"project = \"{project_key}\""
-                params = {
-                    'jql': jql_query,
-                    'startAt': start_at_issue,
-                    'maxResults': max_results_issue,
-                    'fields': 'summary,description,status,issuetype,priority,creator,reporter,assignee,created,updated,comment,attachment'
-                }
-                
-                try:
-                    # FIXED: Changed from /search to /search/jql
-                    search_response = make_atlassian_request(
-                        f"{jira_base_url}/search/jql", 
-                        params=params, 
-                        bearer_token=bearer_token
-                    )
-                except Exception as e:
-                    log.error(f"Failed to fetch issues for project {project_key}: {e}")
-                    break  # Skip this project and continue with others
-                
-                issues = search_response.get('issues', [])
+            jql_query = f"project = \"{project_key}\""
+            params = {
+                'jql': jql_query,
+                'startAt': start_at_issue,
+                'maxResults': max_results_issue,
+                'fields': 'summary,description,status,issuetype,priority,creator,reporter,assignee,created,updated,comment,attachment'
+            }
+            
+            try:
+                search_response = make_atlassian_request(
+                    f"{jira_base_url}/search/jql", 
+                    params=params, 
+                    bearer_token=bearer_token
+                )
+            except Exception as e:
+                log.error(f"Failed to fetch issues for project {project_key}: {e}")
+                break  # Skip this project and continue with others
+            
+            issues = search_response.get('issues', [])
+            total_issues = search_response.get('total')
 
-                for issue in issues:
-                    issue_key = issue.get('key')
-                    issue_summary = issue.get('fields', {}).get('summary', 'no_summary').replace('/', '_')
+            for issue in issues:
+                issue_key = issue.get('key')
+                issue_summary = issue.get('fields', {}).get('summary', 'no_summary').replace('/', '_')
+                
+                full_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{project_key}/{issue_key}/{issue_key}-{issue_summary}.json"
+                
+                issue_info = {
+                    'id': issue.get('id'),
+                    'key': issue_key,
+                    'fullPath': full_path,
+                    'mimeType': 'application/json',
+                    'content': json.dumps(issue, indent=2),
+                    'modifiedTime': issue.get('fields', {}).get('updated'),
+                    'createdTime': issue.get('fields', {}).get('created'),
+                    'type': 'issue',
+                    'layer': layer
+                }
+                all_items.append(issue_info)
+
+                # Handle attachments for the issue
+                attachments = issue.get('fields', {}).get('attachment', [])
+                for attachment in attachments:
+                    attachment_filename = attachment.get('filename')
+                    attachment_id = attachment.get('id')
+                    attachment_content_url = attachment.get('content')
+                    attachment_mime_type = attachment.get('mimeType')
+                    attachment_size = attachment.get('size')
                     
-                    full_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{project_key}/{issue_key}-{issue_summary}.json"
+                    attachment_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{project_key}/{issue_key}/attachments/{attachment_filename}"
                     
-                    issue_info = {
-                        'id': issue.get('id'),
-                        'key': issue_key,
-                        'fullPath': full_path,
-                        'mimeType': 'application/json',
-                        'content': json.dumps(issue, indent=2),
-                        'modifiedTime': issue.get('fields', {}).get('updated'),
-                        'createdTime': issue.get('fields', {}).get('created'),
-                        'type': 'issue',
+                    attachment_info = {
+                        'id': attachment_id,
+                        'fullPath': attachment_path,
+                        'mimeType': attachment_mime_type,
+                        'downloadUrl': attachment_content_url,
+                        'size': attachment_size,
+                        'modifiedTime': attachment.get('created'),
+                        'createdTime': attachment.get('created'),
+                        'type': 'attachment',
                         'layer': layer
                     }
-                    all_items.append(issue_info)
+                    all_items.append(attachment_info)
 
-                    # Handle attachments for the issue
-                    attachments = issue.get('fields', {}).get('attachment', [])
-                    for attachment in attachments:
-                        attachment_filename = attachment.get('filename')
-                        attachment_id = attachment.get('id')
-                        attachment_content_url = attachment.get('content')
-                        attachment_mime_type = attachment.get('mimeType')
-                        attachment_size = attachment.get('size')
-                        
-                        attachment_path = f"userResources/{USER_ID}/Atlassian/{folder_name}/{site_url.replace('https://', '').replace('/', '_')}/{project_key}/{issue_key}/attachments/{attachment_filename}"
-                        
-                        attachment_info = {
-                            'id': attachment_id,
-                            'fullPath': attachment_path,
-                            'mimeType': attachment_mime_type,
-                            'downloadUrl': attachment_content_url,
-                            'size': attachment_size,
-                            'modifiedTime': attachment.get('created'),
-                            'createdTime': attachment.get('created'),
-                            'type': 'attachment',
-                            'layer': layer
-                        }
-                        all_items.append(attachment_info)
-
-                if search_response.get('total') <= start_at_issue + len(issues):
-                    break
-                start_at_issue += max_results_issue
+            if total_issues is not None:
+                if isinstance(total_issues, int):
+                    if total_issues <= start_at_issue + len(issues):
+                        break
+            start_at_issue += max_results_issue
 
     except Exception as error:
         log.error(f'Listing selected Jira projects/issues failed for site {site_url}: {str(error)}', exc_info=True)

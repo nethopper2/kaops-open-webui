@@ -47,7 +47,8 @@ class StorageConfig:
         self.gcs_bucket_name = os.environ.get('GCS_BUCKET_NAME')
         
         # PAI Data Service Configuration
-        base_url = os.environ.get('NH_DATA_SERVICE_URL', 'http://localhost:4500')
+        default_base_url = os.environ.get('NH_DATA_SERVICE_URL', 'http://localhost:4500')
+        base_url = os.environ.get('NH_DATA_SERVICE_URL_BACKEND', default_base_url)
         
         # Ensure /api/v1 is appended if NH_DATA_SERVICE_URL is set
         if 'NH_DATA_SERVICE_URL' in os.environ:

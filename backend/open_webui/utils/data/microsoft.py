@@ -606,7 +606,7 @@ def download_and_upload_onedrive_file(file, auth_token, exists, reason):
         log.error(f"Error processing OneDrive file {file['fullPath']}:", exc_info=True)
         return None
 
-async def sync_onedrive(auth_token):
+async def sync_onedrive_to_storage(auth_token):
     """Main function to sync OneDrive to storage"""
     global total_api_calls, USER_ID
     
@@ -911,7 +911,7 @@ def download_and_upload_sharepoint_file(file, auth_token, exists, reason):
         log.error(f"Error processing SharePoint file {file['fullPath']}:", exc_info=True)
         return None
 
-async def sync_sharepoint(auth_token):
+async def sync_sharepoint_to_storage(auth_token):
     """Main function to sync SharePoint to storage"""
     global total_api_calls, USER_ID
     
@@ -1095,15 +1095,19 @@ async def initiate_microsoft_sync(
     try:
         # Execute sync operations based on parameters
         if sync_onedrive:
-            results['onedrive'] = await sync_onedrive(auth_token)
+            await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'syncing')
+            results['onedrive'] = await sync_onedrive_to_storage(auth_token)
         
         if sync_sharepoint:
-            results['sharepoint'] = await sync_sharepoint(auth_token)
+            await update_data_source_sync_status(USER_ID, 'microsoft', 'sharepoint', 'syncing')
+            results['sharepoint'] = await sync_sharepoint_to_storage(auth_token)
         
         if sync_onenote:
+            await update_data_source_sync_status(USER_ID, 'microsoft', 'onenote', 'syncing')
             results['onenote'] = await sync_onenote_to_storage(auth_token)
         
         if sync_outlook:
+            await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'syncing')
             results['outlook'] = await sync_outlook_to_storage(
                 auth_token, outlook_folder, outlook_query, max_emails
             )
