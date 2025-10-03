@@ -494,6 +494,15 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         trusted_profile_image_url = "/user.png"
         update_user_details = False
 
+        print("================================================")
+        print("sso_provider", sso_provider)
+        print("auth_token", auth_token)
+        print("trusted_email", trusted_email)
+        print("trusted_name", trusted_name)
+        print("trusted_profile_image_url", trusted_profile_image_url)
+        print("update_user_details", update_user_details)
+        print("================================================")
+
         # If the trusted name header is present, use it to set the trusted name
         # Otherwise, use the trusted email as the name
         if WEBUI_AUTH_TRUSTED_NAME_HEADER:
@@ -504,8 +513,10 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         # If an SSO provider is present, use it to fetch user profile data
         # and update the trusted email, name, and profile image URL
         if sso_provider:
+            print("Getting user profile data from SSO provider")
             sso_response = Users.get_user_profile_data_from_sso_provider(sso_provider, auth_token)
             if sso_response:
+                print("sso_response", sso_response)
                 trusted_email = sso_response.get('trusted_email', trusted_email)
                 trusted_name = sso_response.get('trusted_name', trusted_name)
                 trusted_profile_image_url = sso_response.get('trusted_profile_image_url', trusted_profile_image_url)
@@ -516,6 +527,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
 
         # If the user does not exist, create a new user with the trusted email, profile image url, name and default data sources
         if not user_exists:
+            print("Creating new user")
             await signup(
                 request,
                 response,
@@ -525,6 +537,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
             )
 
         if sso_provider:
+            print("Inside sso_provider (540)")
             user_id = user_exists.id if user_exists else Users.get_user_by_email(trusted_email).id
 
             # Fetch and save the user's OAuth tokens from the SSO provider
@@ -553,6 +566,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
 
             # For existing and new users, trigger user file data sync from the SSO provider if enabled
             if ENABLE_SSO_DATA_SYNC:
+                print("Inside ENABLE_SSO_DATA_SYNC (569)")
                 log.info(f"Initiating data sync for user {user_id} from {sso_provider} provider")
                 # Create default data sources for the new user
                 DataSources.create_default_data_sources_for_user(user_id)
@@ -572,6 +586,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                 await create_task(redis_connection, get_user_file_data(), id=f"get_user_file_data_{user_id}")
         # Authenticate the user using the trusted email
         user = Auths.authenticate_user_by_email(trusted_email)
+        print("user", user)
 
 
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER and user and user.role != "admin":
