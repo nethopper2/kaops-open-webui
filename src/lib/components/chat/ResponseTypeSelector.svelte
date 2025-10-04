@@ -11,6 +11,7 @@ const i18n = getContext('i18n');
 let ResponseTypeSelectorEnabled = false;
 let ResponseType = 'Default';
 const ResponseOptions=['Default','Professional', 'Creative','Constructive'];
+
 let ResponseButtonRef;
 let ResponseDropdownRef;
 let ResponseDropdownStyle = '';
@@ -35,7 +36,10 @@ function ResponseToggleDropdown() {
 </script>
 
 <div class="relative inline-block text-left">
-    <Tooltip content={$i18n.t('Select tone of response')} placement="top">
+    <Tooltip
+        content={$i18n.t('Select tone of response')}
+        placement="top"
+    >
         <button
             bind:this={ResponseButtonRef}
             class="px-2 py-1 flex gap-1.5 text-sm transition-colors duration-300 max-w-full hover:bg-gray-50 dark:hover:bg-gray-800
@@ -52,12 +56,23 @@ function ResponseToggleDropdown() {
             {:else}
                 {ResponseType}
             {/if}
-            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            <svg
+                class="w-4 h-4 ml-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 9l-7 7-7-7"
+                />
             </svg>
         </button>
     </Tooltip>
 </div>
+
 <div style= {ResponseDropdownStyle} class:hidden={!ResponseTypeSelectorEnabled}>
     <div class="absolute rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50">
         {#each ResponseOptions as option}
