@@ -36,14 +36,19 @@ let ShowCustomMenu = false;
 
 function handleapply(e) {
     const { from, to } = e.detail;
-    SelectedDate = `${from} → ${to}`;
+    const reformatDate = (isoString) => {
+        const [year, month, day] = isoString.split('-');
+        return `${month}/${day}/${year}`;
+    };
+    SelectedDate = `${reformatDate(from)} → ${reformatDate(to)}`;
     ShowCustomMenu = false;
     DateSelectorEnabled = false;
 }
 
 function handlecancel(e) {
     ShowCustomMenu = false;
-    DateSelectorEnabled = true;
+    DateSelectorEnabled = false;
+    SelectedDate = 'All';
 }
 </script>
 
