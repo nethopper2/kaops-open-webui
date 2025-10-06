@@ -7,13 +7,11 @@ import { appHooks } from '$lib/utils/hooks';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
 import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 import { chatId, currentSelectedModelId } from '$lib/stores';
-import {
-	type GenerateDocumentResult,
-	generateTokenReplacerDocument,
-	getTokenReplacementValues,
-	putTokenReplacementValues,
-	type TokenReplacementValue
-} from '$lib/apis/private-ai/sidekicks/token-replacer';
+	import {
+		getTokenReplacementValues,
+		putTokenReplacementValues,
+		type TokenReplacementValue
+	} from '$lib/apis/private-ai/sidekicks/token-replacer';
 import {
 	clearTokenReplacerDraft,
 	loadTokenReplacerDraft,
@@ -21,7 +19,6 @@ import {
 	type TokenReplacerDraft
 } from '../drafts';
 import Spinner from '$lib/components/common/Spinner.svelte';
-import Eye from '$lib/components/icons/Eye.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import DOMPurify from 'dompurify';
 import ListBullet from '$lib/components/icons/ListBullet.svelte';
@@ -516,26 +513,11 @@ async function handleGenerate() {
 	try {
 		loadingToastId = toast.loading($i18n.t('Generating document...'));
 		closePreviewPanel();
-		// TODO: This should really happen from within the pipeline so we dont rely on the lifecycle of this component.
-		const result = (await generateTokenReplacerDocument(cId, mId)) as GenerateDocumentResult;
-		if (!result || result.didReplace === false) {
-			toast.error($i18n.t('No tokens were replaced.'));
-			return;
-		}
-		toast.success($i18n.t('Document generated successfully.'));
-		// Send an assistant-only directive message to the chat including the full result payload
+		// Send a directive to pipeline to perform generation
 		const directive = {
-			_kind: 'openwebui.directive',
-			version: 1,
-			name: 'token_replacer.generate.result',
-			assistant_only: true,
-			payload: { result }
+			name: 'token_replacer.generate',
 		};
-		try {
-			await appHooks.callHook('chat.submit', { prompt: JSON.stringify(directive) });
-		} catch {
-			// ignore hook issues; generation already succeeded
-		}
+		await appHooks.callHook('chat.submit', { prompt: $i18n.t('Generate document now.'), privateAi: { directive } });
 	} catch (e) {
 		console.error(e);
 		toast.error($i18n.t('Failed to generate document.'));

@@ -103,6 +103,9 @@
 			usage?: unknown;
 		};
 		annotation?: { type: string; rating: number };
+		meta?: {
+			privateAi?: Record<string, unknown>;
+		}
 	}
 
 	export let chatId = '';
@@ -591,6 +594,10 @@
 			});
 		}
 	});
+
+	function isPrivateAiDirectiveMessage(m: MessageType) {
+		return !!m.meta?.privateAi?.directive;
+	}
 </script>
 
 <DeleteConfirmDialog
@@ -622,6 +629,9 @@
 				<Tooltip content={model?.name ?? message.model} placement="top-start">
 					<span class="line-clamp-1 text-black dark:text-white">
 						{model?.name ?? message.model}
+						{#if isPrivateAiDirectiveMessage(message)}
+							<span class="opacity-75 text-xs">(Sidekick)</span>
+						{/if}
 					</span>
 				</Tooltip>
 
@@ -1342,6 +1352,8 @@
 										</Tooltip>
 									{/if}
 
+									<!-- Don't show the regenerate button for response to a directive -->
+									{#if !isPrivateAiDirectiveMessage(message)}
 									{#if $settings?.regenerateMenu ?? true}
 										<button
 											type="button"
@@ -1449,6 +1461,7 @@
 												</svg>
 											</button>
 										</Tooltip>
+									{/if}
 									{/if}
 
 									{#if siblings.length > 1}
