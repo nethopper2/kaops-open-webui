@@ -8,6 +8,7 @@
   let fromError = '';
   let toError = '';
   let checkdateError = '';
+  let futuredateError = '';
 
   let fromdateInput;
   let todateInput;
@@ -38,12 +39,21 @@
     if (customFrom && customTo) {
       const from = new Date(customFrom);
       const to = new Date(customTo);
+      const today = new Date();
+        today.setHours(0,0,0,0);
 
       if (to < from) {
         checkdateError = "End date must be on or after start date."
         valid = false
       } else {
         checkdateError = "";
+      }
+
+      if (from>today || to>today) {
+        futuredateError = "Date must be on or before today."
+        valid = false
+      } else {
+        futuredateError = "";
       }
     }
 
@@ -85,6 +95,10 @@
     <p class="text-red-500 text-xs mt-1 ml-1">{fromError}</p>
   {/if}
 
+  {#if futuredateError}
+    <p class="text-red-500 text-xs mt-1 ml-1">{futuredateError}</p>
+  {/if}
+
   <label
     class="block mt-2 ml-1 text-xs"
     on:click|stopPropagation
@@ -114,6 +128,10 @@
 
   {#if checkdateError}
     <p class="text-red-500 text-xs mt-1 ml-1">{checkdateError}</p>
+  {/if}
+
+  {#if futuredateError}
+    <p class="text-red-500 text-xs mt-1 ml-1">{futuredateError}</p>
   {/if}
 
   <div class="flex justify-left text-sm mt-2 mb-0.5 ml-1 gap-53"
