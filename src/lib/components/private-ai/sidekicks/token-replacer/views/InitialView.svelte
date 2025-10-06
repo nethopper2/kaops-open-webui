@@ -3,6 +3,7 @@ import Select from 'svelte-select';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import Eye from '$lib/components/icons/Eye.svelte';
 import { getContext, onMount } from 'svelte';
+import { get } from 'svelte/store';
 import { appHooks } from '$lib/utils/hooks';
 import { isChatStarted, chatId } from '$lib/stores';
 import {
@@ -15,7 +16,7 @@ import {
 } from '../stores';
 import { savePrivateAiSidekickState } from '$lib/private-ai/state';
 import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
-import { getTokenReplacerFileHealth, type TokenReplacerFileHealth } from '$lib/apis/private-ai/sidekicks/token-replacer';
+import { getTokenReplacerFileHealth, type TokenReplacerFileHealth, uploadTokenizedDocument } from '$lib/apis/private-ai/sidekicks/token-replacer';
 
 const i18n = getContext('i18n');
 
@@ -25,6 +26,10 @@ $: void modelId;
 let analyzing = false;
 let analysisError: string | null = null;
 let analysis: TokenReplacerFileHealth | null = null;
+
+let uploading = false;
+let uploadError: string | null = null;
+let fileInputEl: HTMLInputElement | null = null;
 
 async function analyzeSelected() {
 	analysisError = null;
@@ -56,6 +61,52 @@ function openPreviewDialog() {
 onMount(() => {
 	ensureFilesFetched();
 });
+
+async function onFileChange(e: Event) {
+	const input = e.currentTarget as HTMLInputElement;
+	const file = input?.files && input.files[0] ? input.files[0] : null;
+	if (!file) return;
+	uploadError = null;
+	uploading = true;
+	try {
+		const res = await uploadTokenizedDocument(file);
+		// small delay before attempting to select
+		await new Promise((r) => setTimeout(r, 600));
+		// Update in-memory list and try to select
+		const newPath = String(res.filePath || '').trim();
+		const name = newPath.split('/').pop() || file.name || 'Uploaded document';
+		const newEntry = {
+			fullPath: newPath,
+			name,
+			size: Number(res.size ?? file.size ?? 0),
+			sourceName: 'userUploads',
+			lastModified: String(res.uploadedAt ?? new Date().toISOString()),
+			metadata: {}
+		};
+
+		tokenizedFiles.update((list) => {
+			const exists = (list ?? []).some((f) => String(f.fullPath) === newPath);
+			if (exists) {
+				return (list ?? []).map((f) => (String(f.fullPath) === newPath ? { ...f, ...newEntry } : f));
+			}
+			return [...(list ?? []), newEntry];
+		});
+
+		// Attempt to select; verify presence
+		const filesNow = get(tokenizedFiles);
+		const found = (filesNow ?? []).find((f) => String(f.fullPath) === newPath);
+		if (found) {
+			selectedTokenizedDocPath.set(found.fullPath);
+		} else {
+			uploadError = 'Uploaded document was not found in the list. Please try again.';
+		}
+	} catch (err) {
+		uploadError = err instanceof Error ? err.message : 'Failed to upload document';
+	} finally {
+		uploading = false;
+		if (fileInputEl) fileInputEl.value = '';
+	}
+}
 </script>
 
 
@@ -96,7 +147,31 @@ onMount(() => {
 <!--					<Eye className="w-5 h-5" />-->
 				</button>
 			</Tooltip>
-		</div>
+
+			<!-- Hidden file input for uploads -->
+			<input
+				bind:this={fileInputEl}
+				type="file"
+				class="hidden"
+				accept=".docx,.csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/csv,application/octet-stream"
+				on:change={onFileChange}
+			/>
+
+			<Tooltip content="Upload Tokenized Document" placement="top">
+				<button
+					class="p-1 rounded bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+					disabled={uploading}
+					aria-label="Upload Tokenized Document"
+					on:click={() => fileInputEl && fileInputEl.click()}
+				>
+					<div class="h-5 w-5">⤴️</div>
+				</button>
+			</Tooltip>
+ 	</div>
+
+		{#if uploadError}
+			<div class="mt-2 w-full text-xs text-red-600 dark:text-red-400">{uploadError}</div>
+		{/if}
 
 		{#if $selectedTokenizedDocPath !== ""}
 			<div class="flex w-full flex-col items-center justify-center mt-6 gap-3">
