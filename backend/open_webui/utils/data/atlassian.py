@@ -112,12 +112,13 @@ def detect_atlassian_deployment(bearer_token: str = None, base_url: str = None) 
 #         log.error(f"Failed to make Atlassian API request to {url}: {e}", exc_info=True)
 #         raise Exception(f"Failed to make Atlassian API request after retries for URL: {url}")
 
+
 def make_atlassian_request(url: str, method: str = 'GET', headers: Optional[Dict[str, str]] = None,
                            params: Optional[Dict[str, Any]] = None, data: Optional[Any] = None,
                            stream: bool = False, bearer_token: Optional[str] = None, 
                            auth: Optional[HTTPBasicAuth] = None):
     """
-    Unified request handler - prioritizes Basic Auth for self-hosted
+    Unified request handler - supports Bearer token (cloud OAuth or self-hosted PAT)
     """
     global total_api_calls
     total_api_calls += 1
@@ -128,14 +129,13 @@ def make_atlassian_request(url: str, method: str = 'GET', headers: Optional[Dict
     headers.setdefault('Content-Type', 'application/json')
     headers.setdefault('Accept', 'application/json')
     
-    # Priority: Basic Auth (self-hosted) > Bearer Token (cloud)
-    if auth:
-        # Basic Auth - pass directly to requests
-        log.debug(f"Using Basic Auth for {url}")
-    elif bearer_token:
-        # Bearer token for cloud OAuth
+    # Use Bearer token for both cloud OAuth and self-hosted PAT
+    if bearer_token:
         headers['Authorization'] = f'Bearer {bearer_token}'
         log.debug(f"Using Bearer token for {url}")
+    elif auth:
+        # Legacy Basic Auth support (if needed)
+        log.debug(f"Using Basic Auth for {url}")
     else:
         log.warning(f"No authentication provided for {url}")
 
@@ -291,11 +291,12 @@ def list_jira_projects_and_issues(site_url, cloud_id, bearer_token: str, all_ite
 
     return all_items
 
+
 def list_jira_projects_self_hosted(base_url: str, bearer_token: str = None, 
                                     auth=None):
-    """Get list of available Jira projects from self-hosted instance"""
+    """Get list of available Jira projects from self-hosted instance using PAT"""
     
-    jira_base_url = f"{base_url}/rest/api/3"
+    jira_base_url = f"{base_url}/rest/api/2"
     
     log.info(f"Fetching Jira projects for self-hosted: {jira_base_url}")
 
@@ -310,11 +311,12 @@ def list_jira_projects_self_hosted(base_url: str, bearer_token: str = None,
                 'maxResults': max_results
             }
             
+            # Use PAT as bearer token
             response = make_atlassian_request(
                 f"{jira_base_url}/project/search", 
                 params=params, 
                 bearer_token=bearer_token,
-                auth=auth
+                auth=auth  
             )
             
             projects = response.get('values', [])
@@ -346,7 +348,7 @@ def list_jira_projects_and_issues_self_hosted(base_url: str, bearer_token: str =
         all_items = []
 
     # Direct API path for self-hosted
-    jira_base_url = f"{base_url}/rest/api/3"
+    jira_base_url = f"{base_url}/rest/api/2"
     
     log.info(f"Listing Jira projects for self-hosted: {jira_base_url}")
 
@@ -472,7 +474,7 @@ def list_jira_selected_projects_and_issues_self_hosted(base_url: str, bearer_tok
     if all_items is None:
         all_items = []
 
-    jira_base_url = f"{base_url}/rest/api/3"
+    jira_base_url = f"{base_url}/rest/api/2"
     
     log.info(f"Listing selected Jira projects for self-hosted: {jira_base_url}")
     log.info(f"Selected project keys: {project_keys}")
@@ -1579,27 +1581,15 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
                         log.error(f"Error listing {site_info['type']} for site {site_info['site_url']}: {str(e)}", exc_info=True)
         
         elif deployment_type == 'self_hosted':
-            # ============ SELF-HOSTED BASIC AUTH FLOW ============
-            log.info("Using self-hosted Atlassian deployment")
+            # ============ SELF-HOSTED PAT FLOW ============
+            log.info("Using self-hosted Atlassian deployment with PAT")
             
             if not base_url:
                 raise ValueError("Base URL required for self-hosted Atlassian")
             
-            # Parse credentials from token
-            # Expected format: "username:password" for Basic Auth
-            # OR just token string for PAT
-            auth = None
-            bearer_token = None
-            
-            if ':' in token:
-                # Basic Auth (default)
-                username_auth, password = token.split(':', 1)
-                auth = HTTPBasicAuth(username_auth, password)
-                log.info(f"Using Basic Auth for self-hosted with username: {username_auth}")
-            else:
-                # Personal Access Token fallback
-                bearer_token = token
-                log.info("Using PAT for self-hosted")
+            # Token is always a PAT for self-hosted
+            bearer_token = token
+            log.info("Using PAT for self-hosted authentication")
             
             # Process Jira if needed
             if should_process_jira:
@@ -1610,7 +1600,7 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
                         items = list_jira_projects_and_issues_self_hosted(
                             jira_url,
                             bearer_token=bearer_token,
-                            auth=auth,
+                            auth=None,
                             all_items=[],
                             layer=layer
                         )
@@ -1630,7 +1620,7 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
                         items = list_confluence_spaces_and_pages_self_hosted(
                             confluence_url,
                             bearer_token=bearer_token,
-                            auth=auth,
+                            auth=None,
                             all_items=[],
                             layer=layer
                         )
@@ -1711,28 +1701,16 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
                         reason = f"Atlassian version newer ({item['modifiedTime']} > {storage_file.get('updated')})"
                 
                 if needs_upload:
-                    # Prepare authentication for download
-                    if deployment_type == 'self_hosted':
-                        if ':' in token:
-                            username_auth, password = token.split(':', 1)
-                            download_auth = HTTPBasicAuth(username_auth, password)
-                            download_bearer = None
-                        else:
-                            download_auth = None
-                            download_bearer = token
-                    else:
-                        download_auth = None
-                        download_bearer = token
-                    
+                    # Use PAT as bearer token for both cloud and self-hosted
                     futures.append(
                         (
                             executor.submit(
                                 download_and_upload_atlassian_item,
                                 item,
-                                download_bearer if deployment_type == 'cloud' else download_bearer,
+                                token,  # Use token directly as bearer
                                 bool(storage_file),
                                 reason,
-                                download_auth
+                                None  # No Basic Auth needed
                             ),
                             item
                         )
@@ -1779,6 +1757,173 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
         await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
         log.error(f"[{datetime.now().isoformat()}] Atlassian Sync failed critically: {str(error)}", exc_info=True)
         raise error
+
+
+async def initiate_atlassian_sync_selected_self_hosted(user_id: str, credentials: str, 
+                                                        project_keys: List[str], 
+                                                        layer: str, base_url: str):
+    """Sync only selected Jira projects for self-hosted using PAT"""
+    
+    log.info(f'Initiating self-hosted Atlassian sync for selected projects')
+    log.info(f'User ID: {user_id}, Projects: {project_keys}')
+
+    global USER_ID, USER, script_start_time, total_api_calls
+
+    USER_ID = user_id
+    USER = Users.get_user_by_id(user_id)
+    
+    if not USER:
+        raise ValueError(f"User with ID {user_id} not found")
+    
+    total_api_calls = 0
+    script_start_time = time.time()
+
+    await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'syncing')
+
+    try:
+        # Credentials is now always a PAT
+        bearer_token = credentials
+        log.info("Using PAT for self-hosted selected projects sync")
+        
+        # Get all items from selected projects
+        all_items = list_jira_selected_projects_and_issues_self_hosted(
+            base_url=base_url,
+            bearer_token=bearer_token,
+            auth=None,  # No Basic Auth needed
+            project_keys=project_keys,
+            all_items=[],
+            layer=layer
+        )
+        
+        log.info(f"Found {len(all_items)} items from selected projects")
+        
+        uploaded_items = []
+        deleted_items = []
+        skipped_items = 0
+        
+        # Determine folder prefix
+        if layer and layer in LAYER_CONFIG:
+            layer_folder = LAYER_CONFIG[layer]['folder']
+            user_prefix = f"userResources/{USER_ID}/Atlassian/{layer_folder}/"
+        else:
+            user_prefix = f"userResources/{USER_ID}/Atlassian/"
+        
+        # Get existing storage files
+        storage_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
+        storage_file_map = {file_info['name']: file_info for file_info in storage_files}
+        atlassian_item_paths = {item['fullPath'] for item in all_items}
+        
+        # Delete orphans for selected projects only
+        for file_name, file_info in storage_file_map.items():
+            is_selected_project = any(f"/{project_key}/" in file_name for project_key in project_keys)
+            if file_name.startswith(user_prefix) and is_selected_project and file_name not in atlassian_item_paths:
+                try:
+                    delete_file_unified(file_name, user_id=USER_ID)
+                    deleted_items.append({
+                        'name': file_name,
+                        'size': file_info.get('size'),
+                        'timeCreated': file_info.get('timeCreated')
+                    })
+                    log.info(f"[{datetime.now().isoformat()}] Deleted orphan: {file_name}")
+                except Exception as e:
+                    log.error(f"Error deleting orphan file {file_name}: {str(e)}")
+        
+        # Upload items in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = []
+            
+            for item in all_items:
+                # Check for excluded files/extensions (only for attachments)
+                if item.get('type') == 'attachment':
+                    if any(pattern.lower() in item['fullPath'].lower() for pattern in EXCLUDED_FILES if pattern):
+                        log.info(f"Excluded (filename pattern): {item['fullPath']}")
+                        skipped_items += 1
+                        continue
+                    
+                    file_ext = item['fullPath'].split('.')[-1].lower() if '.' in item['fullPath'] else ''
+                    if ALLOWED_EXTENSIONS and file_ext not in ALLOWED_EXTENSIONS:
+                        log.info(f"Skipped (extension): {file_ext} in {item['fullPath']}")
+                        skipped_items += 1
+                        continue
+                
+                storage_file = storage_file_map.get(item['fullPath'])
+                
+                needs_upload = False
+                reason = ''
+                
+                if not storage_file:
+                    needs_upload = True
+                    reason = 'New item'
+                else:
+                    storage_updated = parse_date(storage_file.get('updated'))
+                    atlassian_modified = parse_date(item.get('modifiedTime'))
+                    
+                    if atlassian_modified and storage_updated and atlassian_modified > storage_updated:
+                        needs_upload = True
+                        reason = f"Atlassian version newer ({item['modifiedTime']} > {storage_file.get('updated')})"
+                
+                if needs_upload:
+                    futures.append(
+                        (
+                            executor.submit(
+                                download_and_upload_atlassian_item,
+                                item,
+                                bearer_token,
+                                bool(storage_file),
+                                reason,
+                                None  # No Basic Auth needed
+                            ),
+                            item
+                        )
+                    )
+                else:
+                    skipped_items += 1
+            
+            # Process completed uploads
+            for future, item_for_log in futures:
+                try:
+                    result = future.result()
+                    if result:
+                        uploaded_items.append(result)
+                except Exception as e:
+                    log.error(f"Error processing future for {item_for_log.get('fullPath')}: {str(e)}", exc_info=True)
+        
+        # Enhanced summary
+        log.info('\nSync Summary for Selected Projects:')
+        for item in uploaded_items:
+            symbol = '+' if item['type'] == 'new' else '^'
+            log.info(
+                f" {symbol} {item['path']} | {format_bytes(item['size'])} | {item['durationMs']}ms | {item['reason']}"
+            )
+        
+        for item in deleted_items:
+            log.info(f" - {item['name']} | {format_bytes(item['size'])} | Created: {item['timeCreated']}")
+        
+        total_runtime = int((time.time() - script_start_time) * 1000)
+        log.info("\nAccounting Metrics:")
+        log.info(f"⏱️  Total Runtime: {(total_runtime/1000):.2f} seconds")
+        log.info(f"📊 Billable API Calls: {total_api_calls}")
+        log.info(f"📦 Items Processed: {len(all_items)}")
+        log.info(f"🗑️  Orphans Removed: {len(deleted_items)}")
+        log.info(f"📂 Selected Projects: {', '.join(project_keys)}")
+        
+        log.info(f"\nTotal: +{len([f for f in uploaded_items if f['type'] == 'new'])} added, " +
+              f"^{len([f for f in uploaded_items if f['type'] == 'updated'])} updated, " +
+              f"-{len(deleted_items)} removed, {skipped_items} skipped")
+        
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'synced')
+        
+        return {
+            "status": "completed",
+            "message": f"Self-hosted sync completed for {len(project_keys)} projects",
+            "user_id": user_id,
+            "layer": layer,
+            "project_count": len(project_keys)
+        }
+    except Exception as e:
+        log.error(f"Self-hosted selected projects sync failed: {e}", exc_info=True)
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
+        raise
 
 async def initiate_atlassian_sync(user_id: str, token: str, layer: str = None,
                                   deployment_type: str = 'cloud',
@@ -1836,112 +1981,6 @@ async def initiate_atlassian_sync(user_id: str, token: str, layer: str = None,
         }
     except Exception as e:
         log.error(f"Atlassian sync initiation failed: {e}", exc_info=True)
-        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
-        raise
-
-async def initiate_atlassian_sync_selected_self_hosted(user_id: str, credentials: str, 
-                                                        project_keys: List[str], 
-                                                        layer: str, base_url: str):
-    """Sync only selected Jira projects for self-hosted"""
-    
-    log.info(f'Initiating self-hosted Atlassian sync for selected projects')
-    log.info(f'User ID: {user_id}, Projects: {project_keys}')
-
-    global USER_ID, USER, script_start_time, total_api_calls
-
-    USER_ID = user_id
-    USER = Users.get_user_by_id(user_id)
-    
-    if not USER:
-        raise ValueError(f"User with ID {user_id} not found")
-    
-    total_api_calls = 0
-    script_start_time = time.time()
-
-    await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'syncing')
-
-    try:
-        # Parse credentials
-        if ':' in credentials:
-            username, password = credentials.split(':', 1)
-            auth = HTTPBasicAuth(username, password)
-            bearer_token = None
-        else:
-            auth = None
-            bearer_token = credentials
-        
-        # Get all items from selected projects
-        all_items = list_jira_selected_projects_and_issues_self_hosted(
-            base_url=base_url,
-            bearer_token=bearer_token,
-            auth=auth,
-            project_keys=project_keys,
-            all_items=[],
-            layer=layer
-        )
-        
-        log.info(f"Found {len(all_items)} items from selected projects")
-        
-        # Upload/sync logic (similar to sync_atlassian_selected_projects)
-        uploaded_items = []
-        deleted_items = []
-        skipped_items = 0
-        
-        # Determine folder prefix
-        if layer and layer in LAYER_CONFIG:
-            layer_folder = LAYER_CONFIG[layer]['folder']
-            user_prefix = f"userResources/{USER_ID}/Atlassian/{layer_folder}/"
-        else:
-            user_prefix = f"userResources/{USER_ID}/Atlassian/"
-        
-        # Get existing storage files
-        storage_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
-        storage_file_map = {file_info['name']: file_info for file_info in storage_files}
-        atlassian_item_paths = {item['fullPath'] for item in all_items}
-        
-        # Delete orphans for selected projects only
-        for file_name, file_info in storage_file_map.items():
-            is_selected_project = any(f"/{project_key}/" in file_name for project_key in project_keys)
-            if file_name.startswith(user_prefix) and is_selected_project and file_name not in atlassian_item_paths:
-                delete_file_unified(file_name, user_id=USER_ID)
-                deleted_items.append({'name': file_name, 'size': file_info.get('size')})
-        
-        # Upload items
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = []
-            for item in all_items:
-                storage_file = storage_file_map.get(item['fullPath'])
-                needs_upload = not storage_file or (
-                    parse_date(item.get('modifiedTime')) > parse_date(storage_file.get('updated'))
-                )
-                
-                if needs_upload:
-                    futures.append(executor.submit(
-                        download_and_upload_atlassian_item,
-                        item, bearer_token, bool(storage_file), 
-                        'New item' if not storage_file else 'Updated', auth
-                    ))
-            
-            for future in futures:
-                try:
-                    result = future.result()
-                    if result:
-                        uploaded_items.append(result)
-                except Exception as e:
-                    log.error(f"Upload error: {str(e)}")
-        
-        log.info(f"Sync complete: +{len(uploaded_items)} uploaded, -{len(deleted_items)} deleted")
-        
-        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'synced')
-        
-        return {
-            "status": "completed",
-            "message": f"Self-hosted sync completed for {len(project_keys)} projects",
-            "user_id": user_id,
-            "layer": layer
-        }
-    except Exception as e:
-        log.error(f"Self-hosted selected projects sync failed: {e}", exc_info=True)
         await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
         raise
 

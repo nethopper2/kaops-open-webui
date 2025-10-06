@@ -11,8 +11,7 @@
 
 	const dispatch = createEventDispatcher();
 
-	let username = '';
-	let password = '';
+	let pat = '';
 	let loading = false;
 	let error = '';
 
@@ -25,25 +24,20 @@
 	};
 
 	const handleSubmit = async () => {
-		if (!username || !password || !dataSource) return;
+		if (!pat || !dataSource) return;
 
 		error = '';
 		loading = true;
 
 		try {
-			const response = await atlassianSelfHostedAuth(
-				username,
-				password,
-				dataSource.layer || 'jira'
-			);
+			const response = await atlassianSelfHostedAuth(pat, dataSource.layer || 'jira');
 
 			if (response.ok) {
 				const result = await response.json();
 				console.log('Self-hosted Jira auth successful:', result);
 
 				// Reset form
-				username = '';
-				password = '';
+				pat = '';
 				show = false;
 
 				// Notify parent component
@@ -69,8 +63,7 @@
 	};
 
 	const handleClose = () => {
-		username = '';
-		password = '';
+		pat = '';
 		error = '';
 		show = false;
 		dispatch('close');
@@ -120,12 +113,12 @@
 						for="jira-username"
 						class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
 					>
-						Username
+						Personal Access Token
 					</label>
 					<input
-						id="jira-username"
+						id="jira-pat"
 						type="text"
-						bind:value={username}
+						bind:value={pat}
 						required
 						disabled={loading}
 						class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
@@ -133,32 +126,8 @@
 						       bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
 						       disabled:opacity-50 disabled:cursor-not-allowed
 						       transition-colors"
-						placeholder="your.username"
-						autocomplete="username"
-					/>
-				</div>
-
-				<!-- Password -->
-				<div>
-					<label
-						for="jira-password"
-						class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-					>
-						Password
-					</label>
-					<input
-						id="jira-password"
-						type="password"
-						bind:value={password}
-						required
-						disabled={loading}
-						class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-						       focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-						       bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-						       disabled:opacity-50 disabled:cursor-not-allowed
-						       transition-colors"
-						placeholder="••••••••"
-						autocomplete="current-password"
+						placeholder="your.pat"
+						autocomplete="Personal Access Token"
 					/>
 				</div>
 
@@ -187,7 +156,7 @@
 					</button>
 					<button
 						type="submit"
-						disabled={loading || !username || !password}
+						disabled={loading || !pat}
 						class="flex-1 px-4 py-2.5 text-sm font-medium text-white
 						       bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors
 						       disabled:opacity-50 disabled:cursor-not-allowed

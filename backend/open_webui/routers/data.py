@@ -1242,11 +1242,10 @@ async def sync_selected_jira_projects(
         log.error(f"Failed to start selected projects sync: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
+
 class AtlassianSelfHostedAuthForm(BaseModel):
-    username: str
-    password: str
+    pat_token: str 
     layer: Optional[str] = 'jira'
-    auth_type: str = 'basic'
 
 @router.post("/atlassian/self-hosted/auth")
 async def atlassian_self_hosted_auth(
@@ -1254,7 +1253,7 @@ async def atlassian_self_hosted_auth(
     form_data: AtlassianSelfHostedAuthForm,
     user=Depends(get_verified_user)
 ):
-    """Authenticate with self-hosted Atlassian using Basic Auth (default) or PAT"""
+    """Authenticate with self-hosted Atlassian using Personal Access Token (PAT)"""
     if not user:
         raise HTTPException(status_code=401, detail="User not authenticated")
     
@@ -1272,11 +1271,16 @@ async def atlassian_self_hosted_auth(
         if not base_url:
             raise HTTPException(status_code=400, detail=f"Self-hosted {form_data.layer} URL not configured")
         
-        test_url = f"{base_url}/rest/api/3/myself" if form_data.layer == 'jira' else f"{base_url}/rest/api/user/current"
+        
+        test_url = f"{base_url}/rest/api/2/myself" if form_data.layer == 'jira' else f"{base_url}/rest/api/user/current"
         
         try:
-            test_auth = HTTPBasicAuth(form_data.username, form_data.password)
-            test_response = requests.get(test_url, auth=test_auth, timeout=10)
+            # Use PAT as Bearer token
+            headers = {
+                'Authorization': f'Bearer {form_data.pat_token}',
+                'Accept': 'application/json'
+            }
+            test_response = requests.get(test_url, headers=headers, timeout=10)
             
             if test_response.status_code != 200:
                 raise HTTPException(
@@ -1284,36 +1288,37 @@ async def atlassian_self_hosted_auth(
                     detail=f"Authentication failed: {test_response.status_code} - {test_response.text}"
                 )
             
-            log.info(f"Successfully authenticated {form_data.username} with self-hosted Atlassian")
+            user_info = test_response.json()
+            user_identifier = user_info.get('emailAddress') or user_info.get('accountId') or 'unknown'
+            log.info(f"Successfully authenticated PAT for user: {user_identifier}")
             
         except requests.exceptions.RequestException as e:
-            log.error(f"Failed to verify credentials: {str(e)}")
+            log.error(f"Failed to verify PAT: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to connect to self-hosted instance: {str(e)}")
         
-        # Store credentials as "username:password" format
-        credentials = f"{form_data.username}:{form_data.password}"
-        encrypted_credentials, _ = encrypt_tokens(credentials, None)
+        # Store PAT (encrypted)
+        encrypted_pat, _ = encrypt_tokens(form_data.pat_token, None)
         
         # Store in database
         OAuthTokens.insert_new_token(
             user_id=user.id,
             provider_name='Atlassian',
-            provider_user_id=form_data.username,
+            provider_user_id=user_identifier,
             provider_team_id='self_hosted',  # Marker for self-hosted
-            encrypted_access_token=encrypted_credentials,
+            encrypted_access_token=encrypted_pat,
             encrypted_refresh_token=None,
-            access_token_expires_at=None,  # Basic auth doesn't expire
-            scopes='self_hosted_basic_auth',
+            access_token_expires_at=None,  
+            scopes='self_hosted_pat',
             layer=form_data.layer
         )
         
-        log.info(f"Stored self-hosted Atlassian credentials for user {user.id}")
+        log.info(f"Stored self-hosted Atlassian PAT for user {user.id}")
         
         return {
             "success": True, 
             "message": f"Self-hosted Atlassian authentication successful. Sync initiated for {form_data.layer}.",
             "deployment_type": "self_hosted",
-            "auth_type": "basic"
+            "auth_type": "pat"
         }
         
     except HTTPException:
@@ -1321,7 +1326,6 @@ async def atlassian_self_hosted_auth(
     except Exception as e:
         log.error(f"Self-hosted Atlassian auth failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
-
 ############################
 # Universal OAuth Endpoints
 ############################

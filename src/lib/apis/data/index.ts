@@ -417,11 +417,7 @@ export const syncSelectedJiraProjects = async (
 	return res;
 };
 
-export const atlassianSelfHostedAuth = async (
-	username: string,
-	password: string,
-	layer: string
-) => {
+export const atlassianSelfHostedAuth = async (pat: string, layer: string) => {
 	let error = null;
 
 	const response = await fetch(`${DATA_API_BASE_URL}/atlassian/self-hosted/auth`, {
@@ -431,10 +427,8 @@ export const atlassianSelfHostedAuth = async (
 			Authorization: `Bearer ${localStorage.getItem('token')}`
 		},
 		body: JSON.stringify({
-			username: username.trim(),
-			password: password,
-			layer: layer || 'jira',
-			auth_type: 'basic'
+			pat_token: pat,
+			layer: layer || 'jira'
 		})
 	})
 		.then(async (res) => {
