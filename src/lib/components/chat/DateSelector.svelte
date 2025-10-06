@@ -94,7 +94,7 @@ function handlecancel(e) {
     <div
         bind:this={DateDropdownRef}
         style={DateDropdownStyle}
-        class="absolute rounded-md shadow-lg w-full bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50"
+        class="absolute rounded-md shadow-lg max-w-full bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50"
     >
         {#each DateOptions as option}
             <button

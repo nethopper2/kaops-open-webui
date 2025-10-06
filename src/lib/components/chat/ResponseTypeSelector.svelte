@@ -73,12 +73,16 @@ function ResponseToggleDropdown() {
     </Tooltip>
 </div>
 
-<div style= {ResponseDropdownStyle} class:hidden={!ResponseTypeSelectorEnabled}>
-    <div class="absolute rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50">
+{#if ResponseTypeSelectorEnabled}
+    <div
+        bind:this={ResponseDropdownRef}
+        style={ResponseDropdownStyle}
+        class="absolute rounded-md shadow-lg max-w-full bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50"
+    >
         {#each ResponseOptions as option}
             <button
                 type="button"
-                class="flex items-center px-1 py-1 text-sm text-left font-small w-full hover:bg-gray-700 cursor-pointer
+                class="flex w-full text-left items-center px-1 py-1 text-sm font-small hover:bg-gray-700 cursor-pointer
                     {ResponseType === option
                         ? 'text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
                         : ''}"
@@ -91,4 +95,4 @@ function ResponseToggleDropdown() {
             </button>
         {/each}
     </div>
-</div>
+{/if}
