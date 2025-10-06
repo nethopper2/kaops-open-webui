@@ -59,7 +59,7 @@
 
 <div class="max-w-full shadow-lg border rounded border-gray-50 dark:border-gray-850">
   <label
-    class="block text-xs ml-1"
+    class="block text-xs ml-1 mt-1"
     on:click|stopPropagation
   >
     From:
