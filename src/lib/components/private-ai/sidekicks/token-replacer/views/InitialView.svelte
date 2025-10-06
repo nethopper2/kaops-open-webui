@@ -124,7 +124,7 @@ async function onFileChange(e: Event) {
 				label="name"
 				itemId="fullPath"
 				clearable={true}
-				class="w-full max-w-full rounded-md border border-gray-300 bg-white text-gray-900 shadow-sm hover:border-gray-400 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-white dark:!border-gray-700 dark:!bg-gray-900 dark:!text-gray-100 dark:!hover:border-gray-600 dark:!focus-within:ring-blue-400 dark:!focus-within:ring-offset-gray-900"
+				class="flex-1 min-w-0 rounded-md border border-gray-300 bg-white text-gray-900 shadow-sm hover:border-gray-400 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-white dark:!border-gray-700 dark:!bg-gray-900 dark:!text-gray-100 dark:!hover:border-gray-600 dark:!focus-within:ring-blue-400 dark:!focus-within:ring-offset-gray-900"
 				showChevron
 				loading={$filesLoading}
 				on:select={(e) => {
@@ -138,7 +138,7 @@ async function onFileChange(e: Event) {
 			/>
 			<Tooltip content="Preview Document" placement="top">
 				<button
-					class="p-1 rounded bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed {$selectedTokenizedDocPath === '' ? 'border-gray-200 dark:border-gray-800 cursor-not-allowed' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900'}"
+					class="flex-shrink-0 p-1 rounded bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed {$selectedTokenizedDocPath === '' ? 'border-gray-200 dark:border-gray-800 cursor-not-allowed' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900'}"
 					disabled={$selectedTokenizedDocPath === ""}
 					aria-label="Preview Document"
 					on:click={() => openPreviewDialog()}
@@ -153,13 +153,13 @@ async function onFileChange(e: Event) {
 				bind:this={fileInputEl}
 				type="file"
 				class="hidden"
-				accept=".docx,.csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/csv,application/octet-stream"
+				accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 				on:change={onFileChange}
 			/>
 
 			<Tooltip content="Upload Tokenized Document" placement="top">
 				<button
-					class="p-1 rounded bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+					class="flex-shrink-0 p-1 rounded bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={uploading}
 					aria-label="Upload Tokenized Document"
 					on:click={() => fileInputEl && fileInputEl.click()}
