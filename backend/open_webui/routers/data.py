@@ -2,6 +2,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
 import requests
+from requests.auth import HTTPBasicAuth
 import os
 import logging
 import jwt
@@ -70,6 +71,12 @@ from open_webui.env import (
     ATLASSIAN_CLIENT_ID,
     ATLASSIAN_CLIENT_SECRET,
     ATLASSIAN_REDIRECT_URL,
+
+    ATLASSIAN_DEPLOYMENT_TYPE,
+    ATLASSIAN_SELF_HOSTED_ENABLED,
+    ATLASSIAN_SELF_HOSTED_JIRA_URL,
+    ATLASSIAN_SELF_HOSTED_CONFLUENCE_URL,
+    ATLASSIAN_SELF_HOSTED_AUTH_TYPE,
 
     MINERAL_CLIENT_ID,
     MINERAL_CLIENT_SECRET,
@@ -199,6 +206,10 @@ PROVIDER_CONFIGS = {
         'token_url': ATLASSIAN_TOKEN_URL,
         'revoke_url': None,  # Atlassian doesn't have a direct revoke endpoint
         'scope_separator': ' ',
+        'self_hosted_enabled': ATLASSIAN_SELF_HOSTED_ENABLED,
+        'self_hosted_jira_url': ATLASSIAN_SELF_HOSTED_JIRA_URL,
+        'self_hosted_confluence_url': ATLASSIAN_SELF_HOSTED_CONFLUENCE_URL,
+        'self_hosted_auth_type': ATLASSIAN_SELF_HOSTED_AUTH_TYPE,
         'default_scopes': [
             "read:me",           # Required for user identity
             "read:account", 
@@ -1003,11 +1014,10 @@ async def mineral_auth(
 async def get_available_jira_projects(
     user=Depends(get_verified_user)
 ):
-    """Get list of available Jira projects for user selection"""
+    """Get list of available Jira projects for user selection (cloud or self-hosted)"""
     if not user:
         raise HTTPException(status_code=401, detail="User not authenticated")
     
-    # Get token entry
     token_entry = OAuthTokens.get_token_by_user_provider_details(
         user_id=user.id,
         provider_name='Atlassian'
@@ -1019,93 +1029,120 @@ async def get_available_jira_projects(
             detail="No Atlassian integration found. Please authorize first."
         )
 
-    # Handle token refresh if needed
+    # Determine deployment type
+    is_self_hosted = token_entry.provider_team_id == 'self_hosted'
+    
     try:
-        access_token, needs_reauth = handle_token_refresh('atlassian', token_entry, user.id)
-        
-        if needs_reauth:
-            reauth_url = generate_reauth_url('atlassian', user.id, 'jira')
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": "token_expired_no_refresh",
-                    "reauth_url": reauth_url
-                }
+        if is_self_hosted:
+            # Self-hosted flow
+            from open_webui.utils.data.atlassian import list_jira_projects_self_hosted
+            
+            credentials, _ = decrypt_tokens(token_entry)
+            
+            # Parse credentials
+            if ':' in credentials:
+                username, password = credentials.split(':', 1)
+                auth = HTTPBasicAuth(username, password)
+                bearer_token = None
+            else:
+                auth = None
+                bearer_token = credentials
+            
+            # Use Jira URL from config
+            base_url = ATLASSIAN_SELF_HOSTED_JIRA_URL
+            if not base_url:
+                raise HTTPException(status_code=400, detail="Self-hosted Jira URL not configured")
+            
+            all_projects = list_jira_projects_self_hosted(
+                base_url=base_url,
+                bearer_token=bearer_token,
+                auth=auth
             )
-    except HTTPException:
-        raise
-    except Exception as e:
-        log.error(f"Token refresh failed for Atlassian user {user.id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to refresh Atlassian token.")
-
-    try:
-        # Get accessible sites
-        from open_webui.utils.data.atlassian import get_accessible_atlassian_sites, make_atlassian_request
-        
-        accessible_sites = get_accessible_atlassian_sites(access_token)
-        
-        if not accessible_sites:
-            raise HTTPException(status_code=404, detail="No accessible Atlassian sites found")
-        
-        all_projects = []
-        
-        for site in accessible_sites:
-            site_url = site.get('url')
-            cloud_id = site.get('id')
-            scopes = site.get('scopes', [])
             
-            if not site_url or not cloud_id:
-                continue
-                
-            # Check if site has Jira access
-            if not any('jira' in scope for scope in scopes):
-                continue
+            return {
+                "projects": all_projects,
+                "total": len(all_projects),
+                "deployment_type": "self_hosted"
+            }
+        
+        else:
+            # Cloud OAuth flow (existing code)
+            access_token, needs_reauth = handle_token_refresh('atlassian', token_entry, user.id)
             
-            jira_base_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3"
-            
-            # Fetch projects from this site
-            start_at = 0
-            max_results = 50
-            
-            while True:
-                params = {
-                    'startAt': start_at,
-                    'maxResults': max_results,
-                    'query': ''
-                }
-                
-                response = make_atlassian_request(
-                    f"{jira_base_url}/project/search",
-                    params=params,
-                    bearer_token=access_token
+            if needs_reauth:
+                reauth_url = generate_reauth_url('atlassian', user.id, 'jira')
+                raise HTTPException(
+                    status_code=401,
+                    detail={
+                        "error": "token_expired_no_refresh",
+                        "reauth_url": reauth_url
+                    }
                 )
+            
+            from open_webui.utils.data.atlassian import get_accessible_atlassian_sites, make_atlassian_request
+            
+            accessible_sites = get_accessible_atlassian_sites(access_token)
+            
+            if not accessible_sites:
+                raise HTTPException(status_code=404, detail="No accessible Atlassian sites found")
+            
+            all_projects = []
+            
+            for site in accessible_sites:
+                site_url = site.get('url')
+                cloud_id = site.get('id')
+                scopes = site.get('scopes', [])
                 
-                projects = response.get('values', [])
+                if not site_url or not cloud_id:
+                    continue
+                    
+                if not any('jira' in scope for scope in scopes):
+                    continue
                 
-                for project in projects:
-                    all_projects.append({
-                        'id': project.get('id'),
-                        'key': project.get('key'),
-                        'name': project.get('name'),
-                        'description': project.get('description', ''),
-                        'avatarUrl': project.get('avatarUrls', {}).get('48x48', ''),
-                        'site_url': site_url,
-                        'cloud_id': cloud_id
-                    })
+                jira_base_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3"
                 
-                if response.get('isLast', True):
-                    break
-                start_at = response.get('nextPage', start_at + max_results)
-        
-        return {
-            "projects": all_projects,
-            "total": len(all_projects)
-        }
+                start_at = 0
+                max_results = 50
+                
+                while True:
+                    params = {
+                        'startAt': start_at,
+                        'maxResults': max_results,
+                        'query': ''
+                    }
+                    
+                    response = make_atlassian_request(
+                        f"{jira_base_url}/project/search",
+                        params=params,
+                        bearer_token=access_token
+                    )
+                    
+                    projects = response.get('values', [])
+                    
+                    for project in projects:
+                        all_projects.append({
+                            'id': project.get('id'),
+                            'key': project.get('key'),
+                            'name': project.get('name'),
+                            'description': project.get('description', ''),
+                            'avatarUrl': project.get('avatarUrls', {}).get('48x48', ''),
+                            'site_url': site_url,
+                            'cloud_id': cloud_id
+                        })
+                    
+                    if response.get('isLast', True):
+                        break
+                    start_at = response.get('nextPage', start_at + max_results)
+            
+            return {
+                "projects": all_projects,
+                "total": len(all_projects),
+                "deployment_type": "cloud"
+            }
         
     except Exception as e:
         log.error(f"Failed to fetch Jira projects: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch projects: {str(e)}")
-
 
 class SelectedProjectsForm(BaseModel):
     project_keys: List[str]
@@ -1118,14 +1155,13 @@ async def sync_selected_jira_projects(
     form_data: SelectedProjectsForm,
     user=Depends(get_verified_user)
 ):
-    """Sync only selected Jira projects"""
+    """Sync only selected Jira projects (cloud or self-hosted)"""
     if not user:
         raise HTTPException(status_code=401, detail="User not authenticated")
     
     if not form_data.project_keys:
         raise HTTPException(status_code=400, detail="No projects selected")
     
-    # Get token entry
     token_entry = OAuthTokens.get_token_by_user_provider_details(
         user_id=user.id,
         provider_name='Atlassian'
@@ -1137,45 +1173,154 @@ async def sync_selected_jira_projects(
             detail="No Atlassian integration found."
         )
 
-    # Handle token refresh
+    # Determine deployment type
+    is_self_hosted = token_entry.provider_team_id == 'self_hosted'
+    
     try:
-        access_token, needs_reauth = handle_token_refresh('atlassian', token_entry, user.id)
+        if is_self_hosted:
+            # Self-hosted selected projects sync
+            from open_webui.utils.data.atlassian import initiate_atlassian_sync_selected_self_hosted
+            
+            credentials, _ = decrypt_tokens(token_entry)
+            base_url = ATLASSIAN_SELF_HOSTED_JIRA_URL
+            
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+            
+            async def run_self_hosted_selected_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,
+                    lambda: asyncio.run(initiate_atlassian_sync_selected_self_hosted(
+                        user.id, 
+                        credentials, 
+                        form_data.project_keys, 
+                        form_data.layer,
+                        base_url
+                    ))
+                )
+            
+            await create_task(redis_connection, run_self_hosted_selected_sync(), id=f"atlassian_sync_{user.id}")
+            
+            return {
+                "status": "started",
+                "message": f"Syncing {len(form_data.project_keys)} selected projects from self-hosted Jira",
+                "project_count": len(form_data.project_keys),
+                "deployment_type": "self_hosted"
+            }
         
-        if needs_reauth:
-            reauth_url = generate_reauth_url('atlassian', user.id, form_data.layer)
-            raise HTTPException(status_code=401, detail={"reauth_url": reauth_url})
-    except HTTPException:
-        raise
-    except Exception as e:
-        log.error(f"Token refresh failed: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to refresh token.")
-
-    try:
-        # Create background task for selected projects sync
-        from open_webui.utils.data.atlassian import initiate_atlassian_sync_selected
-        
-        redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
-        
-        async def run_selected_sync():
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                None,
-                lambda: asyncio.run(initiate_atlassian_sync_selected(
-                    user.id, access_token, form_data.project_keys, form_data.layer
-                ))
-            )
-        
-        await create_task(redis_connection, run_selected_sync(), id=f"atlassian_sync_{user.id}")
-        
-        return {
-            "status": "started",
-            "message": f"Syncing {len(form_data.project_keys)} selected projects",
-            "project_count": len(form_data.project_keys)
-        }
+        else:
+            # Cloud selected projects sync (existing code)
+            access_token, needs_reauth = handle_token_refresh('atlassian', token_entry, user.id)
+            
+            if needs_reauth:
+                reauth_url = generate_reauth_url('atlassian', user.id, form_data.layer)
+                raise HTTPException(status_code=401, detail={"reauth_url": reauth_url})
+            
+            from open_webui.utils.data.atlassian import initiate_atlassian_sync_selected
+            
+            redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+            
+            async def run_selected_sync():
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,
+                    lambda: asyncio.run(initiate_atlassian_sync_selected(
+                        user.id, access_token, form_data.project_keys, form_data.layer
+                    ))
+                )
+            
+            await create_task(redis_connection, run_selected_sync(), id=f"atlassian_sync_{user.id}")
+            
+            return {
+                "status": "started",
+                "message": f"Syncing {len(form_data.project_keys)} selected projects",
+                "project_count": len(form_data.project_keys),
+                "deployment_type": "cloud"
+            }
         
     except Exception as e:
         log.error(f"Failed to start selected projects sync: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+class AtlassianSelfHostedAuthForm(BaseModel):
+    username: str
+    password: str
+    layer: Optional[str] = 'jira'
+    auth_type: str = 'basic'
+
+@router.post("/atlassian/self-hosted/auth")
+async def atlassian_self_hosted_auth(
+    request: Request,
+    form_data: AtlassianSelfHostedAuthForm,
+    user=Depends(get_verified_user)
+):
+    """Authenticate with self-hosted Atlassian using Basic Auth (default) or PAT"""
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    if not ATLASSIAN_SELF_HOSTED_ENABLED:
+        raise HTTPException(status_code=400, detail="Self-hosted Atlassian not configured")
+    
+    try:
+        if form_data.layer == 'jira':
+            base_url = ATLASSIAN_SELF_HOSTED_JIRA_URL
+        elif form_data.layer == 'confluence':
+            base_url = ATLASSIAN_SELF_HOSTED_CONFLUENCE_URL
+        else:
+            base_url = ATLASSIAN_SELF_HOSTED_JIRA_URL
+        
+        if not base_url:
+            raise HTTPException(status_code=400, detail=f"Self-hosted {form_data.layer} URL not configured")
+        
+        test_url = f"{base_url}/rest/api/3/myself" if form_data.layer == 'jira' else f"{base_url}/rest/api/user/current"
+        
+        try:
+            test_auth = HTTPBasicAuth(form_data.username, form_data.password)
+            test_response = requests.get(test_url, auth=test_auth, timeout=10)
+            
+            if test_response.status_code != 200:
+                raise HTTPException(
+                    status_code=401, 
+                    detail=f"Authentication failed: {test_response.status_code} - {test_response.text}"
+                )
+            
+            log.info(f"Successfully authenticated {form_data.username} with self-hosted Atlassian")
+            
+        except requests.exceptions.RequestException as e:
+            log.error(f"Failed to verify credentials: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to connect to self-hosted instance: {str(e)}")
+        
+        # Store credentials as "username:password" format
+        credentials = f"{form_data.username}:{form_data.password}"
+        encrypted_credentials, _ = encrypt_tokens(credentials, None)
+        
+        # Store in database
+        OAuthTokens.insert_new_token(
+            user_id=user.id,
+            provider_name='Atlassian',
+            provider_user_id=form_data.username,
+            provider_team_id='self_hosted',  # Marker for self-hosted
+            encrypted_access_token=encrypted_credentials,
+            encrypted_refresh_token=None,
+            access_token_expires_at=None,  # Basic auth doesn't expire
+            scopes='self_hosted_basic_auth',
+            layer=form_data.layer
+        )
+        
+        log.info(f"Stored self-hosted Atlassian credentials for user {user.id}")
+        
+        return {
+            "success": True, 
+            "message": f"Self-hosted Atlassian authentication successful. Sync initiated for {form_data.layer}.",
+            "deployment_type": "self_hosted",
+            "auth_type": "basic"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Self-hosted Atlassian auth failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
 ############################
 # Universal OAuth Endpoints
@@ -1525,50 +1670,125 @@ def create_universal_sync_endpoint(provider: str):
                 status_code=404,
                 detail=f"No {provider.title()} integration found for this user. Please authorize your {provider.title()} app first."
             )
+        
+        if provider.lower() == 'atlassian': 
+            if check_sync_in_progress(user.id, 'atlassian', layer):
+                return {"message": "Atlassian sync already in progress"}
 
-        # Handle token refresh if needed
-        try:
-            access_token, needs_reauth = handle_token_refresh(provider, token_entry, user.id)
-            
-            if needs_reauth:
-                reauth_url = generate_reauth_url(provider, user.id, layer)
-                raise HTTPException(
-                    status_code=201,
-                    detail={
-                        "error": "token_expired_no_refresh",
-                        "message": f"{provider.title()} token is expired and requires re-authorization.",
-                        "reauth_url": reauth_url,
-                        "action_required": f"redirect_to_{provider}_auth",
-                        "user_id": str(user.id),
-                        "provider": provider
-                    }
-                )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            log.error(f"Token refresh failed for {provider} user {user.id}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Failed to refresh {provider.title()} token.")
-    
-        log.info(f"""Manually trigger {provider.title()} sync for the authenticated user.""")
-
-        try:
-            log.info(f"Starting manual {provider.title()} sync for user {user.id}")
-            await create_background_sync_task(request, provider, user.id, access_token, layer)
-            return RedirectResponse(url=DATASOURCES_URL, status_code=302)
-
-        except Exception as sync_error:
-            log.error(f"{provider.title()} sync failed for user {user.id}: {str(sync_error)}")
-            if "invalid_grant" in str(sync_error).lower() or "invalid_token" in str(sync_error).lower():
-                log.warning(f"{provider.title()} sync for user {user.id} failed due to invalid token.")
-                raise HTTPException(
-                    status_code=401,
-                    detail=f"{provider.title()} token invalid or expired. Please re-authorize your {provider.title()} integration."
-                )
-            raise HTTPException(
-                status_code=500,
-                detail=f"{provider.title()} sync failed: {str(sync_error)}"
+            token_entry = OAuthTokens.get_token_by_user_provider_details(
+                user_id=user.id,
+                provider_name='Atlassian'
             )
+
+            if not token_entry:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No Atlassian integration found. Please authorize first."
+                )
+
+            # Determine deployment type
+            is_self_hosted = token_entry.provider_team_id == 'self_hosted'
+            
+            try:
+                if is_self_hosted:
+                    # Self-hosted: decrypt credentials
+                    credentials, _ = decrypt_tokens(token_entry)
+                    
+                    # Determine base URL
+                    if layer == 'jira':
+                        base_url = ATLASSIAN_SELF_HOSTED_JIRA_URL
+                    elif layer == 'confluence':
+                        base_url = ATLASSIAN_SELF_HOSTED_CONFLUENCE_URL
+                    else:
+                        base_url = ATLASSIAN_SELF_HOSTED_JIRA_URL
+                    
+                    # Initiate sync
+                    redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
+                    
+                    async def run_self_hosted_sync():
+                        loop = asyncio.get_event_loop()
+                        return await loop.run_in_executor(
+                            None,
+                            lambda: asyncio.run(initiate_atlassian_sync(
+                                user.id, 
+                                credentials,
+                                layer,
+                                deployment_type='self_hosted',
+                                base_url=base_url
+                            ))
+                        )
+                    
+                    await create_task(redis_connection, run_self_hosted_sync(), id=f"atlassian_self_hosted_sync_{user.id}")
+                    
+                    return {"message": "Self-hosted Atlassian sync initiated", "deployment_type": "self_hosted"}
+                
+                else:
+                    # Cloud: handle token refresh
+                    access_token, needs_reauth = handle_token_refresh('atlassian', token_entry, user.id)
+                    
+                    if needs_reauth:
+                        reauth_url = generate_reauth_url('atlassian', user.id, layer)
+                        raise HTTPException(
+                            status_code=401,
+                            detail={
+                                "error": "token_expired",
+                                "reauth_url": reauth_url
+                            }
+                        )
+                    
+                    # Initiate cloud sync
+                    await create_background_sync_task(request, 'atlassian', user.id, access_token, layer)
+                    
+                    return {"message": "Cloud Atlassian sync initiated", "deployment_type": "cloud"}
+            except HTTPException:
+                raise
+            except Exception as e:
+                log.error(f"Atlassian sync failed: {str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
+        else:
+            # Handle token refresh if needed
+            try:
+                access_token, needs_reauth = handle_token_refresh(provider, token_entry, user.id)
+                
+                if needs_reauth:
+                    reauth_url = generate_reauth_url(provider, user.id, layer)
+                    raise HTTPException(
+                        status_code=201,
+                        detail={
+                            "error": "token_expired_no_refresh",
+                            "message": f"{provider.title()} token is expired and requires re-authorization.",
+                            "reauth_url": reauth_url,
+                            "action_required": f"redirect_to_{provider}_auth",
+                            "user_id": str(user.id),
+                            "provider": provider
+                        }
+                    )
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                log.error(f"Token refresh failed for {provider} user {user.id}: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Failed to refresh {provider.title()} token.")
+        
+            log.info(f"""Manually trigger {provider.title()} sync for the authenticated user.""")
+
+            try:
+                log.info(f"Starting manual {provider.title()} sync for user {user.id}")
+                await create_background_sync_task(request, provider, user.id, access_token, layer)
+                return RedirectResponse(url=DATASOURCES_URL, status_code=302)
+
+            except Exception as sync_error:
+                log.error(f"{provider.title()} sync failed for user {user.id}: {str(sync_error)}")
+                if "invalid_grant" in str(sync_error).lower() or "invalid_token" in str(sync_error).lower():
+                    log.warning(f"{provider.title()} sync for user {user.id} failed due to invalid token.")
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"{provider.title()} token invalid or expired. Please re-authorize your {provider.title()} integration."
+                    )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"{provider.title()} sync failed: {str(sync_error)}"
+                )
     
     return manual_sync
 

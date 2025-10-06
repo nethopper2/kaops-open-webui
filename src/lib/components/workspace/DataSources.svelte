@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { onMount, getContext, onDestroy } from 'svelte';
-	import { WEBUI_NAME, socket } from '$lib/stores';
+	import { WEBUI_NAME, socket, config } from '$lib/stores';
 	import Search from '../icons/Search.svelte';
 	import Spinner from '../common/Spinner.svelte';
-	import Google from '../icons/Google.svelte';
 	import Microsoft from '../icons/Microsoft.svelte';
 	import Slack from '../icons/Slack.svelte';
 	import GoogleDrive from '../icons/GoogleDrive.svelte';
@@ -24,7 +23,8 @@
 	import Jira from '../icons/Jira.svelte';
 	import Confluence from '../icons/Confluence.svelte';
 	import Mineral from '../icons/Mineral.svelte';
-	import JiraProjectSelector from './JiraProjectSelector.svelte'; // Import the new component
+	import JiraProjectSelector from './JiraProjectSelector.svelte';
+	import JiraSelfHostedAuth from './JiraSelfHostedAuth.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -37,6 +37,8 @@
 	// Project selector state
 	let showProjectSelector = false;
 	let projectSelectorDataSource: DataSource | null = null;
+	let showSelfHostedAuth = false;
+	let selfHostedAuthDataSource: DataSource | null = null;
 
 	// Sort data sources by action, then by name
 	$: sortedDataSources = [...dataSources].sort((a, b) => {
@@ -158,45 +160,68 @@
 	};
 
 	const initializeJiraSync = async (dataSource: DataSource) => {
-		console.log('Initializing Jira sync - opening OAuth...');
+		console.log('Initializing Jira sync...');
 
-		// First, open OAuth window
-		let syncDetails = await initializeDataSync(
-			localStorage.token,
-			dataSource.action as string,
-			dataSource.layer as string
-		);
+		// Check if self-hosted is enabled
+		const isSelfHosted = $config?.features.atlassian_self_hosted_enabled;
 
-		if (syncDetails.url) {
-			const authWindow = window.open(syncDetails.url, '_blank', 'width=600,height=700');
+		console.log('Is self-hosted enabled?', isSelfHosted);
 
-			// Listen for OAuth completion message
-			const messageHandler = async (event: MessageEvent) => {
-				if (event.data?.type === 'atlassian_connected' && event.data?.layer === 'jira') {
-					console.log('Atlassian OAuth completed, showing project selector');
+		if (isSelfHosted) {
+			// Show self-hosted auth modal
+			selfHostedAuthDataSource = dataSource;
+			showSelfHostedAuth = true;
+		} else {
+			// Existing cloud OAuth flow
+			let syncDetails = await initializeDataSync(
+				localStorage.token,
+				dataSource.action as string,
+				dataSource.layer as string
+			);
 
-					// Remove the message listener
-					window.removeEventListener('message', messageHandler);
+			if (syncDetails.url) {
+				const authWindow = window.open(syncDetails.url, '_blank', 'width=600,height=700');
 
-					// Refresh data sources to get updated status
-					dataSources = await getDataSources(localStorage.token);
+				const messageHandler = async (event: MessageEvent) => {
+					if (event.data?.type === 'atlassian_connected' && event.data?.layer === 'jira') {
+						console.log('Atlassian OAuth completed, showing project selector');
+						window.removeEventListener('message', messageHandler);
+						dataSources = await getDataSources(localStorage.token);
+						projectSelectorDataSource = dataSource;
+						showProjectSelector = true;
+					}
+				};
 
-					// Show project selector
-					projectSelectorDataSource = dataSource;
-					showProjectSelector = true;
-				}
-			};
+				window.addEventListener('message', messageHandler);
 
-			window.addEventListener('message', messageHandler);
-
-			// Cleanup listener if window is closed without completing auth
-			const checkWindowClosed = setInterval(() => {
-				if (authWindow && authWindow.closed) {
-					window.removeEventListener('message', messageHandler);
-					clearInterval(checkWindowClosed);
-				}
-			}, 500);
+				const checkWindowClosed = setInterval(() => {
+					if (authWindow && authWindow.closed) {
+						window.removeEventListener('message', messageHandler);
+						clearInterval(checkWindowClosed);
+					}
+				}, 500);
+			}
 		}
+	};
+
+	const handleSelfHostedAuthSuccess = async (event: CustomEvent) => {
+		console.log('Self-hosted auth successful:', event.detail);
+
+		// Refresh data sources
+		dataSources = await getDataSources(localStorage.token);
+
+		// Show project selector
+		projectSelectorDataSource = event.detail.dataSource;
+		showProjectSelector = true;
+
+		// Reset self-hosted auth state
+		showSelfHostedAuth = false;
+		selfHostedAuthDataSource = null;
+	};
+
+	const handleSelfHostedAuthClose = () => {
+		showSelfHostedAuth = false;
+		selfHostedAuthDataSource = null;
 	};
 
 	const handleMineralSync = async (dataSource: DataSource) => {
@@ -438,6 +463,13 @@
 		{$i18n.t('Data Sources')} | {$WEBUI_NAME}
 	</title>
 </svelte:head>
+
+<JiraSelfHostedAuth
+	bind:show={showSelfHostedAuth}
+	bind:dataSource={selfHostedAuthDataSource}
+	on:authSuccess={handleSelfHostedAuthSuccess}
+	on:close={handleSelfHostedAuthClose}
+/>
 
 <!-- Project Selector Modal -->
 <JiraProjectSelector
