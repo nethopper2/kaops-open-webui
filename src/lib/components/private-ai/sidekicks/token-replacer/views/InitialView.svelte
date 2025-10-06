@@ -64,6 +64,11 @@ onMount(() => {
 
 async function onFileChange(e: Event) {
 	const input = e.currentTarget as HTMLInputElement;
+	// Prevent concurrent uploads and accidental re-triggers
+	if (uploading) {
+		if (input) input.value = '';
+		return;
+	}
 	const file = input?.files && input.files[0] ? input.files[0] : null;
 	if (!file) return;
 	uploadError = null;
@@ -113,7 +118,7 @@ async function onFileChange(e: Event) {
 <div class="flex flex-col w-full px-2 py-2">
 	<div class="text-xs text-gray-500 mb-2 text-left">
 		<strong>Let's get started!</strong> To replace tokens in your document, select a tokenized document from the list
-		below.
+		below or upload a new one.
 	</div>
 	<div class="flex flex-col w-full h-full gap-2 items-center">
 		<div class="flex items-center gap-2 w-full min-w-0">
@@ -157,14 +162,22 @@ async function onFileChange(e: Event) {
 				on:change={onFileChange}
 			/>
 
-			<Tooltip content="Upload Tokenized Document" placement="top">
+			<Tooltip content={uploading ? 'Uploading…' : 'Upload Tokenized Document'} placement="top">
 				<button
 					class="flex-shrink-0 p-1 rounded bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={uploading}
-					aria-label="Upload Tokenized Document"
+					aria-label={uploading ? 'Uploading…' : 'Upload Tokenized Document'}
+					aria-busy={uploading}
 					on:click={() => fileInputEl && fileInputEl.click()}
 				>
-					<div class="h-5 w-5">⤴️</div>
+					{#if uploading}
+						<svg class="h-5 w-5 animate-spin text-gray-700 dark:text-gray-200" viewBox="0 0 24 24" role="status" aria-label="Uploading">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+						</svg>
+					{:else}
+						<div class="h-5 w-5">⤴️</div>
+					{/if}
 				</button>
 			</Tooltip>
  	</div>
