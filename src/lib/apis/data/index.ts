@@ -417,33 +417,29 @@ export const syncSelectedJiraProjects = async (
 	return res;
 };
 
-export const atlassianSelfHostedAuth = async (pat: string, layer: string) => {
+export const atlassianSelfHostedAuth = async (pat: string, layer: string = 'jira') => {
 	let error = null;
 
-	const response = await fetch(`${DATA_API_BASE_URL}/atlassian/self-hosted/auth`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/atlassian/self-hosted/auth`, {
 		method: 'POST',
 		headers: {
+			Accept: 'application/json',
 			'Content-Type': 'application/json',
 			Authorization: `Bearer ${localStorage.getItem('token')}`
 		},
 		body: JSON.stringify({
 			pat_token: pat,
-			layer: layer || 'jira'
+			layer: layer
 		})
-	})
-		.then(async (res) => {
-			if (!res.ok) throw await res.json();
-			return res.json();
-		})
-		.catch((err) => {
-			error = err.detail;
-			console.log(err);
-			return null;
-		});
+	}).catch((err) => {
+		error = err;
+		console.error('Network error:', err);
+		return null;
+	});
 
 	if (error) {
 		throw error;
 	}
 
-	return response;
+	return res;
 };

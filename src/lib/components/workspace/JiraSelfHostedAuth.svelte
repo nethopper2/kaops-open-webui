@@ -32,31 +32,52 @@
 		try {
 			const response = await atlassianSelfHostedAuth(pat, dataSource.layer || 'jira');
 
-			if (response.ok) {
-				const result = await response.json();
-				console.log('Self-hosted Jira auth successful:', result);
-
-				// Reset form
+			if (response && response.ok) {
 				pat = '';
 				show = false;
 
-				// Notify parent component
 				dispatch('authSuccess', { dataSource });
+			} else if (response) {
+				let errorMessage = 'Authentication failed';
+
+				try {
+					const errorData = await response.json();
+					errorMessage = errorData.detail || errorMessage;
+				} catch (jsonError) {
+					try {
+						const errorText = await response.text();
+						if (errorText) {
+							errorMessage = errorText;
+						}
+					} catch (textError) {
+						errorMessage = response.statusText || errorMessage;
+					}
+				}
+
+				throw new Error(errorMessage);
 			} else {
-				const errorData = await response.json();
-				throw new Error(errorData.detail || 'Authentication failed');
+				throw new Error('Network request failed');
 			}
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'An error occurred';
 
-			// Provide user-friendly error messages
 			if (errorMessage.includes('401') || errorMessage.includes('Authentication failed')) {
-				error = 'Invalid username or password. Please try again.';
-			} else if (errorMessage.includes('connection') || errorMessage.includes('fetch')) {
-				error = 'Cannot connect to Jira server. Please check your connection.';
+				error = 'Invalid Personal Access Token. Please check and try again.';
+			} else if (
+				errorMessage.includes('connection') ||
+				errorMessage.includes('fetch') ||
+				errorMessage.includes('Network')
+			) {
+				error = 'Cannot connect to Atlassian server. Please check your connection and server URL.';
+			} else if (errorMessage.includes('404')) {
+				error = 'Atlassian server not found. Please verify the server URL in settings.';
+			} else if (errorMessage.includes('403')) {
+				error = 'Access denied. Please check your PAT permissions.';
 			} else {
 				error = errorMessage;
 			}
+
+			console.error('Self-hosted auth error:', err);
 		} finally {
 			loading = false;
 		}
@@ -117,7 +138,7 @@
 					</label>
 					<input
 						id="jira-pat"
-						type="text"
+						type="password"
 						bind:value={pat}
 						required
 						disabled={loading}
