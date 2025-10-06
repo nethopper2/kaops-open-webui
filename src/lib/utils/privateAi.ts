@@ -207,10 +207,16 @@ export async function downloadProxyResource(
 		}
 
 		if (!opened) {
-			// Fallback to downloading when not viewable or opening was blocked.
+			// Fallback to downloading or opening in a new tab when open() is blocked.
 			const a = document.createElement('a');
 			a.href = objectUrl;
-			if (!isViewable) a.download = filename;
+			// If the resource is viewable, force the anchor to open in a new tab as a fallback.
+			if (isViewable) {
+				a.target = '_blank';
+			} else {
+				// Non-viewable resources should trigger a download
+				a.download = filename;
+			}
 			a.rel = 'noopener noreferrer';
 			document.body.appendChild(a);
 			a.click();
