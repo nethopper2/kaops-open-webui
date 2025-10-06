@@ -152,12 +152,3 @@ export type GenerateDocumentResult = {
 	tokenPattern: string;
 	templateFilename?: string;
 };
-
-export async function generateTokenReplacerDocument(chatId: string, modelId: string) {
-	const raw = await apiFetch<any>(
-		`/tools/token-replacer/generate/chat/${encodeURIComponent(chatId)}/model/${encodeURIComponent(modelId)}`,
-		{ method: 'POST' }
-	);
-	const data = (raw as any)?.data ?? raw;
-	return data as GenerateDocumentResult;
-}
