@@ -173,18 +173,44 @@ export async function downloadProxyResource(
 		}
 
 		const objectUrl = URL.createObjectURL(blob);
-		const isPdf = (blob.type === 'application/pdf') || /\.pdf$/i.test(filename);
+
+		// Decide whether the resource is safe/viewable to open in a browser tab.
+		const viewableMimePrefixes = ['image/', 'text/', 'video/', 'audio/'];
+		const viewableMimeExact = new Set([
+			'application/pdf',
+			'application/json',
+			'image/svg+xml',
+			'text/html'
+		]);
+
+		const filenameExt = ((): string => {
+			const m = filename.match(/\.([a-zA-Z0-9]{1,8})$/);
+			return m ? m[1].toLowerCase() : '';
+		})();
+
+		const viewableExts = new Set(['svg', 'html', 'htm', 'json', 'txt', 'csv']);
+
+		const isViewableByMime =
+			typeof blob.type === 'string' &&
+			(blob.type !== '' &&
+				(viewableMimePrefixes.some((p) => blob.type.startsWith(p)) || viewableMimeExact.has(blob.type)));
+
+		const isViewableByExt = filenameExt && viewableExts.has(filenameExt);
+
+		const isViewable = isViewableByMime || isViewableByExt;
 
 		let opened = false;
-		if (isPdf) {
+		if (isViewable) {
+			// Most browsers allow opening an object URL in a new tab from a click handler.
 			const w = window.open(objectUrl, '_blank', 'noopener,noreferrer');
 			opened = !!w;
 		}
 
 		if (!opened) {
+			// Fallback to downloading when not viewable or opening was blocked.
 			const a = document.createElement('a');
 			a.href = objectUrl;
-			if (!isPdf) a.download = filename;
+			if (!isViewable) a.download = filename;
 			a.rel = 'noopener noreferrer';
 			document.body.appendChild(a);
 			a.click();
@@ -200,7 +226,7 @@ export async function downloadProxyResource(
 			}
 		}, 60000);
 
-		toast.success(isPdf ? 'Opened in a new tab' : 'Download started');
+		toast.success(isViewable ? 'Opened in a new tab' : 'Download started');
 	} catch (err) {
 		console.error('Failed to process downloaded Blob', err);
 		toast.error('Failed to download resource');
