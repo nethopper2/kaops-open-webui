@@ -1029,24 +1029,15 @@ async def get_available_jira_projects(
             detail="No Atlassian integration found. Please authorize first."
         )
 
-    # Determine deployment type
     is_self_hosted = token_entry.provider_team_id == 'self_hosted'
     
     try:
         if is_self_hosted:
-            # Self-hosted flow
             from open_webui.utils.data.atlassian import list_jira_projects_self_hosted
             
             credentials, _ = decrypt_tokens(token_entry)
             
-            # Parse credentials
-            if ':' in credentials:
-                username, password = credentials.split(':', 1)
-                auth = HTTPBasicAuth(username, password)
-                bearer_token = None
-            else:
-                auth = None
-                bearer_token = credentials
+            bearer_token = credentials
             
             # Use Jira URL from config
             base_url = ATLASSIAN_SELF_HOSTED_JIRA_URL
@@ -1056,7 +1047,7 @@ async def get_available_jira_projects(
             all_projects = list_jira_projects_self_hosted(
                 base_url=base_url,
                 bearer_token=bearer_token,
-                auth=auth
+                auth=None  # No Basic Auth needed with PAT
             )
             
             return {
@@ -1143,7 +1134,6 @@ async def get_available_jira_projects(
     except Exception as e:
         log.error(f"Failed to fetch Jira projects: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch projects: {str(e)}")
-
 class SelectedProjectsForm(BaseModel):
     project_keys: List[str]
     layer: str = 'jira'

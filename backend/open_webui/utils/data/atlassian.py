@@ -291,51 +291,80 @@ def list_jira_projects_and_issues(site_url, cloud_id, bearer_token: str, all_ite
 
     return all_items
 
-
 def list_jira_projects_self_hosted(base_url: str, bearer_token: str = None, 
                                     auth=None):
     """Get list of available Jira projects from self-hosted instance using PAT"""
     
+    base_url = base_url.rstrip('/')
     jira_base_url = f"{base_url}/rest/api/2"
     
     log.info(f"Fetching Jira projects for self-hosted: {jira_base_url}")
 
     try:
-        start_at = 0
-        max_results = 50
         all_projects = []
         
-        while True:
-            params = {
-                'startAt': start_at,
-                'maxResults': max_results
-            }
+        # Try modern endpoint first (Jira 8.0+)
+        try:
+            start_at = 0
+            max_results = 50
             
-            # Use PAT as bearer token
-            response = make_atlassian_request(
-                f"{jira_base_url}/project/search", 
-                params=params, 
-                bearer_token=bearer_token,
-                auth=auth  
-            )
+            while True:
+                params = {
+                    'startAt': start_at,
+                    'maxResults': max_results
+                }
+                
+                response = make_atlassian_request(
+                    f"{jira_base_url}/project/search", 
+                    params=params, 
+                    bearer_token=bearer_token,
+                    auth=auth  
+                )
+                
+                projects = response.get('values', [])
+                
+                for project in projects:
+                    all_projects.append({
+                        'id': project.get('id'),
+                        'key': project.get('key'),
+                        'name': project.get('name'),
+                        'description': project.get('description', ''),
+                        'avatarUrl': project.get('avatarUrls', {}).get('48x48', ''),
+                        'instance_url': base_url
+                    })
+                
+                if response.get('isLast', True):
+                    break
+                start_at = response.get('nextPage', start_at + max_results)
             
-            projects = response.get('values', [])
+            return all_projects
             
-            for project in projects:
-                all_projects.append({
-                    'id': project.get('id'),
-                    'key': project.get('key'),
-                    'name': project.get('name'),
-                    'description': project.get('description', ''),
-                    'avatarUrl': project.get('avatarUrls', {}).get('48x48', ''),
-                    'instance_url': base_url
-                })
-            
-            if response.get('isLast', True):
-                break
-            start_at = response.get('nextPage', start_at + max_results)
-        
-        return all_projects
+        except Exception as e:
+            # If 404, fall back to older endpoint
+            if '404' in str(e):
+                log.warning(f"Modern endpoint not found, falling back to legacy /project endpoint")
+                
+                # Fallback: Use older /project endpoint (Jira 7.x and earlier)
+                response = make_atlassian_request(
+                    f"{jira_base_url}/project", 
+                    bearer_token=bearer_token,
+                    auth=auth
+                )
+                
+                # This returns a list directly, not paginated
+                for project in response:
+                    all_projects.append({
+                        'id': project.get('id'),
+                        'key': project.get('key'),
+                        'name': project.get('name'),
+                        'description': project.get('description', ''),
+                        'avatarUrl': project.get('avatarUrls', {}).get('48x48', ''),
+                        'instance_url': base_url
+                    })
+                
+                return all_projects
+            else:
+                raise
         
     except Exception as e:
         log.error(f"Failed to fetch projects from self-hosted Jira: {str(e)}")
