@@ -19,6 +19,7 @@ import { getBackendConfig } from '$lib/apis';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
 import PopupMetadataEdit from './PopupMetadataEdit.vue';
 import { useTheme } from '../composables/useTheme';
+import { downloadProxyResource } from '$lib/utils/privateAi';
 
 const props = defineProps(['i18n']);
 const svelteHost = useHost();
@@ -74,6 +75,28 @@ async function handleContextMenuItemClick(e: ContextMenuItemClickEvent) {
 	if (e.itemData.options.action === 'editMetadata') {
 		currentFileItem.value = e.fileSystemItem;
 		showEditMetadataPopup.value = true;
+	} else if (e.itemData.options.action === 'viewFile') {
+		try {
+			const backendConfig = await getBackendConfig();
+			if (!backendConfig || !backendConfig.private_ai || !backendConfig.private_ai.nh_data_service_url) {
+				console.warn('Missing private_ai.nh_data_service_url in backend config', backendConfig);
+				// Nothing more we can do here
+				return;
+			}
+
+			// Build a proxy-download URL for the selected file.
+			// DevExtreme file system items commonly expose a `path` (relative path) or `name`.
+			const path = e.fileSystemItem?.path ?? e.fileSystemItem?.name ?? '';
+			// Encode each path segment
+			const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+			const base = backendConfig.private_ai.nh_data_service_url.replace(/\/$/, '');
+			const target = new URL(`${base}/files/${encodedPath}/proxy-download`);
+
+			// Use the shared util. Bypass allowlist because FileManager is a trusted UI flow.
+			await downloadProxyResource(target, backendConfig, { bypassAllowlist: true });
+		} catch (err) {
+			console.error('Failed to open file', err);
+		}
 	}
 }
 
@@ -137,6 +160,10 @@ onMounted(async () => {
 			<dx-item
 				:text="i18nRef?.t?.('Edit Metadata') ?? 'Edit Metadata'"
 				:options="{ action: 'editMetadata' }"
+			/>
+			<dx-item
+				:text="i18nRef?.t?.('View File') ?? 'View File'"
+				:options="{ action: 'viewFile' }"
 			/>
 		</dx-context-menu>
 
