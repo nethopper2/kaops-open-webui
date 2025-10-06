@@ -483,9 +483,10 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         # Fetch the Authorization headers added to request
         # This will be used when using SSO to extract user profile and file data
         sso_provider = str(SSO_PROVIDER_NAME).lower()
-        auth_token = request.headers.get(
-                'X-Forwarded-Access-Token', None
-            )
+        auth_token = (
+            request.headers.get('X-Forwarded-Access-Token') or 
+            request.headers.get('X-Auth-Request-Access-Token', None)
+        )
 
         #Retrieve the trusted email from the headers and set trusted name and profile image URL to default values
         trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
@@ -505,7 +506,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
         if sso_provider:
             sso_response = Users.get_user_profile_data_from_sso_provider(sso_provider, auth_token)
             if sso_response:
-                trusted_email = sso_response.get('trusted_email', trusted_email)
+                trusted_email = sso_response.get('trusted_email', trusted_email).lower()
                 trusted_name = sso_response.get('trusted_name', trusted_name)
                 trusted_profile_image_url = sso_response.get('trusted_profile_image_url', trusted_profile_image_url)
                 update_user_details = True
@@ -548,7 +549,6 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                 # Perform the update only if there are changes
                 if updates_to_make:
                     Users.update_user_by_id(user_id, updates_to_make)
-                    print(f"User '{user_id}' updated successfully.")
 
             # For existing and new users, trigger user file data sync from the SSO provider if enabled
             if ENABLE_SSO_DATA_SYNC:

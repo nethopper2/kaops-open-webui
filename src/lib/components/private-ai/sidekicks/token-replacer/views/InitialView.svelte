@@ -119,19 +119,14 @@ onMount(() => {
 						on:click={() => {
 							const file = $selectedTokenizedDoc;
 							const fullPath = $selectedTokenizedDocPath;
-							// Build directive envelope as a JSON string
+							// Send a normal prompt with directive metadata via privateAi
 							const directive = {
-								_kind: 'openwebui.directive',
-								version: 1,
 								name: 'token_replacer.begin',
-								assistant_only: true,
-								payload: {
-									file_path: String(fullPath || '')
-								}
+								payload: { filePath: String(fullPath || '') }
 							};
-							const prompt = JSON.stringify(directive);
+							const prompt = 'Let\'s begin token replacement.';
 							const title = `🔁 ${String(file?.name ?? '').trim()}`;
-							appHooks.callHook('chat.submit', { prompt, title });
+							appHooks.callHook('chat.submit', { prompt, title, privateAi: { directive } });
 							// Switch to the edit values sub-view after the beginning
 							currentTokenReplacerSubView.set('editValues');
 							// Persist sidekick UI state (selected document) for this chat+sidekick

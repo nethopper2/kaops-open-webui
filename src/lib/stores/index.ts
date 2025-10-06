@@ -112,15 +112,16 @@ showPrivateAiSidekick.subscribe((v) => {
 // Single source of truth for which right-side pane is active in the PaneGroup
 export const activeRightPane = derived(
 	[showControls, showPrivateAiSidekick],
-	([controls, privateAi]) => (controls ? 'controls' : privateAi ? 'private' : null) as 'controls' | 'private' | null
+	([controls, privateAi]) =>
+		(controls ? 'controls' : privateAi ? 'private' : null) as 'controls' | 'private' | null
 );
-
 
 // Selected single model id used for Private AI sidekicks
 export const currentSelectedModelId: Writable<string | null> = writable<string | null>(null);
 
 // Component to render for the selected model's sidekick (loaded asynchronously)
-export const privateAiSidekickComponent: Writable<ComponentType | null> = writable<ComponentType | null>(null);
+export const privateAiSidekickComponent: Writable<ComponentType | null> =
+	writable<ComponentType | null>(null);
 currentSelectedModelId.subscribe(async (id) => {
 	try {
 		const comp = await loadPrivateAiSidekickComponent(id);
@@ -131,7 +132,9 @@ currentSelectedModelId.subscribe(async (id) => {
 });
 
 // Derived: whether Private AI Model sidekick can be used with the selected model
-export const canShowPrivateAiSidekick = derived(currentSelectedModelId, (id) => canSupportSidekick(id));
+export const canShowPrivateAiSidekick = derived(currentSelectedModelId, (id) =>
+	canSupportSidekick(id)
+);
 
 // Derived: avatar URL for the selected model (matches ModelSelector avatar)
 export const privateAiSelectedModelAvatarUrl = derived(
@@ -139,12 +142,9 @@ export const privateAiSelectedModelAvatarUrl = derived(
 	([id, $models]) => {
 		if (!id) return `${WEBUI_BASE_URL}/static/favicon.png`;
 		const model = ($models || []).find((m) => m.id === id);
-		return (
-			(model?.info as any)?.meta?.profile_image_url ?? `${WEBUI_BASE_URL}/static/favicon.png`
-		);
+		return (model?.info as any)?.meta?.profile_image_url ?? `${WEBUI_BASE_URL}/static/favicon.png`;
 	}
 );
-
 
 // Emit model.changed hook whenever the selected model changes
 let __prevHookModelId: string | null = null;
@@ -348,6 +348,7 @@ type Config = {
 		enable_version_update_check: boolean;
 		enable_upstream_ui: boolean;
 		enable_file_ingestion: boolean;
+		atlassian_self_hosted_enabled: boolean;
 	};
 	oauth: {
 		providers: {
@@ -370,7 +371,7 @@ type Config = {
 			bgImageAuth?: string;
 			bgImageAuthLight?: string;
 		};
-    docker_image?: string;
+		docker_image?: string;
 	};
 };
 
