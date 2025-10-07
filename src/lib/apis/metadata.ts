@@ -1,5 +1,4 @@
-import { ofetch } from 'ofetch';
-import { getBackendConfig } from '$lib/apis';
+import { apiFetch } from '$lib/apis/private-ai/fetchClients';
 
 // Types for the new metadata API
 export interface MetadataResponse {
@@ -172,35 +171,7 @@ export function handleMetadataError(error: unknown): MetadataError {
 	return new MetadataError(errorMessage);
 }
 
-// Create metadata API client
-const createMetadataClient = () => {
-	return ofetch.create({
-		async onRequest({ options }) {
-			const backendConfig = await getBackendConfig();
-			
-			// Set base URL for metadata API
-			// nh_data_service_url already includes /api/v1, so we don't need to add it again
-			options.baseURL = backendConfig.private_ai.nh_data_service_url;
-			
-			// Add authorization header
-			const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
-			if (token) {
-				options.headers = new Headers({
-					...options.headers,
-					'Authorization': `Bearer ${token}`,
-					'Content-Type': 'application/json'
-				});
-			}
-		},
-		
-		async onResponseError({ response }) {
-			// Let the error bubble up to be handled by the calling code
-			throw response._data || response;
-		}
-	});
-};
-
-const metadataClient = createMetadataClient();
+// Use the centralized apiFetch client from fetchClients.ts
 
 // API functions
 export const metadataApi = {
@@ -209,7 +180,7 @@ export const metadataApi = {
 	 */
 	async getMetadata(filePath: string, debugRaw = false): Promise<MetadataResponse> {
 		try {
-			const response = await metadataClient<MetadataResponse>(`/files/${encodeURIComponent(filePath)}/metadata`, {
+			const response = await apiFetch<MetadataResponse>(`/files/${encodeURIComponent(filePath)}/metadata`, {
 				method: 'GET',
 				query: debugRaw ? { debugRaw: 'true' } : undefined
 			});
@@ -239,7 +210,7 @@ export const metadataApi = {
 				merge
 			};
 
-			const response = await metadataClient<MetadataUpdateResponse>(`/files/${encodeURIComponent(filePath)}/metadata`, {
+			const response = await apiFetch<MetadataUpdateResponse>(`/files/${encodeURIComponent(filePath)}/metadata`, {
 				method: 'PUT',
 				body: requestBody
 			});
@@ -262,7 +233,7 @@ export const metadataApi = {
 				files: filePaths
 			};
 
-			const response = await metadataClient<BatchMetadataResponse>('/files/batch/metadata', {
+			const response = await apiFetch<BatchMetadataResponse>('/files/batch/metadata', {
 				method: 'POST',
 				body: requestBody
 			});
@@ -279,7 +250,7 @@ export const metadataApi = {
 	async deleteMetadata(filePath: string): Promise<void> {
 		try {
 			// If the API supports DELETE, use it; otherwise use PUT with empty metadata
-			await metadataClient(`/files/${encodeURIComponent(filePath)}/metadata`, {
+			await apiFetch(`/files/${encodeURIComponent(filePath)}/metadata`, {
 				method: 'DELETE'
 			});
 		} catch (error) {
