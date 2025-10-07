@@ -103,7 +103,7 @@ export async function downloadProxyResource(
 		}
 
 		// Robustly obtain a Blob from the response. ofetch sometimes exposes parsed data
-		// on resp._data (which can be a Blob, ArrayBuffer, Uint8Array, etc).
+		// on resp._data (which can be a Blob, ArrayBuffer, Uint8Array, string, or parsed JSON object).
 		let blob: Blob | null = null;
 
 		// @ts-ignore - ofetch specific property
@@ -120,6 +120,13 @@ export async function downloadProxyResource(
 			} else if (typeof maybeData === 'string') {
 				// If ofetch returned a string, create a blob (best-effort).
 				blob = new Blob([maybeData]);
+			} else if (typeof maybeData === 'object') {
+				// Handle parsed JSON objects from ofetch by stringifying to a JSON Blob
+				try {
+					blob = new Blob([JSON.stringify(maybeData)], { type: 'application/json' });
+				} catch {
+					// ignore and try other fallbacks
+				}
 			} else {
 				// Unknown _data shape: try to coerce with ArrayBuffer if available
 				try {
@@ -128,6 +135,18 @@ export async function downloadProxyResource(
 				} catch {
 					// ignore
 				}
+			}
+		}
+
+		// If we still don't have a usable blob, try reading directly from the response
+		if (!(blob instanceof Blob) || blob.size === 0) {
+			try {
+				const b = await resp.blob();
+				if (b && b.size > 0) {
+					blob = b;
+				}
+			} catch {
+				// ignore
 			}
 		}
 
