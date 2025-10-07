@@ -446,6 +446,7 @@ from open_webui.env import (
     ENABLE_SSO_DATA_SYNC,
     OVERIDE_WEB_SOCKET_URL,
     STORAGE_BACKEND,
+    ATLASSIAN_SELF_HOSTED_ENABLED
 )
 
 
@@ -1720,6 +1721,7 @@ async def get_app_config(request: Request):
                     "enable_admin_chat_access": ENABLE_ADMIN_CHAT_ACCESS,
                     "enable_google_drive_integration": app.state.config.ENABLE_GOOGLE_DRIVE_INTEGRATION,
                     "enable_onedrive_integration": app.state.config.ENABLE_ONEDRIVE_INTEGRATION,
+                    "atlassian_self_hosted_enabled": ATLASSIAN_SELF_HOSTED_ENABLED,
                 }
                 if user is not None
                 else {}

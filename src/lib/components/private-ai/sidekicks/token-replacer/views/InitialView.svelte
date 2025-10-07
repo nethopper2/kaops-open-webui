@@ -3,6 +3,7 @@ import Select from 'svelte-select';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import Eye from '$lib/components/icons/Eye.svelte';
 import { getContext, onMount } from 'svelte';
+import { get } from 'svelte/store';
 import { appHooks } from '$lib/utils/hooks';
 import { isChatStarted, chatId } from '$lib/stores';
 import {
@@ -15,7 +16,7 @@ import {
 } from '../stores';
 import { savePrivateAiSidekickState } from '$lib/private-ai/state';
 import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
-import { getTokenReplacerFileHealth, type TokenReplacerFileHealth } from '$lib/apis/private-ai/sidekicks/token-replacer';
+import { getTokenReplacerFileHealth, type TokenReplacerFileHealth, uploadTokenizedDocument } from '$lib/apis/private-ai/sidekicks/token-replacer';
 
 const i18n = getContext('i18n');
 
@@ -25,6 +26,10 @@ $: void modelId;
 let analyzing = false;
 let analysisError: string | null = null;
 let analysis: TokenReplacerFileHealth | null = null;
+
+let uploading = false;
+let uploadError: string | null = null;
+let fileInputEl: HTMLInputElement | null = null;
 
 async function analyzeSelected() {
 	analysisError = null;
@@ -56,13 +61,64 @@ function openPreviewDialog() {
 onMount(() => {
 	ensureFilesFetched();
 });
+
+async function onFileChange(e: Event) {
+	const input = e.currentTarget as HTMLInputElement;
+	// Prevent concurrent uploads and accidental re-triggers
+	if (uploading) {
+		if (input) input.value = '';
+		return;
+	}
+	const file = input?.files && input.files[0] ? input.files[0] : null;
+	if (!file) return;
+	uploadError = null;
+	uploading = true;
+	try {
+		const res = await uploadTokenizedDocument(file);
+		// small delay before attempting to select
+		await new Promise((r) => setTimeout(r, 600));
+		// Update in-memory list and try to select
+		const newPath = String(res.filePath || '').trim();
+		const name = newPath.split('/').pop() || file.name || 'Uploaded document';
+		const newEntry = {
+			fullPath: newPath,
+			name,
+			size: Number(res.size ?? file.size ?? 0),
+			sourceName: 'userUploads',
+			lastModified: String(res.uploadedAt ?? new Date().toISOString()),
+			metadata: {}
+		};
+
+		tokenizedFiles.update((list) => {
+			const exists = (list ?? []).some((f) => String(f.fullPath) === newPath);
+			if (exists) {
+				return (list ?? []).map((f) => (String(f.fullPath) === newPath ? { ...f, ...newEntry } : f));
+			}
+			return [...(list ?? []), newEntry];
+		});
+
+		// Attempt to select; verify presence
+		const filesNow = get(tokenizedFiles);
+		const found = (filesNow ?? []).find((f) => String(f.fullPath) === newPath);
+		if (found) {
+			selectedTokenizedDocPath.set(found.fullPath);
+		} else {
+			uploadError = 'Uploaded document was not found in the list. Please try again.';
+		}
+	} catch (err) {
+		uploadError = err instanceof Error ? err.message : 'Failed to upload document';
+	} finally {
+		uploading = false;
+		if (fileInputEl) fileInputEl.value = '';
+	}
+}
 </script>
 
 
 <div class="flex flex-col w-full px-2 py-2">
 	<div class="text-xs text-gray-500 mb-2 text-left">
 		<strong>Let's get started!</strong> To replace tokens in your document, select a tokenized document from the list
-		below.
+		below or upload a new one.
 	</div>
 	<div class="flex flex-col w-full h-full gap-2 items-center">
 		<div class="flex items-center gap-2 w-full min-w-0">
@@ -73,7 +129,7 @@ onMount(() => {
 				label="name"
 				itemId="fullPath"
 				clearable={true}
-				class="w-full max-w-full rounded-md border border-gray-300 bg-white text-gray-900 shadow-sm hover:border-gray-400 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-white dark:!border-gray-700 dark:!bg-gray-900 dark:!text-gray-100 dark:!hover:border-gray-600 dark:!focus-within:ring-blue-400 dark:!focus-within:ring-offset-gray-900"
+				class="flex-1 min-w-0 rounded-md border border-gray-300 bg-white text-gray-900 shadow-sm hover:border-gray-400 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-white dark:!border-gray-700 dark:!bg-gray-900 dark:!text-gray-100 dark:!hover:border-gray-600 dark:!focus-within:ring-blue-400 dark:!focus-within:ring-offset-gray-900"
 				showChevron
 				loading={$filesLoading}
 				on:select={(e) => {
@@ -87,7 +143,7 @@ onMount(() => {
 			/>
 			<Tooltip content="Preview Document" placement="top">
 				<button
-					class="p-1 rounded bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed {$selectedTokenizedDocPath === '' ? 'border-gray-200 dark:border-gray-800 cursor-not-allowed' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900'}"
+					class="flex-shrink-0 p-1 rounded bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed {$selectedTokenizedDocPath === '' ? 'border-gray-200 dark:border-gray-800 cursor-not-allowed' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900'}"
 					disabled={$selectedTokenizedDocPath === ""}
 					aria-label="Preview Document"
 					on:click={() => openPreviewDialog()}
@@ -96,7 +152,39 @@ onMount(() => {
 <!--					<Eye className="w-5 h-5" />-->
 				</button>
 			</Tooltip>
-		</div>
+
+			<!-- Hidden file input for uploads -->
+			<input
+				bind:this={fileInputEl}
+				type="file"
+				class="hidden"
+				accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+				on:change={onFileChange}
+			/>
+
+			<Tooltip content={uploading ? 'Uploading…' : 'Upload Tokenized Document'} placement="top">
+				<button
+					class="flex-shrink-0 p-1 rounded bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+					disabled={uploading}
+					aria-label={uploading ? 'Uploading…' : 'Upload Tokenized Document'}
+					aria-busy={uploading}
+					on:click={() => fileInputEl && fileInputEl.click()}
+				>
+					{#if uploading}
+						<svg class="h-5 w-5 animate-spin text-gray-700 dark:text-gray-200" viewBox="0 0 24 24" role="status" aria-label="Uploading">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+						</svg>
+					{:else}
+						<div class="h-5 w-5">⤴️</div>
+					{/if}
+				</button>
+			</Tooltip>
+ 	</div>
+
+		{#if uploadError}
+			<div class="mt-2 w-full text-xs text-red-600 dark:text-red-400">{uploadError}</div>
+		{/if}
 
 		{#if $selectedTokenizedDocPath !== ""}
 			<div class="flex w-full flex-col items-center justify-center mt-6 gap-3">
@@ -119,19 +207,14 @@ onMount(() => {
 						on:click={() => {
 							const file = $selectedTokenizedDoc;
 							const fullPath = $selectedTokenizedDocPath;
-							// Build directive envelope as a JSON string
+							// Send a normal prompt with directive metadata via privateAi
 							const directive = {
-								_kind: 'openwebui.directive',
-								version: 1,
 								name: 'token_replacer.begin',
-								assistant_only: true,
-								payload: {
-									file_path: String(fullPath || '')
-								}
+								payload: { filePath: String(fullPath || '') }
 							};
-							const prompt = JSON.stringify(directive);
+							const prompt = 'Let\'s begin token replacement.';
 							const title = `🔁 ${String(file?.name ?? '').trim()}`;
-							appHooks.callHook('chat.submit', { prompt, title });
+							appHooks.callHook('chat.submit', { prompt, title, privateAi: { directive } });
 							// Switch to the edit values sub-view after the beginning
 							currentTokenReplacerSubView.set('editValues');
 							// Persist sidekick UI state (selected document) for this chat+sidekick
