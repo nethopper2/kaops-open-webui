@@ -128,19 +128,23 @@ function handleContextMenuShowing(e: ContextMenuShowingEvent) {
 		// Always clone from original to avoid persistence
 		let newItems = JSON.parse(JSON.stringify(originalContextMenuItems.value));
 
-		// Conditionally modify only for directories
-		if (e.fileSystemItem && e.fileSystemItem.isDirectory) {
-			const modifyItemVisibility = (item) => {
-				if (item?.options?.action === 'viewFile') {
-					item.visible = false; // Hide for directories (or item.disabled = true; to gray out)
+		// Conditionally modify based on file type
+		const modifyItemVisibility = (item: any) => {
+			if (e.fileSystemItem && e.fileSystemItem.isDirectory) {
+				// For directories: hide viewFile and editMetadata
+				if (item?.options?.action === 'viewFile' || item?.options?.action === 'editMetadata') {
+					item.visible = false;
 				}
-				if (item.items && item.items.length > 0) {
-					item.items.forEach(modifyItemVisibility);
-				}
-			};
+			} else {
+				// For files: show all items
+				item.visible = true;
+			}
+			if (item.items && item.items.length > 0) {
+				item.items.forEach(modifyItemVisibility);
+			}
+		};
 
-			newItems.forEach(modifyItemVisibility);
-		}
+		newItems.forEach(modifyItemVisibility);
 
 		// Set the context-specific version for this menu showing
 		e.component.option('contextMenu.items', newItems);
@@ -161,23 +165,6 @@ function handleContextMenuShowing(e: ContextMenuShowingEvent) {
 
 const showEditMetadataPopup = ref(false);
 
-// Computed property for context menu items
-const contextMenuItems = computed(() => {
-	const items = [];
-	
-	// Add "Edit Metadata" for files
-	if (currentFileItem.value && !currentFileItem.value.isDirectory) {
-		items.push({
-			text: i18nRef.value?.t?.('Edit Metadata') ?? 'Edit Metadata',
-			options: { action: 'editMetadata' }
-		});
-	}
-	items.push({
-    text: 18nRef?.t?.('View File') ?? 'View File',
-    options: { action: 'viewFile' } 
-  })
-	return items;
-});
 
 // Use the theme composable
 const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme({
@@ -227,9 +214,13 @@ onMounted(async () => {
 			:download="false"
 		/>
 
-		<dx-context-menu
-			:items="contextMenuItems"
-		/>
+		<dx-context-menu>
+			<dx-item
+				:text="i18nRef?.t?.('Edit Metadata') ?? 'Edit Metadata'"
+				:options="{ action: 'editMetadata' }"
+			/>
+			<dx-item :text="i18nRef?.t?.('View File') ?? 'View File'" :options="{ action: 'viewFile' }" />
+		</dx-context-menu>
 
 		<dx-item-view>
 			<dx-details>
