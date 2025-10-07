@@ -1991,7 +1991,7 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 
  // Build privateAi payload for pipelines (optional)
 	const modelIsPrivate = typeof model?.id === 'string' && model.id.startsWith(PRIVATE_AI_MODEL_PREFIX);
-	let privateAiPayload: any = privateAi ? { ...privateAi } : undefined;
+	let privateAiPayload: PrivateAiExtras | undefined = privateAi ? { ...privateAi } as PrivateAiExtras : undefined;
 	if (modelIsPrivate) {
 		// TODO: consider other options and remove this.
 		privateAiPayload = privateAiPayload ?? {};

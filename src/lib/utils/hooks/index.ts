@@ -4,6 +4,7 @@
 import { createHooks } from 'hookable';
 
 export type PrivateAiExtras = {
+	auth?: { authorization: string };
 	directive?: {
 		name: string
 		payload?: Record<string, unknown>;
