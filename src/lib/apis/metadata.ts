@@ -3,20 +3,19 @@ import { getBackendConfig } from '$lib/apis';
 
 // Types for the new metadata API
 export interface MetadataResponse {
-	success: boolean;
-	data: {
-		exists: boolean;
+	exists: boolean;
+	metadata: {
+		name: string;
+		contentType: string;
+		size: number;
+		createdAt: string;
+		updatedAt: string;
+		etag: string;
 		metadata: {
-			name: string;
-			contentType: string;
-			size: number;
-			metadata: {
-				tags?: string;
-				context?: string;
-				[key: string]: string | undefined;
-			};
+			tags?: string;
+			context?: string;
+			[key: string]: string | undefined;
 		};
-		provider: string;
 	};
 }
 
@@ -44,18 +43,15 @@ export interface BatchMetadataRequest {
 }
 
 export interface BatchMetadataResponse {
-	success: boolean;
-	data: {
-		results: Array<{
-			filePath: string;
-			metadata: {
-				tags?: string;
-				context?: string;
-				[key: string]: string | undefined;
-			} | null;
-			error: string | null;
-		}>;
-	};
+	results: Array<{
+		filePath: string;
+		metadata: {
+			tags?: string;
+			context?: string;
+			[key: string]: string | undefined;
+		} | null;
+		error: string | null;
+	}>;
 }
 
 // Validation utilities
@@ -123,20 +119,27 @@ export class MetadataValidator {
 }
 
 // Error handling utilities
+interface ErrorWithStatus {
+	status: number;
+	data?: unknown;
+	message?: string;
+}
+
 export class MetadataError extends Error {
 	constructor(
 		message: string,
 		public statusCode?: number,
-		public response?: any
+		public response?: unknown
 	) {
 		super(message);
 		this.name = 'MetadataError';
 	}
 }
 
-export function handleMetadataError(error: any): MetadataError {
-	if (error.status) {
-		const statusCode = error.status;
+export function handleMetadataError(error: unknown): MetadataError {
+	if (error && typeof error === 'object' && 'status' in error) {
+		const errorWithStatus = error as ErrorWithStatus;
+		const statusCode = errorWithStatus.status;
 		let message = 'An error occurred';
 		
 		switch (statusCode) {
@@ -159,10 +162,14 @@ export function handleMetadataError(error: any): MetadataError {
 				message = `Request failed with status ${statusCode}`;
 		}
 		
-		return new MetadataError(message, statusCode, error.data);
+		return new MetadataError(message, statusCode, errorWithStatus.data);
 	}
 	
-	return new MetadataError(error.message || 'An unexpected error occurred');
+	const errorMessage = error && typeof error === 'object' && 'message' in error 
+		? (error as { message: string }).message 
+		: 'An unexpected error occurred';
+	
+	return new MetadataError(errorMessage);
 }
 
 // Create metadata API client
@@ -178,11 +185,11 @@ const createMetadataClient = () => {
 			// Add authorization header
 			const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
 			if (token) {
-				options.headers = {
+				options.headers = new Headers({
 					...options.headers,
 					'Authorization': `Bearer ${token}`,
 					'Content-Type': 'application/json'
-				};
+				});
 			}
 		},
 		
@@ -277,7 +284,7 @@ export const metadataApi = {
 			});
 		} catch (error) {
 			// If DELETE is not supported, try PUT with empty metadata
-			if (error.status === 405) {
+			if (error && typeof error === 'object' && 'status' in error && (error as ErrorWithStatus).status === 405) {
 				await this.updateMetadata(filePath, {}, false);
 			} else {
 				throw handleMetadataError(error);

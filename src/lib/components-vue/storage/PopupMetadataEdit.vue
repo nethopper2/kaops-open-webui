@@ -162,8 +162,8 @@ async function loadMetadata() {
 		
 		const response = await metadataApi.getMetadata(props.fileItem.path);
 
-		if (response.data.exists && response.data.metadata.metadata) {
-			const apiMetadata = response.data.metadata.metadata;
+		if (response.exists && response.metadata.metadata) {
+			const apiMetadata = response.metadata.metadata;
 			
 			// Convert API response to our form format
 			const contextData = apiMetadata.context || '';
