@@ -62,6 +62,23 @@ export async function getTokenReplacerFileHealth(filePath: string) {
 	return ((raw as any)?.data ?? raw) as TokenReplacerFileHealth;
 }
 
+// Upload a tokenized document (multipart/form-data)
+export type UploadTokenizedDocumentResponse = {
+	filePath: string;
+	size: number;
+	contentType: string;
+	uploadedAt: string; // ISO timestamp
+};
+
+export async function uploadTokenizedDocument(file: File | Blob, filename?: string) {
+	const fd = new FormData();
+	// Prefer provided filename, else use File.name when available
+	const name = filename ?? (file as any)?.name ?? 'upload.bin';
+	fd.append('file', file, name);
+	const raw = await apiFetch<any>('/tools/token-replacer/upload', { method: 'POST', body: fd });
+	return ((raw as any)?.data ?? raw) as UploadTokenizedDocumentResponse;
+}
+
 // GET the available tokens and current values for a chat/model and selected document path
 export async function getTokenReplacementValues(chatId: string, modelId: string) {
 	const raw = await apiFetch<any>(
