@@ -1,12 +1,11 @@
 <script lang="ts">
 import DOMPurify from 'dompurify';
 import { getContext, onDestroy, onMount } from 'svelte';
-import { getFilePreview } from '$lib/apis/private-ai/sidekicks/token-replacer';
-import { chatId, currentSelectedModelId } from '$lib/stores';
+import { getFilePreview, getFilePreviewBeforeChat } from '$lib/apis/private-ai/sidekicks/token-replacer';
+import { chatId, currentSelectedModelId, showSidebar } from '$lib/stores';
 import type { TokenFile } from '../stores';
 import Spinner from '$lib/components/common/Spinner.svelte';
 import { appHooks } from '$lib/utils/hooks';
-import { showSidebar } from '$lib/stores';
 import Switch from '$lib/components/common/Switch.svelte';
 
 export let file: TokenFile | null = null;
@@ -159,16 +158,15 @@ async function load() {
 		}
 		const cId = $chatId as string;
 		const mId = $currentSelectedModelId as string | null;
-		if (!cId) {
-			previewError = $i18n.t('No chat is active.');
-			return;
+		let res: { preview: string } | undefined;
+
+		if (cId && mId) {
+			res = await getFilePreview(previewType, cId, mId);
+		} else {
+			res = await getFilePreviewBeforeChat(previewType, file.fullPath);
 		}
-		if (!mId) {
-			previewError = $i18n.t('No model selected.');
-			return;
-		}
-		const res = await getFilePreview(previewType, cId, mId);
-		previewHtml = res.preview ?? '';
+
+		previewHtml = res?.preview ?? '';
 	} catch (e) {
 		previewError = $i18n.t('Failed to load preview.');
 	} finally {
@@ -426,11 +424,14 @@ onDestroy(() => {
 					{$i18n.t('No document selected')}
 				{/if}
 			</div>
-			<div class="flex items-center gap-2 shrink-0">
-				<span id="values-switch-label"
-							class="text-[11px] text-gray-700 dark:text-gray-300 select-none">+{$i18n.t('Values')}</span>
-				<Switch id="values-switch" ariaLabelledbyId="values-switch-label" bind:state={isValuesMode} disabled={previewLoading} />
-			</div>
+			{#if $chatId}
+				<div class="flex items-center gap-2 shrink-0">
+					<span id="values-switch-label"
+								class="text-[11px] text-gray-700 dark:text-gray-300 select-none">+{$i18n.t('Values')}</span>
+					<Switch id="values-switch" ariaLabelledbyId="values-switch-label" bind:state={isValuesMode}
+									disabled={previewLoading} />
+				</div>
+			{/if}
 		</div>
 	</div>
 	<div class="flex-1 overflow-auto">
@@ -444,10 +445,10 @@ onDestroy(() => {
 		{:else if previewHtml}
 			<div class="p-4">
 				<div class="preview-html prose prose-sm max-w-none dark:prose-invert"
-							 class:mode-original={previewMode==='original'} class:mode-values={previewMode==='values'}
-							 bind:this={previewContainer} style="min-height:80px; text-align: left;" on:click={handlePreviewClick}>
-						{@html DOMPurify.sanitize(previewHtml)}
-					</div>
+						 class:mode-original={previewMode==='original'} class:mode-values={previewMode==='values'}
+						 bind:this={previewContainer} style="min-height:80px; text-align: left;" on:click={handlePreviewClick}>
+					{@html DOMPurify.sanitize(previewHtml)}
+				</div>
 			</div>
 		{:else}
 			<div class="p-4 text-sm text-gray-500 dark:text-gray-400">{$i18n.t('No preview available.')}</div>
@@ -597,10 +598,10 @@ onDestroy(() => {
     }
 
     :global(.preview-html .token.token-selected-original) {
-    background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
-    color: #fde68a !important; /* yellow-200 */
-    border: 2px solid rgba(245, 158, 11, 0.85) !important;
-    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4) !important;
+      background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
+      color: #fde68a !important; /* yellow-200 */
+      border: 2px solid rgba(245, 158, 11, 0.85) !important;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4) !important;
     }
   }
 
