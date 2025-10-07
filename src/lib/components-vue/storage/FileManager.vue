@@ -128,19 +128,23 @@ function handleContextMenuShowing(e: ContextMenuShowingEvent) {
 		// Always clone from original to avoid persistence
 		let newItems = JSON.parse(JSON.stringify(originalContextMenuItems.value));
 
-		// Conditionally modify only for directories
-		if (e.fileSystemItem && e.fileSystemItem.isDirectory) {
-			const modifyItemVisibility = (item) => {
-				if (item?.options?.action === 'viewFile') {
-					item.visible = false; // Hide for directories (or item.disabled = true; to gray out)
+		// Conditionally modify based on file type
+		const modifyItemVisibility = (item: any) => {
+			if (e.fileSystemItem && e.fileSystemItem.isDirectory) {
+				// For directories: hide viewFile and editMetadata
+				if (item?.options?.action === 'viewFile' || item?.options?.action === 'editMetadata') {
+					item.visible = false;
 				}
-				if (item.items && item.items.length > 0) {
-					item.items.forEach(modifyItemVisibility);
-				}
-			};
+			} else {
+				// For files: show all items
+				item.visible = true;
+			}
+			if (item.items && item.items.length > 0) {
+				item.items.forEach(modifyItemVisibility);
+			}
+		};
 
-			newItems.forEach(modifyItemVisibility);
-		}
+		newItems.forEach(modifyItemVisibility);
 
 		// Set the context-specific version for this menu showing
 		e.component.option('contextMenu.items', newItems);
@@ -148,9 +152,19 @@ function handleContextMenuShowing(e: ContextMenuShowingEvent) {
 		// Be defensive: if anything goes wrong, don't block the menu entirely.
 		console.warn('Error adjusting context menu visibility', err);
 	}
+	
+	// Cancel context menu for directories
+	if (e.fileSystemItem.isDirectory) {
+		e.cancel = true;
+		return;
+	}
+	
+	// Store the current file item for files
+	currentFileItem.value = e.fileSystemItem;
 }
 
 const showEditMetadataPopup = ref(false);
+
 
 // Use the theme composable
 const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme({
