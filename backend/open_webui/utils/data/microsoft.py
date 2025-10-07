@@ -414,12 +414,13 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
             
             for message in messages:
                 message_id = message.get('id')
+                message_etag = message.get('@odata.etag', '')
                 if not message_id:
                     continue
                 
                 safe_subject = message.get('subject', 'No Subject')[:100]
                 file_path = construct_file_path(
-                    "Outlook", folder, f"email_{message_id}_{safe_subject}.txt"
+                    "Outlook", folder, f"email_{message_etag}_{safe_subject}.txt"
                 )
                 
                 if file_exists_in_storage(file_path):
