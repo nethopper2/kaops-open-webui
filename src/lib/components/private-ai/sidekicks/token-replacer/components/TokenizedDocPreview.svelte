@@ -265,7 +265,7 @@ let removeHook: (() => void) | null = null;
 
 function clearSelection() {
 	if (!previewContainer) return;
-	const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved, .token.token-selected, .token.token-selected-original') as HTMLElement | null;
+	const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved, .token.token-selected-original') as HTMLElement | null;
 	if (prevSel) {
 		// Determine the token's persisted state if available
 		const savedState: TokenState = (prevSel.dataset?.tokenState as TokenState | undefined)
@@ -273,7 +273,6 @@ function clearSelection() {
 		// Remove selected state classes
 		prevSel.classList.remove('token-selected-draft');
 		prevSel.classList.remove('token-selected-saved');
-		prevSel.classList.remove('token-selected');
 		prevSel.classList.remove('token-selected-original');
 		// Restore unselected state based on mode and tokenState
 		clearStateTint(prevSel);
@@ -364,7 +363,12 @@ onMount(() => {
 	const setValues = (params: { byId: Record<string, { draft?: string; saved?: string }> }) => {
 		try {
 			replacementsById = new Map(Object.entries(params.byId || {}));
-			if (previewMode === 'values') applyValuesText();
+			if (previewMode === 'values') {
+				applyValuesText();
+				// Re-apply status markers and mode styles immediately so draft/saved classes update in real time
+				applyStatusMarkers();
+				applyModeStyles();
+			}
 		} catch {
 		}
 	};
@@ -564,13 +568,6 @@ onDestroy(() => {
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35) !important;
   }
 
-  :global(.preview-html .token.token-selected) {
-    background: #fef9c3 !important; /* yellow-100 */
-    color: #111827 !important; /* gray-900 for readability */
-    border: 2px solid rgba(250, 204, 21, 0.9) !important; /* yellow-400 */
-    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.35) !important; /* subtle halo */
-    font-weight: 700 !important;
-  }
 
   :global(.preview-html .token.token-selected-original) {
     background: #fef9c3 !important; /* align with lighter warning */
@@ -596,12 +593,6 @@ onDestroy(() => {
       box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.4) !important;
     }
 
-    :global(.preview-html .token.token-selected) {
-      background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
-      color: #fde68a !important; /* yellow-200 */
-      border: 2px solid rgba(245, 158, 11, 0.85) !important; /* amber-500-600 */
-      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4) !important;
-    }
 
     :global(.preview-html .token.token-selected-original) {
       background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */

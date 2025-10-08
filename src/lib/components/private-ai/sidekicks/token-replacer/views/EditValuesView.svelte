@@ -581,13 +581,20 @@ function handleInput(token: string, id?: string) {
 			value: string
 		}>).detail?.value ?? (e.target as HTMLTextAreaElement | null)?.value ?? '';
 		updateValue(token, vRaw);
-		// If this token is currently selected in preview, update highlight state when it flips.
-		if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
-			const v = (vRaw ?? '').trim();
-			const s = (savedValues[token] ?? '').trim();
-			const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+		const v = (vRaw ?? '').trim();
+		const s = (savedValues[token] ?? '').trim();
+		const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+		// If preview is open but this token isn't currently selected (focus event might not have fired), select it now.
+		if (isPreviewOpen && (!lastPreviewSelection || lastPreviewToken !== token)) {
+			const selId = id ?? getFirstOccurrenceId(token, tokens.indexOf(token));
+			appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: selId, state: newState });
+			lastPreviewSelection = { id: selId, state: newState };
+			lastPreviewToken = token;
+		} else if (isPreviewOpen && lastPreviewSelection && lastPreviewToken === token) {
+			// If this token is currently selected in preview (any occurrence), update highlight state when it flips.
 			if (lastPreviewSelection.state !== newState) {
-				appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
+				const selId = lastPreviewSelection.id;
+				appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: selId, state: newState });
 				lastPreviewSelection.state = newState;
 			}
 		}
