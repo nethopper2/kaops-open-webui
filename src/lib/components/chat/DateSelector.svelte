@@ -2,11 +2,13 @@
 import { computePosition, offset, flip, shift, autoPlacement } from '@floating-ui/dom';
 import Tooltip from '../common/Tooltip.svelte';
 import CalendarIcon from '../icons/CalendarSolid.svelte';
-import { getContext } from 'svelte';
+import { createEventDispatcher, getContext } from 'svelte';
 import { settings } from '$lib/stores';
 import CustomDateMenu from '../chat/CustomDateMenu.svelte';
 
 const i18n = getContext('i18n');
+
+const dispatch = createEventDispatcher();
 
 let DateSelectorEnabled = false;
 let SelectedDate = 'All';
@@ -32,9 +34,21 @@ function DateToggleDropdown() {
     }
 }
 
+function handlePresetDate(option) {
+    SelectedDate = option;
+    if (option === 'Custom') {
+        ShowCustomMenu = true;
+    } else {
+        DateSelectorEnabled = false;
+        ShowCustomMenu = false;
+        
+        dispatch('dateselected', { type: 'presetrange', value: option });
+    }
+}
+
 let ShowCustomMenu = false;
 
-function handleapply(e) {
+function handleCustomapply(e) {
     const { from, to } = e.detail;
     const reformatDate = (isoString) => {
         const [year, month, day] = isoString.split('-');
@@ -43,9 +57,11 @@ function handleapply(e) {
     SelectedDate = `${reformatDate(from)} → ${reformatDate(to)}`;
     ShowCustomMenu = false;
     DateSelectorEnabled = false;
+
+    dispatch('dateselected', { type: 'customrange', value: SelectedDate })
 }
 
-function handlecancel(e) {
+function handleCustomcancel(e) {
     ShowCustomMenu = false;
     DateSelectorEnabled = false;
     SelectedDate = 'All';
@@ -103,14 +119,7 @@ function handlecancel(e) {
                     {SelectedDate === option
                         ? 'text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
                         :''}"
-                on:click={() => {
-                    SelectedDate = option;
-                    if (option === 'Custom') {
-                        ShowCustomMenu = true;
-                    } else {
-                        DateSelectorEnabled = false;
-                        ShowCustomMenu = false;
-                    }
+                on:click={() => {handlePresetDate(option)
                 }}
             >
                 {option}
@@ -118,12 +127,12 @@ function handlecancel(e) {
             
             {#if option === 'Custom' && ShowCustomMenu}
                 <div class="fixed inset-0 z-[999] flex items-start justify-center bg-black/30"
-                    on:click={handlecancel}
+                    on:click={handleCustomcancel}
                 >
                     <div class='mt-9 rounded-md shadow-lg w-80 bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50'>
                         <CustomDateMenu
-                            on:apply={handleapply}
-                            on:cancel={handlecancel}
+                            on:apply={handleCustomapply}
+                            on:cancel={handleCustomcancel}
                         />
                     </div>
                 </div>

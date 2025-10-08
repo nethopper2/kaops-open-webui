@@ -2,11 +2,13 @@
 import { computePosition, offset, flip, shift, autoPlacement } from '@floating-ui/dom';
 import Tooltip from '../common/Tooltip.svelte';
 import FaceIcon from '../icons/FaceSmile.svelte'
-import { getContext } from 'svelte';
+import { createEventDispatcher, getContext } from 'svelte';
 import { settings } from '$lib/stores';
 import { Button } from 'bits-ui';
 
 const i18n = getContext('i18n');
+
+const dispatch = createEventDispatcher();
 
 let ResponseTypeSelectorEnabled = false;
 let ResponseType = 'Default';
@@ -32,7 +34,11 @@ function ResponseToggleDropdown() {
     }
 }
 
-
+function handleResponseType(option) {
+    ResponseType = option;
+    ResponseTypeSelectorEnabled = false;
+    dispatch('responsetypeselected', { value: option });
+}
 </script>
 
 <div class="relative inline-block text-left">
@@ -86,10 +92,8 @@ function ResponseToggleDropdown() {
                     {ResponseType === option
                         ? 'text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
                         : ''}"
-                on:click={() => {
-                    ResponseType = option;
-                    ResponseTypeSelectorEnabled = false;
-                    }}
+                on:click={() => {handleResponseType(option)
+                }}
             >
                 {option}
             </button>
