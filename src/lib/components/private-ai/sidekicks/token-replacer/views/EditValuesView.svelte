@@ -1166,7 +1166,7 @@ onDestroy(() => {
 															fullscreenStrategy="container"
 															id={getInputId(token)}
 															placeholder={$i18n.t('token will be removed from document')}
-															ariaLabel={$i18n.t('Replacement value')}
+															ariaLabel={$i18n.t('Value')}
 															ariaDescribedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
 															describedByText={$i18n.t('Value differs from the last saved value and is not yet saved.')}
 															value={values[token] ?? ''}
