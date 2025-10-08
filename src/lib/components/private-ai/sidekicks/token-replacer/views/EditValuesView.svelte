@@ -235,13 +235,23 @@ function onOverlayInput(e: Event | CustomEvent<{ value: string }>) {
 	updateValue(overlayToken, v);
 	if (isPreviewOpen) {
 		const id = overlayOccurrences[overlayCurrentIdx];
+		const s = (savedValues[overlayToken] ?? '').trim();
+		const vTrim = (v ?? '').trim();
+		const isNone = !vTrim && !s;
 		const newState = computeTokenState(overlayToken, v);
+		// For NONE case, emit statuses/values first so preview persists 'none' before selection
+		if (isNone) {
+			emitStatusIds();
+			emitValuesById();
+		}
 		appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 		lastPreviewSelection = { id, state: newState };
 		lastPreviewToken = overlayToken;
-		// Update unselected state coloring and replacement text
-		emitStatusIds();
-		emitValuesById();
+		// For non-NONE or as a follow-up, update unselected state coloring and replacement text
+		if (!isNone) {
+			emitStatusIds();
+			emitValuesById();
+		}
 	}
 }
 
@@ -584,6 +594,14 @@ function handleInput(token: string, id?: string) {
 		const v = (vRaw ?? '').trim();
 		const s = (savedValues[token] ?? '').trim();
 		const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+		const isNone = !v && !s;
+		// Always sync values and statuses to the preview when open so +Values text updates live.
+		// For the special NONE case (v and s are both empty), emit statuses first so the preview
+		// persists dataset.tokenState = 'none' before we (re)select. This avoids a brief 'saved' tint.
+		if (isPreviewOpen && isNone) {
+			emitStatusIds();
+			emitValuesById();
+		}
 		// If preview is open but this token isn't currently selected (focus event might not have fired), select it now.
 		if (isPreviewOpen && (!lastPreviewSelection || lastPreviewToken !== token)) {
 			const selId = id ?? getFirstOccurrenceId(token, tokens.indexOf(token));
@@ -598,8 +616,8 @@ function handleInput(token: string, id?: string) {
 				lastPreviewSelection.state = newState;
 			}
 		}
-		// Always sync values and statuses to the preview when open so +Values text updates live
-		if (isPreviewOpen) {
+		// For non-NONE cases (or as a follow-up), ensure preview receives live values/statuses
+		if (isPreviewOpen && !isNone) {
 			emitStatusIds();
 			emitValuesById();
 		}
@@ -614,17 +632,23 @@ const iconBtnActive = 'border-amber-300 bg-amber-100 text-amber-700 dark:border-
 function handleRemoveTokenClick(token: string, id?: string) {
 	// Clicking the remove button clears the value (marks as removed)
 	updateValue(token, '');
+	const v = ''.trim();
+	const s = (savedValues[token] ?? '').trim();
+	const isNone = !v && !s;
+	// For NONE case, emit statuses/values first so preview persists 'none' before selection update
+	if (isPreviewOpen && isNone) {
+		emitStatusIds();
+		emitValuesById();
+	}
 	if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
-		const v = ''.trim();
-		const s = (savedValues[token] ?? '').trim();
 		const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
 		if (lastPreviewSelection.state !== newState) {
 			appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 			lastPreviewSelection.state = newState;
 		}
 	}
-	// Also reflect cleared value in the preview's +Values mode immediately
-	if (isPreviewOpen) {
+	// For non-NONE or as a follow-up, reflect cleared value in the preview's +Values mode immediately
+	if (isPreviewOpen && !isNone) {
 		emitStatusIds();
 		emitValuesById();
 	}
