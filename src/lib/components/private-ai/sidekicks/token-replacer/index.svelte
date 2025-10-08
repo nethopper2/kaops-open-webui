@@ -2,7 +2,7 @@
   import { getContext } from 'svelte';
   import InitialView from '$lib/components/private-ai/sidekicks/token-replacer/views/InitialView.svelte';
   import EditValuesView from '$lib/components/private-ai/sidekicks/token-replacer/views/EditValuesView.svelte';
-  import { isChatStarted } from '$lib/stores';
+  import { isChatStarted, chatId } from '$lib/stores';
   import { currentTokenReplacerSubView, selectedTokenizedDocPath } from './stores';
 	import type { PrivateAiSidekickState } from '$lib/apis/private-ai/sidekicks';
 
@@ -16,11 +16,21 @@
   export let initialState: PrivateAiSidekickState<TokenReplacerState> | null = null;
   $: void modelId;
 
-  // Hydrate selection from the initial state once, but only when showing edit values
-  let hydrated = false;
-  $: if (!hydrated && $currentTokenReplacerSubView === 'editValues' && initialState?.tokenizedDocPath) {
-    selectedTokenizedDocPath.set(String(initialState.tokenizedDocPath));
-    hydrated = true;
+  // Hydrate selection from the initial state per chat, when showing edit values.
+  // Use chatId as the key to ensure we re-hydrate on chat switches but only once per chat.
+  let hydratedKey = '';
+  $: if ($currentTokenReplacerSubView === 'editValues') {
+    const c = $chatId || '';
+    const statePath = initialState?.tokenizedDocPath ? String(initialState.tokenizedDocPath) : '';
+    if (c && hydratedKey !== c && statePath) {
+      // Switching to an existing chat with persisted state: force hydrate from state.
+      selectedTokenizedDocPath.set(statePath);
+      hydratedKey = c;
+    }
+    // If we leave chats (c === ''), allow future hydration when another chat loads
+    if (!c && hydratedKey !== '') {
+      hydratedKey = '';
+    }
   }
 
   // A chat is considered "started" whenever there is an active chat id.
