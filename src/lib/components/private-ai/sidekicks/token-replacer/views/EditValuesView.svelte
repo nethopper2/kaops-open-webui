@@ -1,7 +1,7 @@
 <script lang="ts">
 import { getContext, onDestroy, onMount, tick } from 'svelte';
 import { toast } from 'svelte-sonner';
-import { ensureFilesFetched, selectedTokenizedDoc, selectedTokenizedDocPath } from '../stores';
+import { ensureFilesFetched, tokenizedFiles, selectedTokenizedDocPath } from '../stores';
 import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
 import { appHooks } from '$lib/utils/hooks';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
@@ -25,11 +25,47 @@ import ListBullet from '$lib/components/icons/ListBullet.svelte';
 import Minus from '$lib/components/icons/Minus.svelte';
 import ClearableInput from '$lib/components/common/ClearableInput.svelte';
 import ExpandableTextarea from '$lib/components/common/ExpandableTextarea.svelte';
+import { loadPrivateAiSidekickState } from '$lib/private-ai/state';
 
 const i18n = getContext('i18n');
 
+// Persisted document path for this chat+model (Edit view relies solely on persisted state)
+let persistedDocPath: string = '';
+let isHydratingDoc: boolean = true;
+let selectedDoc: any = null;
+
+// Keep tokenized files list available for lookup
+onMount(() => {
+	ensureFilesFetched();
+});
+
+// TODO: this extra call for loadPrivateAiSidekickState was added during a bug fix and then caching was used to prevent excess api calls. Is this necessary. Be sure not to reintroduce bugs pai-407.
+// Load persisted sidekick state whenever chat/model changes
+$: (async () => {
+	const cId = $chatId as string | null;
+	const mId = $currentSelectedModelId as string | null;
+	isHydratingDoc = true;
+	try {
+		if (cId && mId) {
+			const state = await loadPrivateAiSidekickState(cId, mId);
+			persistedDocPath = String(state?.tokenizedDocPath ?? '');
+			// Sync the global selection store so dependent UI reflects the persisted document
+			if (persistedDocPath) {
+				selectedTokenizedDocPath.set(persistedDocPath);
+			}
+		} else {
+			persistedDocPath = '';
+		}
+	} finally {
+		isHydratingDoc = false;
+	}
+})();
+
+// Derive the selected document from persistedDocPath and the available files
+$: selectedDoc = ($tokenizedFiles ?? []).find((f) => String(f.fullPath) === String(persistedDocPath)) ?? null;
+
 function openPreviewPanel() {
-	const file = $selectedTokenizedDoc;
+	const file = selectedDoc;
 	if (file) {
 		appHooks.callHook('chat.overlay', {
 			action: 'open',
@@ -495,11 +531,32 @@ async function loadTokensAndValuesWithRetry() {
 	}
 }
 
+// Coalesce concurrent/rapid token-value loads per chat+model
+const tokensInFlight = new Map<string, Promise<{ tokens: Token[]; values: ReplacementValues; occurrences: Record<string, string[]> }>>();
+function makeKey(chat?: string | null, model?: string | null) { return `${chat || ''}|${model || ''}`; }
+async function getTokensAndValuesOnce() {
+	const cId = $chatId as string | null;
+	const mId = $currentSelectedModelId as string | null;
+	const key = makeKey(cId, mId);
+	const existing = tokensInFlight.get(key);
+	if (existing) return existing;
+	const p = (async () => {
+		try {
+			return await loadTokensAndValuesWithRetry();
+		} finally {
+			// allow subsequent loads (e.g., on chat switch) to refetch
+			tokensInFlight.delete(key);
+		}
+	})();
+	tokensInFlight.set(key, p);
+	return p;
+}
+
 // Submit replacement values to API
 async function submitReplacementValues(payload: { token: string; value: string }[]): Promise<void> {
 	const cId = $chatId as string | null;
 	const mId = $currentSelectedModelId as string | null;
-	const dPath = $selectedTokenizedDocPath as string | null;
+	const dPath = persistedDocPath as string | null;
 	if (!cId || !mId || !dPath) {
 		throw new Error('Missing context: chat, model, or document path');
 	}
@@ -515,7 +572,7 @@ async function submitReplacementValues(payload: { token: string; value: string }
 async function handleGenerate() {
 	const cId = $chatId as string | null;
 	const mId = $currentSelectedModelId as string | null;
-	const dPath = $selectedTokenizedDocPath as string | null;
+	const dPath = persistedDocPath as string | null;
 	if (!cId || !mId || !dPath) {
 		toast.error($i18n.t('Missing context: chat, model, or document path'));
 		return;
@@ -661,7 +718,7 @@ function getInputId(token: string): string {
 function getContextIds() {
 	const cId = $chatId as string | null;
 	const mId = $currentSelectedModelId as string | null;
-	const tId = $selectedTokenizedDocPath as string | null;
+	const tId = persistedDocPath as string | null;
 	return { cId, mId, tId };
 }
 
@@ -921,7 +978,7 @@ onMount(async () => {
 	isLoading = true;
 	loadError = null;
 	try {
-		const { tokens: tk, values: vals, occurrences: occ } = await loadTokensAndValuesWithRetry();
+		const { tokens: tk, values: vals, occurrences: occ } = await getTokensAndValuesOnce();
 		tokens = tk;
 		// Track server-saved values separately from editable values
 		savedValues = vals;
@@ -1063,10 +1120,17 @@ onDestroy(() => {
 	<!-- Content area container (page scroll) -->
 	<div class="relative">
 		<!-- Selected document summary (non-sticky) -->
-		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
+		{#if isHydratingDoc && $selectedTokenizedDocPath === ""}
+			<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
 				 bind:this={summaryEl}>
-			<SelectedDocumentSummary on:preview={openPreviewPanel} disabled={isPreviewOpen} />
-		</div>
+				<div class="text-xs text-gray-500 dark:text-gray-400">{$i18n.t('Loading...')}</div>
+			</div>
+		{:else}
+			<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
+				 bind:this={summaryEl}>
+				<SelectedDocumentSummary on:preview={openPreviewPanel} disabled={isPreviewOpen} />
+			</div>
+		{/if}
 
 		<!-- Overlay scope wrapper: covers from below SelectedDocumentSummary -->
 		<div class="relative">
