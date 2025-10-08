@@ -65,7 +65,7 @@ function emitStatusIds() {
 				noneIds.push(...ids);
 			} else if (v === s && s) {
 				savedIds.push(...ids);
-			} else if (v && v !== s) {
+			} else {
 				draftIds.push(...ids);
 			}
 		}
@@ -692,14 +692,15 @@ async function handleSubmit() {
 		savedValues = { ...values };
 		submitSuccess = true;
 		suppressDraftPersistence = true; // prevent re-saving this session unless user edits again
-		// If a token is currently selected in preview, update its selected class to saved and sync all statuses/values live
+		// If preview is open, first emit statuses/values so the preview updates tokenState (including none for empty saved)
+		// then re-select the current token so the correct selected class is applied immediately.
 		if (isPreviewOpen) {
-			if (lastPreviewSelection) {
-				lastPreviewSelection.state = 'saved';
-				try { appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: lastPreviewSelection.id, state: 'saved' }); } catch {}
-			}
 			try { emitStatusIds(); } catch {}
 			try { emitValuesById(); } catch {}
+			if (lastPreviewSelection) {
+				try { appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: lastPreviewSelection.id, state: 'saved' }); } catch {}
+				lastPreviewSelection.state = 'saved';
+			}
 		}
 		// Clear the saved draft on successful submit so future sessions start fresh
 		const { cId, mId, tId } = getContextIds();

@@ -47,10 +47,18 @@ function applyValuesText() {
 		const rep = replacementsById.get(id);
 		const draft = (rep?.draft ?? '').trim();
 		const saved = (rep?.saved ?? '').trim();
+		const state = (el.dataset?.tokenState as TokenState | undefined) ?? 'none';
 		let text = '';
-		if (draft) text = draft;
-		else if (saved) text = saved;
-		else text = el.dataset.originalText ?? '';
+		if (state === 'draft') {
+			// In draft state, an explicit empty draft means show the original token text
+			text = draft ? draft : (el.dataset.originalText ?? '');
+		} else if (state === 'saved') {
+			// If saved value is empty or missing, fall back to original token text
+			text = saved ? saved : (el.dataset.originalText ?? '');
+		} else {
+			// none/unknown state uses original token text
+			text = el.dataset.originalText ?? '';
+		}
 		// Only update when different to avoid cursor jumps
 		if ((el.textContent ?? '') !== text) {
 			el.textContent = text;
@@ -364,9 +372,9 @@ onMount(() => {
 		try {
 			replacementsById = new Map(Object.entries(params.byId || {}));
 			if (previewMode === 'values') {
-				applyValuesText();
-				// Re-apply status markers and mode styles immediately so draft/saved classes update in real time
+				// Apply status first so tokenState is accurate for text resolution
 				applyStatusMarkers();
+				applyValuesText();
 				applyModeStyles();
 			}
 		} catch {
