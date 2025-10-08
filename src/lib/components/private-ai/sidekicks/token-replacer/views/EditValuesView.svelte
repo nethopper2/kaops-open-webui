@@ -39,6 +39,7 @@ onMount(() => {
 	ensureFilesFetched();
 });
 
+// TODO: this extra call for loadPrivateAiSidekickState was added during a bug fix and then caching was used to prevent excess api calls. Is this necessary. Be sure not to reintroduce bugs pai-407.
 // Load persisted sidekick state whenever chat/model changes
 $: (async () => {
 	const cId = $chatId as string | null;
