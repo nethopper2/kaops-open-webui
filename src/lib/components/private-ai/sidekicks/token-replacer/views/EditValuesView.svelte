@@ -65,7 +65,7 @@ function emitStatusIds() {
 				noneIds.push(...ids);
 			} else if (v === s && s) {
 				savedIds.push(...ids);
-			} else if (v && v !== s) {
+			} else {
 				draftIds.push(...ids);
 			}
 		}
@@ -144,6 +144,7 @@ let removeOverlayHook: (() => void) | null = null;
 let removePreviewClosedHook: (() => void) | null = null;
 let removePreviewReloadedHook: (() => void) | null = null;
 let removePreviewTokenClickedHook: (() => void) | null = null;
+let removePreviewRequestSyncHook: (() => void) | null = null;
 // Track the last previewed token selection to update highlight state on edits
 let lastPreviewSelection: { id: string; state: 'draft' | 'saved' } | null = null;
 let lastPreviewToken: string | null = null;
@@ -234,13 +235,23 @@ function onOverlayInput(e: Event | CustomEvent<{ value: string }>) {
 	updateValue(overlayToken, v);
 	if (isPreviewOpen) {
 		const id = overlayOccurrences[overlayCurrentIdx];
+		const s = (savedValues[overlayToken] ?? '').trim();
+		const vTrim = (v ?? '').trim();
+		const isNone = !vTrim && !s;
 		const newState = computeTokenState(overlayToken, v);
+		// For NONE case, emit statuses/values first so preview persists 'none' before selection
+		if (isNone) {
+			emitStatusIds();
+			emitValuesById();
+		}
 		appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 		lastPreviewSelection = { id, state: newState };
 		lastPreviewToken = overlayToken;
-		// Update unselected state coloring and replacement text
-		emitStatusIds();
-		emitValuesById();
+		// For non-NONE or as a follow-up, update unselected state coloring and replacement text
+		if (!isNone) {
+			emitStatusIds();
+			emitValuesById();
+		}
 	}
 }
 
@@ -580,18 +591,33 @@ function handleInput(token: string, id?: string) {
 			value: string
 		}>).detail?.value ?? (e.target as HTMLTextAreaElement | null)?.value ?? '';
 		updateValue(token, vRaw);
-		// If this token is currently selected in preview, update highlight state when it flips.
-		if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
-			const v = (vRaw ?? '').trim();
-			const s = (savedValues[token] ?? '').trim();
-			const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+		const v = (vRaw ?? '').trim();
+		const s = (savedValues[token] ?? '').trim();
+		const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+		const isNone = !v && !s;
+		// Always sync values and statuses to the preview when open so +Values text updates live.
+		// For the special NONE case (v and s are both empty), emit statuses first so the preview
+		// persists dataset.tokenState = 'none' before we (re)select. This avoids a brief 'saved' tint.
+		if (isPreviewOpen && isNone) {
+			emitStatusIds();
+			emitValuesById();
+		}
+		// If preview is open but this token isn't currently selected (focus event might not have fired), select it now.
+		if (isPreviewOpen && (!lastPreviewSelection || lastPreviewToken !== token)) {
+			const selId = id ?? getFirstOccurrenceId(token, tokens.indexOf(token));
+			appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: selId, state: newState });
+			lastPreviewSelection = { id: selId, state: newState };
+			lastPreviewToken = token;
+		} else if (isPreviewOpen && lastPreviewSelection && lastPreviewToken === token) {
+			// If this token is currently selected in preview (any occurrence), update highlight state when it flips.
 			if (lastPreviewSelection.state !== newState) {
-				appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
+				const selId = lastPreviewSelection.id;
+				appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: selId, state: newState });
 				lastPreviewSelection.state = newState;
 			}
 		}
-		// Always sync values and statuses to the preview when open so +Values text updates live
-		if (isPreviewOpen) {
+		// For non-NONE cases (or as a follow-up), ensure preview receives live values/statuses
+		if (isPreviewOpen && !isNone) {
 			emitStatusIds();
 			emitValuesById();
 		}
@@ -606,17 +632,23 @@ const iconBtnActive = 'border-amber-300 bg-amber-100 text-amber-700 dark:border-
 function handleRemoveTokenClick(token: string, id?: string) {
 	// Clicking the remove button clears the value (marks as removed)
 	updateValue(token, '');
+	const v = ''.trim();
+	const s = (savedValues[token] ?? '').trim();
+	const isNone = !v && !s;
+	// For NONE case, emit statuses/values first so preview persists 'none' before selection update
+	if (isPreviewOpen && isNone) {
+		emitStatusIds();
+		emitValuesById();
+	}
 	if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
-		const v = ''.trim();
-		const s = (savedValues[token] ?? '').trim();
 		const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
 		if (lastPreviewSelection.state !== newState) {
 			appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 			lastPreviewSelection.state = newState;
 		}
 	}
-	// Also reflect cleared value in the preview's +Values mode immediately
-	if (isPreviewOpen) {
+	// For non-NONE or as a follow-up, reflect cleared value in the preview's +Values mode immediately
+	if (isPreviewOpen && !isNone) {
 		emitStatusIds();
 		emitValuesById();
 	}
@@ -684,9 +716,15 @@ async function handleSubmit() {
 		savedValues = { ...values };
 		submitSuccess = true;
 		suppressDraftPersistence = true; // prevent re-saving this session unless user edits again
-		// If a token is currently selected in preview, reload the preview and reselect/scroll to it when loaded
-		if (isPreviewOpen && lastPreviewSelection) {
-			lastPreviewSelection.state = 'saved';
+		// If preview is open, first emit statuses/values so the preview updates tokenState (including none for empty saved)
+		// then re-select the current token so the correct selected class is applied immediately.
+		if (isPreviewOpen) {
+			try { emitStatusIds(); } catch {}
+			try { emitValuesById(); } catch {}
+			if (lastPreviewSelection) {
+				try { appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: lastPreviewSelection.id, state: 'saved' }); } catch {}
+				lastPreviewSelection.state = 'saved';
+			}
 		}
 		// Clear the saved draft on successful submit so future sessions start fresh
 		const { cId, mId, tId } = getContextIds();
@@ -755,6 +793,21 @@ onMount(async () => {
 		};
 	} catch {
 	}
+	// Respond to a request from the preview to sync statuses/values (e.g., when +Values is toggled on)
+	try {
+		const previewRequestSyncHandler = () => {
+			if (isPreviewOpen) {
+				try { emitStatusIds(); } catch {}
+				try { emitValuesById(); } catch {}
+			}
+		};
+		appHooks.hook('private-ai.token-replacer.preview.request-sync', previewRequestSyncHandler);
+		removePreviewRequestSyncHook = () => {
+			try {
+				appHooks.removeHook('private-ai.token-replacer.preview.request-sync', previewRequestSyncHandler);
+			} catch {}
+		};
+	} catch { }
 
 	// Listen for clicks in the preview to focus corresponding input and handle occurrences overlay
 	try {
