@@ -78,7 +78,7 @@ function applyDraftMarkers() {
 			const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
 			const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
 			if (el) {
-				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 					clearStateTint(el);
 					el.classList.add('token-draft');
 				}
@@ -102,7 +102,7 @@ function applySavedMarkers() {
 			const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
 			const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
 			if (el) {
-				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 					clearStateTint(el);
 					el.classList.add('token-saved');
 				}
@@ -126,7 +126,7 @@ function applyNoneMarkers() {
 			const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
 			if (el) {
 				// For none state, ensure any previous draft/saved tints are removed when unselected.
-				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 					clearStateTint(el);
 				}
 				// Persist state regardless of selection so unselecting restores correctly
@@ -192,10 +192,10 @@ function applyModeStyles() {
 			clearStateTint(el);
 			const wasSavedSel = el.classList.contains('token-selected-saved');
 			const wasDraftSel = el.classList.contains('token-selected-draft');
-			const wasIncompleteSel = el.classList.contains('token-selected');
+			const wasIncompleteSel = el.classList.contains('token-selected-original');
 			el.classList.remove('token-selected-saved');
 			el.classList.remove('token-selected-draft');
-			el.classList.remove('token-selected');
+			el.classList.remove('token-selected-original');
 			if (wasSavedSel || wasDraftSel || wasIncompleteSel) {
 				el.classList.add('token-selected-original');
 			} else {
@@ -210,10 +210,10 @@ function applyModeStyles() {
 				el.classList.remove('token-selected-original');
 				const st = (el.dataset?.tokenState as TokenState | undefined) ?? 'saved';
 				if (st === 'draft') el.classList.add('token-selected-draft');
-				else if (st === 'none') el.classList.add('token-selected');
+				else if (st === 'none') el.classList.add('token-selected-original');
 				else el.classList.add('token-selected-saved');
 			}
-			if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+			if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 				clearStateTint(el);
 				const st = (el.dataset?.tokenState as TokenState | undefined);
 				if (st === 'draft') el.classList.add('token-draft');
@@ -246,6 +246,12 @@ $: if (previewHtml) {
 // When mode changes, re-apply styles on next tick
 // Include previewMode in the dependency so toggling modes re-applies text/value swaps and styles
 $: if (previewContainer && previewMode) {
+	try {
+		if (previewMode === 'values') {
+			// Request the editor view to send current statuses and values so we can tint tokens immediately
+			appHooks.callHook('private-ai.token-replacer.preview.request-sync');
+		}
+	} catch {}
 	setTimeout(() => applyModeStyles(), 0);
 }
 
@@ -299,7 +305,7 @@ function selectAndScroll(id: string, state: 'draft' | 'saved') {
 			if (previewMode === 'original') {
 				el.classList.add('token-selected-original');
 			} else {
-				if (isNone) el.classList.add('token-selected');
+				if (isNone) el.classList.add('token-selected-original');
 				else el.classList.add(state === 'draft' ? 'token-selected-draft' : 'token-selected-saved');
 			}
 			// Scroll into view centered within the scrollable container

@@ -144,6 +144,7 @@ let removeOverlayHook: (() => void) | null = null;
 let removePreviewClosedHook: (() => void) | null = null;
 let removePreviewReloadedHook: (() => void) | null = null;
 let removePreviewTokenClickedHook: (() => void) | null = null;
+let removePreviewRequestSyncHook: (() => void) | null = null;
 // Track the last previewed token selection to update highlight state on edits
 let lastPreviewSelection: { id: string; state: 'draft' | 'saved' } | null = null;
 let lastPreviewToken: string | null = null;
@@ -684,9 +685,14 @@ async function handleSubmit() {
 		savedValues = { ...values };
 		submitSuccess = true;
 		suppressDraftPersistence = true; // prevent re-saving this session unless user edits again
-		// If a token is currently selected in preview, reload the preview and reselect/scroll to it when loaded
-		if (isPreviewOpen && lastPreviewSelection) {
-			lastPreviewSelection.state = 'saved';
+		// If a token is currently selected in preview, update its selected class to saved and sync all statuses/values live
+		if (isPreviewOpen) {
+			if (lastPreviewSelection) {
+				lastPreviewSelection.state = 'saved';
+				try { appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: lastPreviewSelection.id, state: 'saved' }); } catch {}
+			}
+			try { emitStatusIds(); } catch {}
+			try { emitValuesById(); } catch {}
 		}
 		// Clear the saved draft on successful submit so future sessions start fresh
 		const { cId, mId, tId } = getContextIds();
@@ -755,6 +761,21 @@ onMount(async () => {
 		};
 	} catch {
 	}
+	// Respond to a request from the preview to sync statuses/values (e.g., when +Values is toggled on)
+	try {
+		const previewRequestSyncHandler = () => {
+			if (isPreviewOpen) {
+				try { emitStatusIds(); } catch {}
+				try { emitValuesById(); } catch {}
+			}
+		};
+		appHooks.hook('private-ai.token-replacer.preview.request-sync', previewRequestSyncHandler);
+		removePreviewRequestSyncHook = () => {
+			try {
+				appHooks.removeHook('private-ai.token-replacer.preview.request-sync', previewRequestSyncHandler);
+			} catch {}
+		};
+	} catch { }
 
 	// Listen for clicks in the preview to focus corresponding input and handle occurrences overlay
 	try {
