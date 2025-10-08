@@ -75,7 +75,7 @@
   <!-- Optional badge (top-right, padded to not conflict with fullscreen button) -->
   {#if badgeText && !isFullscreen}
     <div class="pointer-events-none absolute -top-2 right-4 text-[9px] inline-flex items-center gap-1 text-blue-700 dark:text-blue-300">
-      <span class="inline-block px-1 py-0 rounded bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 shadow-sm">{badgeText}</span>
+      <span class="inline-block px-1 py-0 rounded bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 shadow-sm">{badgeText}</span>
     </div>
   {/if}
   {#if ariaDescribedby && describedByText}
@@ -119,7 +119,7 @@
           <div class="flex items-center gap-2">
             {#if badgeText}
               <div class="text-[10px] inline-flex items-center gap-1 text-blue-700 dark:text-blue-300">
-                <span class="inline-block px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 shadow-sm">{badgeText}</span>
+                <span class="inline-block px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 shadow-sm">{badgeText}</span>
               </div>
             {/if}
             <button
@@ -160,7 +160,7 @@
         <div class="flex items-center gap-2">
           {#if badgeText}
             <div class="text-[10px] inline-flex items-center gap-1 text-blue-700 dark:text-blue-300">
-              <span class="inline-block px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 shadow-sm">{badgeText}</span>
+              <span class="inline-block px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 shadow-sm">{badgeText}</span>
             </div>
           {/if}
           <button
