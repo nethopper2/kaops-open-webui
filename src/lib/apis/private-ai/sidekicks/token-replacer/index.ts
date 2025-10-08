@@ -13,6 +13,12 @@ export async function getFilePreview(type: 'docx' | 'csv', chatId: string, model
 	);
 }
 
+export async function getFilePreviewBeforeChat(type: 'docx' | 'csv', filePath: string) {
+	const params: Record<string, string> = {};
+	const path = encodeURIComponent(filePath);
+	return apiFetch(`/tools/token-replacer/preview/${type}/file/${path}`, { params });
+}
+
 // Types for Token Replacer values API
 export type TokenReplacementValue = { token: string; value: string };
 export type TokenOccurrences = Record<string, string[]>;
@@ -53,13 +59,35 @@ export type TokenReplacerFileHealth = {
 	duplicates: Array<{ token: string; count: number }>;
 	entityAnomalies: Array<{ token: string; entities: string[] }>;
 	styleMarkers: { detected: boolean; notes?: string };
-	anomalySummary: Array<{ type: string; message: string; severity: 'info' | 'warning' | 'error' | string; count: number }>;
+	anomalySummary: Array<{
+		type: string;
+		message: string;
+		severity: 'info' | 'warning' | 'error' | string;
+		count: number;
+	}>;
 };
 
 export async function getTokenReplacerFileHealth(filePath: string) {
 	const path = encodeURIComponent(filePath);
 	const raw = await apiFetch<any>(`/tools/token-replacer/health/file/${path}`);
 	return ((raw as any)?.data ?? raw) as TokenReplacerFileHealth;
+}
+
+// Upload a tokenized document (multipart/form-data)
+export type UploadTokenizedDocumentResponse = {
+	filePath: string;
+	size: number;
+	contentType: string;
+	uploadedAt: string; // ISO timestamp
+};
+
+export async function uploadTokenizedDocument(file: File | Blob, filename?: string) {
+	const fd = new FormData();
+	// Prefer provided filename, else use File.name when available
+	const name = filename ?? (file as any)?.name ?? 'upload.bin';
+	fd.append('file', file, name);
+	const raw = await apiFetch<any>('/tools/token-replacer/upload', { method: 'POST', body: fd });
+	return ((raw as any)?.data ?? raw) as UploadTokenizedDocumentResponse;
 }
 
 // GET the available tokens and current values for a chat/model and selected document path
@@ -88,7 +116,9 @@ export async function getTokenReplacementValues(chatId: string, modelId: string)
 			if (!tokens.includes(t)) tokens.push(t);
 			const v = typeof entry?.value === 'string' ? entry.value : '';
 			if (v && v.trim().length > 0) values[t] = v;
-			const ids = Array.isArray(entry?.occurrenceIds) ? entry.occurrenceIds.filter((x: any) => typeof x === 'string') : [];
+			const ids = Array.isArray(entry?.occurrenceIds)
+				? entry.occurrenceIds.filter((x: any) => typeof x === 'string')
+				: [];
 			if (ids.length > 0) occurrences[t] = ids;
 		}
 	} else if (Array.isArray(payload)) {
