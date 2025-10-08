@@ -58,6 +58,10 @@ function openPreviewDialog() {
 	}
 }
 
+function closePreviewPanel() {
+	appHooks.callHook('chat.overlay', { action: 'close' });
+}
+
 onMount(() => {
 	ensureFilesFetched();
 });
@@ -232,7 +236,10 @@ async function onFileChange(e: Event) {
 										// Chat id not yet assigned (new chat). Save once chatId becomes available.
 										const unsub = chatId.subscribe(async (cid) => {
 											if (cid) {
-												try { await doSave(cid); } finally { unsub(); }
+												try { await doSave(cid); } finally {
+													unsub();
+													closePreviewPanel();
+												}
 											}
 										});
 									}
