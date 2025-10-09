@@ -20,6 +20,7 @@ import {
 	import Drawer from '../common/Drawer.svelte';
 	import Artifacts from './Artifacts.svelte';
 	import Embeds from './ChatControls/Embeds.svelte';
+	import EllipsisVertical from '$lib/components/icons/EllipsisVertical.svelte';
 
 	export let history;
 	export let models = [];
