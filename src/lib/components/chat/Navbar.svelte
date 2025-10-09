@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
+	import { createEventDispatcher, getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 
  import {
@@ -25,6 +25,9 @@
 
 	import ShareChatModal from '../chat/ShareChatModal.svelte';
 	import ModelSelector from '../chat/ModelSelector.svelte';
+	import DateSelector from '../chat/DateSelector.svelte';
+	import ResponseTypeSelector from '../chat/ResponseTypeSelector.svelte';
+	import CustomDateMenu from '../chat/CustomDateMenu.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import Menu from '$lib/components/layout/Navbar/Menu.svelte';
 	import UserMenu from '$lib/components/layout/Sidebar/UserMenu.svelte';
@@ -41,6 +44,7 @@
  import ChatPlus from '../icons/ChatPlus.svelte';
 
 	const i18n = getContext('i18n');
+	const dispatch = createEventDispatcher();
 
 	export let initNewChat: Function;
 	export let title: string = $WEBUI_NAME;
@@ -50,6 +54,8 @@
 	export let history;
 	export let selectedModels;
 	export let showModelSelector = true;
+	export let showDateSelector = true;
+	export let showResponseTypeSelector = true;
 	export let showBanners = true;
 
 	export let onSaveTempChat: () => {};
@@ -60,6 +66,16 @@
 
 	let showShareChatModal = false;
 	let showDownloadChatModal = false;
+
+	function handleDateSelected(e) {
+		dispatch('dateselected', e.detail);
+		console.log('date selection handled in navbar', e.detail)
+	}
+
+	function handleResponseTypeSelected(e) {
+		dispatch('responsetypeselected', e.detail);
+		console.log('response type selection handled in navbar', e.detail)
+	}
 </script>
 
 <ShareChatModal bind:show={showShareChatModal} chatId={$chatId} />
@@ -109,6 +125,22 @@
 						<ModelSelector bind:selectedModels showSetDefault={!shareEnabled} />
 					{/if}
 				</div>
+				
+				<div class="flex-none items-center justify-start gap-1">
+					{#if showDateSelector}
+						<div class="relative">
+							<DateSelector on:dateselected={handleDateSelected}/>
+						</div>
+					{/if}
+				</div>
+				<div class="flex-1 items-center justify-start gap-1">
+					{#if showResponseTypeSelector}
+						<div class="relative">
+							<ResponseTypeSelector on:responsetypeselected={handleResponseTypeSelected}/>
+						</div>
+					{/if}
+				</div>
+				
 
 				<div class="self-start flex flex-none items-center text-gray-600 dark:text-gray-400">
 					<!-- <div class="md:hidden flex self-center w-[1px] h-5 mx-2 bg-gray-300 dark:bg-stone-700" /> -->
