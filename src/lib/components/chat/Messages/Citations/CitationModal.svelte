@@ -1,12 +1,14 @@
 <script lang="ts">
-import { getContext } from 'svelte';
+import { getContext, onMount, tick } from 'svelte';
 import Modal from '$lib/components/common/Modal.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
+import { WEBUI_API_BASE_URL } from '$lib/constants';
+
 import { config } from '$lib/stores';
 import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue';
 
-	import XMark from '$lib/components/icons/XMark.svelte';
-	import Textarea from '$lib/components/common/Textarea.svelte';
+import XMark from '$lib/components/icons/XMark.svelte';
+import Textarea from '$lib/components/common/Textarea.svelte';
 
  let TModalRef: Modal
 
@@ -182,6 +184,7 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 									></Textarea>
 								</div>
 							{/if}
+						{/if}
 
 						<div>
 							<div
@@ -234,7 +237,7 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 							{:else}
 								<pre class="text-sm dark:text-gray-400 whitespace-pre-line">
                 {document.document}
-              </pre>
+              	</pre>
 							{/if}
 						</div>
 					</div>

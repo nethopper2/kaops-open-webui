@@ -1555,9 +1555,9 @@ async def process_chat_response(
                         existing_title = (Chats.get_chat_title_by_id(metadata["chat_id"]) or "").strip()
                         placeholder_titles = {"", "New Chat"}
                         has_meaningful_title = existing_title not in placeholder_titles
+                        user_message = get_last_user_message(messages)
 
                         if not has_meaningful_title:
-                            user_message = get_last_user_message(messages)
                             if user_message and len(user_message) > 100:
                                 user_message = user_message[:100] + "..."
 
