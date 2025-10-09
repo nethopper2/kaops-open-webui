@@ -4,6 +4,7 @@
 import { createHooks } from 'hookable';
 
 export type PrivateAiExtras = {
+	auth?: { authorization: string };
 	directive?: {
 		name: string
 		payload?: Record<string, unknown>;
@@ -61,6 +62,8 @@ export const appHooks = createHooks<{
 		id: string;
 		state: 'draft' | 'saved';
 	}) => void;
+	// Token Replacer: request the preview to sync statuses/values (e.g., when +Values toggled)
+	'private-ai.token-replacer.preview.request-sync': () => void;
 	// Token Replacer: preview finished rendering (initial load or reload)
 	'private-ai.token-replacer.preview.reloaded': () => void;
 }>();

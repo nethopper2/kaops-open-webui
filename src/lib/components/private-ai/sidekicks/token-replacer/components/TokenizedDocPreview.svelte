@@ -1,12 +1,11 @@
 <script lang="ts">
 import DOMPurify from 'dompurify';
 import { getContext, onDestroy, onMount } from 'svelte';
-import { getFilePreview } from '$lib/apis/private-ai/sidekicks/token-replacer';
-import { chatId, currentSelectedModelId } from '$lib/stores';
+import { getFilePreview, getFilePreviewBeforeChat } from '$lib/apis/private-ai/sidekicks/token-replacer';
+import { chatId, currentSelectedModelId, showSidebar } from '$lib/stores';
 import type { TokenFile } from '../stores';
 import Spinner from '$lib/components/common/Spinner.svelte';
 import { appHooks } from '$lib/utils/hooks';
-import { showSidebar } from '$lib/stores';
 import Switch from '$lib/components/common/Switch.svelte';
 
 export let file: TokenFile | null = null;
@@ -48,10 +47,18 @@ function applyValuesText() {
 		const rep = replacementsById.get(id);
 		const draft = (rep?.draft ?? '').trim();
 		const saved = (rep?.saved ?? '').trim();
+		const state = (el.dataset?.tokenState as TokenState | undefined) ?? 'none';
 		let text = '';
-		if (draft) text = draft;
-		else if (saved) text = saved;
-		else text = el.dataset.originalText ?? '';
+		if (state === 'draft') {
+			// In draft state, an explicit empty draft means show the original token text
+			text = draft ? draft : (el.dataset.originalText ?? '');
+		} else if (state === 'saved') {
+			// If saved value is empty or missing, fall back to original token text
+			text = saved ? saved : (el.dataset.originalText ?? '');
+		} else {
+			// none/unknown state uses original token text
+			text = el.dataset.originalText ?? '';
+		}
 		// Only update when different to avoid cursor jumps
 		if ((el.textContent ?? '') !== text) {
 			el.textContent = text;
@@ -79,7 +86,7 @@ function applyDraftMarkers() {
 			const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
 			const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
 			if (el) {
-				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 					clearStateTint(el);
 					el.classList.add('token-draft');
 				}
@@ -103,7 +110,7 @@ function applySavedMarkers() {
 			const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
 			const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
 			if (el) {
-				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 					clearStateTint(el);
 					el.classList.add('token-saved');
 				}
@@ -127,7 +134,7 @@ function applyNoneMarkers() {
 			const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
 			if (el) {
 				// For none state, ensure any previous draft/saved tints are removed when unselected.
-				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 					clearStateTint(el);
 				}
 				// Persist state regardless of selection so unselecting restores correctly
@@ -159,16 +166,15 @@ async function load() {
 		}
 		const cId = $chatId as string;
 		const mId = $currentSelectedModelId as string | null;
-		if (!cId) {
-			previewError = $i18n.t('No chat is active.');
-			return;
+		let res: { preview: string } | undefined;
+
+		if (cId && mId) {
+			res = await getFilePreview(previewType, cId, mId);
+		} else {
+			res = await getFilePreviewBeforeChat(previewType, file.fullPath);
 		}
-		if (!mId) {
-			previewError = $i18n.t('No model selected.');
-			return;
-		}
-		const res = await getFilePreview(previewType, cId, mId);
-		previewHtml = res.preview ?? '';
+
+		previewHtml = res?.preview ?? '';
 	} catch (e) {
 		previewError = $i18n.t('Failed to load preview.');
 	} finally {
@@ -194,10 +200,10 @@ function applyModeStyles() {
 			clearStateTint(el);
 			const wasSavedSel = el.classList.contains('token-selected-saved');
 			const wasDraftSel = el.classList.contains('token-selected-draft');
-			const wasIncompleteSel = el.classList.contains('token-selected');
+			const wasIncompleteSel = el.classList.contains('token-selected-original');
 			el.classList.remove('token-selected-saved');
 			el.classList.remove('token-selected-draft');
-			el.classList.remove('token-selected');
+			el.classList.remove('token-selected-original');
 			if (wasSavedSel || wasDraftSel || wasIncompleteSel) {
 				el.classList.add('token-selected-original');
 			} else {
@@ -212,10 +218,10 @@ function applyModeStyles() {
 				el.classList.remove('token-selected-original');
 				const st = (el.dataset?.tokenState as TokenState | undefined) ?? 'saved';
 				if (st === 'draft') el.classList.add('token-selected-draft');
-				else if (st === 'none') el.classList.add('token-selected');
+				else if (st === 'none') el.classList.add('token-selected-original');
 				else el.classList.add('token-selected-saved');
 			}
-			if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+			if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 				clearStateTint(el);
 				const st = (el.dataset?.tokenState as TokenState | undefined);
 				if (st === 'draft') el.classList.add('token-draft');
@@ -248,6 +254,12 @@ $: if (previewHtml) {
 // When mode changes, re-apply styles on next tick
 // Include previewMode in the dependency so toggling modes re-applies text/value swaps and styles
 $: if (previewContainer && previewMode) {
+	try {
+		if (previewMode === 'values') {
+			// Request the editor view to send current statuses and values so we can tint tokens immediately
+			appHooks.callHook('private-ai.token-replacer.preview.request-sync');
+		}
+	} catch {}
 	setTimeout(() => applyModeStyles(), 0);
 }
 
@@ -261,7 +273,7 @@ let removeHook: (() => void) | null = null;
 
 function clearSelection() {
 	if (!previewContainer) return;
-	const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved, .token.token-selected, .token.token-selected-original') as HTMLElement | null;
+	const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved, .token.token-selected-original') as HTMLElement | null;
 	if (prevSel) {
 		// Determine the token's persisted state if available
 		const savedState: TokenState = (prevSel.dataset?.tokenState as TokenState | undefined)
@@ -269,7 +281,6 @@ function clearSelection() {
 		// Remove selected state classes
 		prevSel.classList.remove('token-selected-draft');
 		prevSel.classList.remove('token-selected-saved');
-		prevSel.classList.remove('token-selected');
 		prevSel.classList.remove('token-selected-original');
 		// Restore unselected state based on mode and tokenState
 		clearStateTint(prevSel);
@@ -301,7 +312,7 @@ function selectAndScroll(id: string, state: 'draft' | 'saved') {
 			if (previewMode === 'original') {
 				el.classList.add('token-selected-original');
 			} else {
-				if (isNone) el.classList.add('token-selected');
+				if (isNone) el.classList.add('token-selected-original');
 				else el.classList.add(state === 'draft' ? 'token-selected-draft' : 'token-selected-saved');
 			}
 			// Scroll into view centered within the scrollable container
@@ -360,7 +371,12 @@ onMount(() => {
 	const setValues = (params: { byId: Record<string, { draft?: string; saved?: string }> }) => {
 		try {
 			replacementsById = new Map(Object.entries(params.byId || {}));
-			if (previewMode === 'values') applyValuesText();
+			if (previewMode === 'values') {
+				// Apply status first so tokenState is accurate for text resolution
+				applyStatusMarkers();
+				applyValuesText();
+				applyModeStyles();
+			}
 		} catch {
 		}
 	};
@@ -426,11 +442,14 @@ onDestroy(() => {
 					{$i18n.t('No document selected')}
 				{/if}
 			</div>
-			<div class="flex items-center gap-2 shrink-0">
-				<span id="values-switch-label"
-							class="text-[11px] text-gray-700 dark:text-gray-300 select-none">+{$i18n.t('Values')}</span>
-				<Switch id="values-switch" ariaLabelledbyId="values-switch-label" bind:state={isValuesMode} disabled={previewLoading} />
-			</div>
+			{#if $chatId}
+				<div class="flex items-center gap-2 shrink-0">
+					<span id="values-switch-label"
+								class="text-[11px] text-gray-700 dark:text-gray-300 select-none">+{$i18n.t('Values')}</span>
+					<Switch id="values-switch" ariaLabelledbyId="values-switch-label" bind:state={isValuesMode}
+									disabled={previewLoading} />
+				</div>
+			{/if}
 		</div>
 	</div>
 	<div class="flex-1 overflow-auto">
@@ -444,10 +463,10 @@ onDestroy(() => {
 		{:else if previewHtml}
 			<div class="p-4">
 				<div class="preview-html prose prose-sm max-w-none dark:prose-invert"
-							 class:mode-original={previewMode==='original'} class:mode-values={previewMode==='values'}
-							 bind:this={previewContainer} style="min-height:80px; text-align: left;" on:click={handlePreviewClick}>
-						{@html DOMPurify.sanitize(previewHtml)}
-					</div>
+						 class:mode-original={previewMode==='original'} class:mode-values={previewMode==='values'}
+						 bind:this={previewContainer} style="min-height:80px; text-align: left;" on:click={handlePreviewClick}>
+					{@html DOMPurify.sanitize(previewHtml)}
+				</div>
 			</div>
 		{:else}
 			<div class="p-4 text-sm text-gray-500 dark:text-gray-400">{$i18n.t('No preview available.')}</div>
@@ -557,13 +576,6 @@ onDestroy(() => {
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35) !important;
   }
 
-  :global(.preview-html .token.token-selected) {
-    background: #fef9c3 !important; /* yellow-100 */
-    color: #111827 !important; /* gray-900 for readability */
-    border: 2px solid rgba(250, 204, 21, 0.9) !important; /* yellow-400 */
-    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.35) !important; /* subtle halo */
-    font-weight: 700 !important;
-  }
 
   :global(.preview-html .token.token-selected-original) {
     background: #fef9c3 !important; /* align with lighter warning */
@@ -589,18 +601,12 @@ onDestroy(() => {
       box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.4) !important;
     }
 
-    :global(.preview-html .token.token-selected) {
-      background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
-      color: #fde68a !important; /* yellow-200 */
-      border: 2px solid rgba(245, 158, 11, 0.85) !important; /* amber-500-600 */
-      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4) !important;
-    }
 
     :global(.preview-html .token.token-selected-original) {
-    background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
-    color: #fde68a !important; /* yellow-200 */
-    border: 2px solid rgba(245, 158, 11, 0.85) !important;
-    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4) !important;
+      background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
+      color: #fde68a !important; /* yellow-200 */
+      border: 2px solid rgba(245, 158, 11, 0.85) !important;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4) !important;
     }
   }
 

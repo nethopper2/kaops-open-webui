@@ -19,6 +19,7 @@ import { getBackendConfig } from '$lib/apis';
 import FileSystemItem from 'devextreme/file_management/file_system_item';
 import PopupMetadataEdit from './PopupMetadataEdit.vue';
 import { useTheme } from '../composables/useTheme';
+import { downloadProxyResource } from '$lib/utils/privateAi';
 
 const props = defineProps(['i18n']);
 const svelteHost = useHost();
@@ -74,16 +75,96 @@ async function handleContextMenuItemClick(e: ContextMenuItemClickEvent) {
 	if (e.itemData.options.action === 'editMetadata') {
 		currentFileItem.value = e.fileSystemItem;
 		showEditMetadataPopup.value = true;
+	} else if (e.itemData.options.action === 'viewFile') {
+		try {
+			const backendConfig = await getBackendConfig();
+			if (
+				!backendConfig ||
+				!backendConfig.private_ai ||
+				!backendConfig.private_ai.nh_data_service_url
+			) {
+				console.warn('Missing private_ai.nh_data_service_url in backend config', backendConfig);
+				// Nothing more we can do here
+				return;
+			}
+
+			// Build a proxy-download URL for the selected file.
+			// DevExtreme file system items commonly expose a `path` (relative path) or `name`.
+			const path = e.fileSystemItem?.path ?? e.fileSystemItem?.name ?? '';
+			// Encode each path segment
+			const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+			const base = backendConfig.private_ai.nh_data_service_url.replace(/\/$/, '');
+			const target = new URL(`${base}/files/${encodedPath}/proxy-download`);
+
+			// Use the shared util. Bypass allowlist because FileManager is a trusted UI flow.
+			await downloadProxyResource(target, backendConfig, { bypassAllowlist: true });
+		} catch (err) {
+			console.error('Failed to open file', err);
+		}
 	}
 }
 
+const originalContextMenuItems = ref(null);
+
 function handleContextMenuShowing(e: ContextMenuShowingEvent) {
+	// Prevent the context menu for root or empty paths
 	if (!e.fileSystemItem?.path.length) {
 		e.cancel = true; // Prevent the context menu from showing
+		return;
 	}
+
+	// If the selected item is a directory, remove any "viewFile" entries from the menu items.
+	// DevExtreme uses e.items to construct the menu; filtering that array is the most reliable way
+	// to prevent a menu item from appearing.
+	try {
+		// Get current items
+		let items = e.component.option('contextMenu.items');
+
+		// Lazily capture unmodified original on first invocation
+		if (!originalContextMenuItems.value) {
+			originalContextMenuItems.value = JSON.parse(JSON.stringify(items));
+		}
+
+		// Always clone from original to avoid persistence
+		let newItems = JSON.parse(JSON.stringify(originalContextMenuItems.value));
+
+		// Conditionally modify based on file type
+		const modifyItemVisibility = (item: any) => {
+			if (e.fileSystemItem && e.fileSystemItem.isDirectory) {
+				// For directories: hide viewFile and editMetadata
+				if (item?.options?.action === 'viewFile' || item?.options?.action === 'editMetadata') {
+					item.visible = false;
+				}
+			} else {
+				// For files: show all items
+				item.visible = true;
+			}
+			if (item.items && item.items.length > 0) {
+				item.items.forEach(modifyItemVisibility);
+			}
+		};
+
+		newItems.forEach(modifyItemVisibility);
+
+		// Set the context-specific version for this menu showing
+		e.component.option('contextMenu.items', newItems);
+	} catch (err) {
+		// Be defensive: if anything goes wrong, don't block the menu entirely.
+		console.warn('Error adjusting context menu visibility', err);
+	}
+	
+	// Cancel context menu for directories
+	if (e.fileSystemItem.isDirectory) {
+		e.cancel = true;
+		return;
+	}
+	
+	// Store the current file item for files
+	currentFileItem.value = e.fileSystemItem;
 }
 
 const showEditMetadataPopup = ref(false);
+
 
 // Use the theme composable
 const { loadTheme, loadDarkTheme, loadLightTheme, unloadCurrentTheme, setupTheme } = useTheme({
@@ -138,6 +219,7 @@ onMounted(async () => {
 				:text="i18nRef?.t?.('Edit Metadata') ?? 'Edit Metadata'"
 				:options="{ action: 'editMetadata' }"
 			/>
+			<dx-item :text="i18nRef?.t?.('View File') ?? 'View File'" :options="{ action: 'viewFile' }" />
 		</dx-context-menu>
 
 		<dx-item-view>
