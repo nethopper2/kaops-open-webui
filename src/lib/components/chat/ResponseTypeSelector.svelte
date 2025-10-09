@@ -37,7 +37,7 @@ function ResponseToggleDropdown() {
 function handleResponseType(option) {
     ResponseType = option;
     ResponseTypeSelectorEnabled = false;
-    dispatch('responsetypeselected', { type: tone_of_voice, value: option });
+    dispatch('responsetypeselected', { type: 'tone_of_voice', value: option });
 }
 </script>
 
