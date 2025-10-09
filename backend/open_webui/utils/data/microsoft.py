@@ -31,6 +31,7 @@ USER_ID = ""
 # Configuration from environment
 ALLOWED_EXTENSIONS = os.environ.get('ALLOWED_EXTENSIONS')
 MAX_WORKERS = int(os.environ.get('MAX_WORKERS', '4'))
+MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB in bytes
 
 if ALLOWED_EXTENSIONS:
     ALLOWED_EXTENSIONS = [ext.strip().lower() for ext in ALLOWED_EXTENSIONS.split(',')]
@@ -102,6 +103,13 @@ def construct_file_path(service, *path_components):
     path = os.path.join(f"userResources/{USER_ID}/Microsoft/{service}", *sanitized_components)
     return path.replace('\\', '/')
 
+def is_file_size_valid(size):
+    """Check if file size is within the allowed limit"""
+    if size > MAX_FILE_SIZE:
+        print(f"Skipping file (size {format_bytes(size)} exceeds {format_bytes(MAX_FILE_SIZE)} limit)")
+        return False
+    return True
+
 # OneNote integration functions
 def list_onenote_notebooks(auth_token):
     """List all OneNote notebooks"""
@@ -162,6 +170,13 @@ def download_and_upload_onenote_page(page_id, file_path, page_title, auth_token)
         if not page_content:
             return None
         
+        content_size = len(page_content.getvalue())
+        
+        # Check file size before uploading
+        if not is_file_size_valid(content_size):
+            print(f"Skipping OneNote page (too large): {page_title} - {format_bytes(content_size)}")
+            return None
+        
         success = upload_file_unified(
             page_content.getvalue(),
             file_path,
@@ -175,7 +190,7 @@ def download_and_upload_onenote_page(page_id, file_path, page_title, auth_token)
         upload_result = {
             'path': file_path,
             'type': 'new',
-            'size': len(page_content.getvalue()),
+            'size': content_size,
             'title': page_title,
             'durationMs': int((time.time() - start_time) * 1000),
             'backend': get_current_backend()
@@ -368,6 +383,13 @@ def download_and_upload_outlook_message(message_id, file_path, auth_token):
         if not message_text:
             return None
         
+        content_size = len(message_text.encode('utf-8'))
+        
+        # Check file size before uploading
+        if not is_file_size_valid(content_size):
+            print(f"Skipping Outlook message (too large): {message.get('subject', 'No Subject')} - {format_bytes(content_size)}")
+            return None
+        
         success = upload_file_unified(
             message_text.encode('utf-8'),
             file_path,
@@ -381,7 +403,7 @@ def download_and_upload_outlook_message(message_id, file_path, auth_token):
         upload_result = {
             'path': file_path,
             'type': 'new',
-            'size': len(message_text.encode('utf-8')),
+            'size': content_size,
             'subject': message.get('subject', 'No Subject'),
             'durationMs': int((time.time() - start_time) * 1000),
             'backend': get_current_backend()
@@ -520,6 +542,12 @@ def list_onedrive_files_recursively(folder_id, auth_token, current_path='', all_
                     print(f"Excluded: {current_path}{file['name']}")
                     continue
                 
+                # Check file size before processing
+                file_size = file.get('size', 0)
+                if not is_file_size_valid(file_size):
+                    print(f"Skipped (size limit): {current_path}{file['name']} - {format_bytes(file_size)}")
+                    continue
+                
                 if ALLOWED_EXTENSIONS:
                     file_ext = file['name'].split('.')[-1].lower() if '.' in file['name'] else ''
                     if file_ext not in ALLOWED_EXTENSIONS:
@@ -619,7 +647,7 @@ async def sync_onedrive_to_storage(auth_token):
     
     try:
         all_files = list_onedrive_files_recursively('root', auth_token)
-        print(f"Found {len(all_files)} files in OneDrive")
+        print(f"Found {len(all_files)} files in OneDrive (after size filtering)")
         
         user_prefix = f"userResources/{USER_ID}/Microsoft/OneDrive/"
         existing_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
@@ -811,6 +839,12 @@ def list_sharepoint_files_recursively(site_id, drive_id, folder_id, auth_token, 
                     print(f"Excluded: {current_path}{file['name']}")
                     continue
                 
+                # Check file size before processing
+                file_size = file.get('size', 0)
+                if not is_file_size_valid(file_size):
+                    print(f"Skipped (size limit): {current_path}{file['name']} - {format_bytes(file_size)}")
+                    continue
+                
                 if ALLOWED_EXTENSIONS:
                     file_ext = file['name'].split('.')[-1].lower() if '.' in file['name'] else ''
                     if file_ext not in ALLOWED_EXTENSIONS:
@@ -954,7 +988,7 @@ async def sync_sharepoint_to_storage(auth_token):
                 
                 all_files.extend(site_files)
         
-        print(f"Found {len(all_files)} files across all SharePoint sites")
+        print(f"Found {len(all_files)} files across all SharePoint sites (after size filtering)")
         
         user_prefix = f"userResources/{USER_ID}/Microsoft/SharePoint/"
         existing_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)

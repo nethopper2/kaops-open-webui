@@ -36,6 +36,8 @@ USER_ID = ""
 GCS_BUCKET_NAME = ""  # Kept for backward compatibility
 ALLOWED_EXTENSIONS = os.environ.get('ALLOWED_EXTENSIONS')
 MAX_WORKERS = int(os.environ.get('MAX_WORKERS', '4'))
+MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB in bytes
+
 if ALLOWED_EXTENSIONS:
     ALLOWED_EXTENSIONS = [ext.strip().lower() for ext in ALLOWED_EXTENSIONS.split(',')]
 else:
@@ -68,6 +70,13 @@ def make_request(url, method='GET', headers=None, params=None, data=None, stream
     total_api_calls += 1
     
     return make_api_request(url, method=method, headers=headers, params=params, data=data, stream=stream, auth_token=auth_token)
+
+def is_file_size_valid(size):
+    """Check if file size is within the allowed limit"""
+    if size and size > MAX_FILE_SIZE:
+        print(f"Skipping file (size {format_bytes(size)} exceeds {format_bytes(MAX_FILE_SIZE)} limit)")
+        return False
+    return True
 
 # ============================================================================
 # GMAIL SYNC FUNCTIONS
@@ -190,7 +199,7 @@ def convert_email_to_text(email_data):
         log.error(f"Error in convert_email_to_text:", exc_info=True)
         return ""
 
-async def sync_gmail_to_storage(auth_token, query='', max_emails=1000):
+async def sync_gmail_to_storage(auth_token, query='', max_emails=1000, user_id=None):
     """Sync Gmail messages to configured storage backend"""
     global USER_ID, total_api_calls
     
@@ -270,7 +279,7 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=1000):
         print(f"📤 Emails uploaded: {len(uploaded_files)}")
         print(f"⏭️  Emails skipped: {skipped_files}")
 
-        await update_data_source_sync_status(USER_ID, 'google', 'gmail', 'synced')
+        await update_data_source_sync_status(user_id, 'google', 'gmail', 'synced')
         
         return {
             'uploaded': len(uploaded_files),
@@ -304,6 +313,13 @@ def download_and_upload_email(message_id, email_path, auth_token):
         if not email_text:
             return None
         
+        content_size = len(email_text.encode('utf-8'))
+        
+        # Check file size before uploading
+        if not is_file_size_valid(content_size):
+            print(f"Skipping Gmail message (too large): {email_data.get('subject', 'No Subject')} - {format_bytes(content_size)}")
+            return None
+        
         # Upload using unified interface
         success = upload_file_unified(
             email_text.encode('utf-8'),
@@ -318,7 +334,7 @@ def download_and_upload_email(message_id, email_path, auth_token):
         upload_result = {
             'path': email_path,
             'type': 'new',
-            'size': len(email_text.encode('utf-8')),
+            'size': content_size,
             'subject': email_data.get('subject', 'No Subject'),
             'durationMs': int((time.time() - start_time) * 1000),
             'backend': get_current_backend()
@@ -379,6 +395,12 @@ def list_files_recursively(folder_id, auth_token, current_path='', all_files=Non
                 # Case-insensitive exclusion check
                 if any(file['name'].lower() == pattern.lower() for pattern in EXCLUDED_FILES):
                     print(f"🚫 Excluded: {current_path}{file['name']}")
+                    continue
+                
+                # Check file size before processing
+                file_size = int(file.get('size', 0)) if file.get('size') else 0
+                if not is_file_size_valid(file_size):
+                    print(f"Skipped (size limit): {current_path}{file['name']} - {format_bytes(file_size)}")
                     continue
                 
                 # Check for allowed extensions if specified
@@ -589,7 +611,7 @@ def process_folder(folder_id, folder_name, auth_token, all_files, drive_name=Non
         print(f'Listing failed for folder {folder_id}: {str(error)}')
         log.error(f"Error in process_folder for {folder_id}:", exc_info=True)
 
-async def sync_drive_to_storage(auth_token):
+async def sync_drive_to_storage(auth_token, user_id):
     """Main function to sync Google Drive to configured storage backend"""
     global total_api_calls, GCS_BUCKET_NAME
     
@@ -664,7 +686,7 @@ async def sync_drive_to_storage(auth_token):
                 except Exception as e:
                     print(f"Error processing shared drive folder {drive_name}/{folder['name']}: {str(e)}")
         
-        print(f"Found {len(all_files)} files across all directories")
+        print(f"Found {len(all_files)} files across all directories (after size filtering)")
 
         global USER_ID
         
@@ -762,7 +784,7 @@ async def sync_drive_to_storage(auth_token):
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {skipped_files} skipped")
 
-        await update_data_source_sync_status(USER_ID, 'google', 'google_drive', 'synced')
+        await update_data_source_sync_status(user_id, 'google', 'google_drive', 'synced')
         
     except Exception as error:
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
@@ -864,13 +886,13 @@ async def initiate_google_file_sync(
         # Sync Google Drive if requested
         if sync_drive:
             await update_data_source_sync_status(USER_ID, 'google', 'google_drive', 'syncing')
-            await sync_drive_to_storage(token)
+            await sync_drive_to_storage(token, user_id)
             results['drive'] = 'completed'
         
         # Sync Gmail if requested
         if sync_gmail:
             await update_data_source_sync_status(USER_ID, 'google', 'gmail', 'syncing')
-            gmail_result = await sync_gmail_to_storage(token, gmail_query, max_emails)
+            gmail_result = await sync_gmail_to_storage(token, gmail_query, max_emails, user_id)
             results['gmail'] = gmail_result
         
         return results

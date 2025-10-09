@@ -124,20 +124,20 @@ PROVIDER_CONFIGS = {
         'redirect_uri': MICROSOFT_REDIRECT_URI,
         'authorize_url': MICROSOFT_AUTHORIZE_URL,
         'token_url': MICROSOFT_TOKEN_URL,
-        'revoke_url': None,  # Microsoft doesn't have a direct revoke endpoint
+        'revoke_url': None,
         'scope_separator': ' ',
         'default_scopes': [
             "User.Read",
-            "Files.Read",
-            "Sites.Read",
+            "Files.Read.All",      
+            "Sites.Read.All",      
             "Notes.Read",
             "Mail.Read",
             "MailboxSettings.Read",
             "offline_access"
         ],
         'layer_scopes': {
-            'onedrive': 'Files.Read',
-            'sharepoint': 'Sites.Read',
+            'onedrive': 'Files.Read.All',    
+            'sharepoint': 'Sites.Read.All',   
             'onenote': 'Notes.Read',
             'outlook': 'Mail.Read'
         },
@@ -283,7 +283,7 @@ PROVIDER_CONFIGS = {
         'layer_folders': {
             'handbooks': 'Handbooks'
         }
-    }
+    },
 }
 
 ############################
@@ -1919,23 +1919,16 @@ def create_universal_disconnect_endpoint(provider: str):
             log.warning(msg)
             messages.append(msg)
 
-        # Delete user data from GCS Bucket
-        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-            msg = "GCS configuration missing. Cannot perform GCS data cleanup."
-            log.error(msg)
+        try:
+            await create_background_delete_task(request, provider, user_id, layer)
+            msg = f"Successfully initiated data cleanup for user {user_id}'s {provider.title()} folder"
+            log.info(msg)
+            messages.append(msg)
+        except Exception as e:
+            msg = f"Error during data cleanup: {e}"
+            log.exception(msg)
             messages.append(msg)
             overall_success = False
-        else:
-            try:
-                await create_background_delete_task(request, provider, user_id, layer)
-                msg = f"Successfully initiated GCS data cleanup for user {user_id}'s {provider.title()} folder"
-                log.info(msg)
-                messages.append(msg)
-            except Exception as e:
-                msg = f"Error during GCS data cleanup: {e}"
-                log.exception(msg)
-                messages.append(msg)
-                overall_success = False
 
         if overall_success:
             log.info(f"{provider.title()} integration disconnection completed successfully for user: {user_id}")

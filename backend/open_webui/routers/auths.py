@@ -501,6 +501,8 @@ async def signin(request: Request, response: Response, form_data: SigninForm, ba
                 WEBUI_AUTH_TRUSTED_NAME_HEADER, trusted_email
             )
 
+        log.info(f"Trusted email from header: {trusted_email}, trusted name: {trusted_name}, SSO provider: {sso_provider}, auth token: {auth_token}")
+
         # If an SSO provider is present, use it to fetch user profile data
         # and update the trusted email, name, and profile image URL
         if sso_provider:
