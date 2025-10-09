@@ -42,7 +42,7 @@ function handlePresetDate(option) {
         DateSelectorEnabled = false;
         ShowCustomMenu = false;
         
-        dispatch('dateselected', { type: 'presetrange', value: option });
+        dispatch('dateselected', { type: 'preset_range', value: option });
     }
 }
 
@@ -58,7 +58,7 @@ function handleCustomapply(e) {
     ShowCustomMenu = false;
     DateSelectorEnabled = false;
 
-    dispatch('dateselected', { type: 'customrange', value: SelectedDate })
+    dispatch('dateselected', { type: 'custom_range', value: SelectedDate })
 }
 
 function handleCustomcancel(e) {
