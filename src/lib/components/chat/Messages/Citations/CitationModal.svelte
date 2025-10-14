@@ -112,10 +112,11 @@ import Textarea from '$lib/components/common/Textarea.svelte';
 		<div class="flex flex-col md:flex-row w-full px-6 pb-5 md:space-x-4">
 			<!-- NOTE: this div used to have a max height max-h-[22rem] -->
 			<div
-				class="flex flex-col w-full dark:text-gray-200 overflow-y-scroll scrollbar-thin gap-1"
+				class="flex flex-col w-full dark:text-gray-200 overflow-y-scroll max-h-[22rem] scrollbar-thin gap-1"
 			>
 				{#each mergedDocuments as document, documentIdx}
 					<div class="flex flex-col w-full gap-2">
+						{#if document?.metadata}
 						<div class="text-sm font-medium dark:text-gray-300">
 							{$i18n.t('Source')}
 						</div>
@@ -137,7 +138,6 @@ import Textarea from '$lib/components/common/Textarea.svelte';
 <!--												: `#`}-->
 <!--										target="_blank"-->
 <!--									>-->
-									<!-- TODO: cleanup - adjust this for when there are multiple sources -->
 									<a
 										class="hover:text-gray-500 dark:hover:text-gray-100 underline grow"
 										href={document?.metadata?.file_id
@@ -156,7 +156,6 @@ import Textarea from '$lib/components/common/Textarea.svelte';
 										</span>
 									{/if}
 
-									{#if document?.metadata}
 									<button
 										class="flex text-xs items-center space-x-1 px-2 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-200 transition"
 										on:click={() => {
@@ -174,7 +173,6 @@ import Textarea from '$lib/components/common/Textarea.svelte';
 											{$i18n.t('Edit Metadata')}
 										</div>
 									</button>
-									{/if}
 								</div>
 							</Tooltip>
 							{#if document.metadata?.parameters}
@@ -188,6 +186,7 @@ import Textarea from '$lib/components/common/Textarea.svelte';
 								</div>
 							{/if}
 						{/if}
+					{/if}
 
 						<div>
 							<div
@@ -249,8 +248,11 @@ import Textarea from '$lib/components/common/Textarea.svelte';
 		</div>
 	</div>
 
+	<!-- NOTE: This popup sometimes takes up space even when hidden, if this issue returns, would like to be able to catch the vue event to show/hide this div to remedy the issue. -->
+	<!--	<div style:display={isPopupMetadataEditVisible ? 'block' : 'none'}>-->
 	<popup-metadata-edit
 		bind:this={TRefFilePopup}
 		i18n={$i18n}
 	/>
+<!--	</div>-->
 </Modal>
