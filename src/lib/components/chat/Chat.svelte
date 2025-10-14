@@ -1896,12 +1896,20 @@ const sendMessage = async (
 	_history = JSON.parse(JSON.stringify(_history));
 
 	const responseMessageIds: Record<PropertyKey, string> = {};
-	// If modelId is provided, use it, else use selected model
+	// If modelId is provided, use it.
+	// If modelId is provided, use it, else use selected model (original code)
+	// let selectedModelIds = modelId
+	// 	? [modelId]
+	// 	: atSelectedModel !== undefined
+	// 		? [atSelectedModel.id]
+	// 		: selectedModels;
+	// Prefer a single selectedModels entry (explicit selection) over atSelectedModel,
+	// otherwise fall back to atSelectedModel or the full selectedModels array.
 	let selectedModelIds = modelId
 		? [modelId]
-		: atSelectedModel !== undefined
-			? [atSelectedModel.id]
-			: selectedModels;
+		: (Array.isArray(selectedModels) && selectedModels.length === 1 && selectedModels[0] !== '')
+			? selectedModels
+			: (atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels);
 
 	// Create response messages for each selected model
 	for (const [_modelIdx, modelId] of selectedModelIds.entries()) {
