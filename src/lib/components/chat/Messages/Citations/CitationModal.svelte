@@ -80,13 +80,22 @@ import Textarea from '$lib/components/common/Textarea.svelte';
 							placement="top-start"
 							tippyOptions={{ duration: [500, 0] }}
 						>
+<!--							<a-->
+<!--								class="hover:text-gray-500 dark:hover:text-gray-100 underline grow line-clamp-1"-->
+<!--								href={document?.metadata?.file_id-->
+<!--									? `${WEBUI_API_BASE_URL}/files/${document?.metadata?.file_id}/content${document?.metadata?.page !== undefined ? `#page=${document.metadata.page + 1}` : ''}`-->
+<!--									: document.source?.url?.includes('http')-->
+<!--										? document.source.url-->
+<!--										: `#`}-->
+<!--								target="_blank"-->
+<!--							>-->
 							<a
 								class="hover:text-gray-500 dark:hover:text-gray-100 underline grow line-clamp-1"
 								href={document?.metadata?.file_id
-									? `${WEBUI_API_BASE_URL}/files/${document?.metadata?.file_id}/content${document?.metadata?.page !== undefined ? `#page=${document.metadata.page + 1}` : ''}`
-									: document.source?.url?.includes('http')
-										? document.source.url
-										: `#`}
+											? `${$config?.private_ai.citation_document_url}/${document?.metadata?.file_id}`
+											: document.source?.url?.includes('http')
+												? document.source.url
+												: `#`}
 								target="_blank"
 							>
 								{decodeString(citation?.source?.name)}
