@@ -656,35 +656,29 @@ async def sync_drive_to_storage(auth_token, user_id):
                 except Exception as e:
                     print(f"Error processing folder {folder['name']}: {str(e)}")
         
-        # Process shared drive folders separately
-        shared_drive_folders = {}
-        for folder in drive_folders['shared_drives_folders']:
-            drive_name = folder.get('driveName')
-            if drive_name:
-                if drive_name not in shared_drive_folders:
-                    shared_drive_folders[drive_name] = []
-                shared_drive_folders[drive_name].append(folder)
-        
-        # Process each shared drive's folders
+        # Process shared drives by their roots instead of enumerating all folders/files first
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             shared_drive_futures = []
             
-            for drive_name, folders in shared_drive_folders.items():
-                for folder in folders:
-                    future = executor.submit(
-                        process_folder, folder['id'], folder['name'], 
-                        auth_token, [], drive_name
-                    )
-                    shared_drive_futures.append((future, folder, drive_name))
+            for drive in drive_folders['shared_drives']:
+                drive_id = drive.get('id')
+                drive_name = drive.get('name')
+                if not drive_id or not drive_name:
+                    continue
+                # List everything under the shared drive root to mirror structure exactly
+                future = executor.submit(
+                    list_files_recursively, drive_id, auth_token, '', [], drive_name
+                )
+                shared_drive_futures.append((future, drive_name))
             
             # Process completed futures
-            for future, folder, drive_name in shared_drive_futures:
+            for future, drive_name in shared_drive_futures:
                 try:
-                    drive_folder_files = future.result()
-                    print(f"Completed shared drive folder: {drive_name}/{folder['name']} with {len(drive_folder_files)} files")
-                    all_files.extend(drive_folder_files)
+                    drive_files = future.result()
+                    print(f"Completed shared drive: {drive_name} with {len(drive_files)} files")
+                    all_files.extend(drive_files)
                 except Exception as e:
-                    print(f"Error processing shared drive folder {drive_name}/{folder['name']}: {str(e)}")
+                    print(f"Error processing shared drive {drive_name}: {str(e)}")
         
         print(f"Found {len(all_files)} files across all directories (after size filtering)")
 
