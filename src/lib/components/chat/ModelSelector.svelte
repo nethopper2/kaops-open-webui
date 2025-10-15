@@ -7,6 +7,7 @@ import { onMount, tick, getContext, onDestroy } from 'svelte';
 
 	import { updateUserSettings } from '$lib/apis/users';
 	import { isPrivateAiModel } from '$lib/utils/privateAi';
+	import { PRIVATE_AI_DEFAULT_MODEL_PREFIX } from '$lib/shared/privateAi';
 	import LockClosed from '$lib/components/icons/LockClosed.svelte';
 import { appHooks } from '$lib/utils/hooks';
 	const i18n = getContext('i18n');
@@ -100,10 +101,17 @@ import { appHooks } from '$lib/utils/hooks';
 			return isPrivateAiModel(model);
 		});
 
-		// If we have private models remaining, use those
+		// If we have private models remaining, use those (prefer default-prefixed)
 		if (privateModelsOnly.length > 0) {
-			selectedModels = privateModelsOnly;
-			console.log('Cleared public models, remaining private models:', privateModelsOnly);
+			// If any private model matches the default prefix, prefer it as the sole selection
+			const defaultPrivate = privateModelsOnly.find(id => id.startsWith(PRIVATE_AI_DEFAULT_MODEL_PREFIX));
+			if (defaultPrivate) {
+				selectedModels = [defaultPrivate];
+				console.log('Cleared public models, selected default private model:', defaultPrivate);
+			} else {
+				selectedModels = privateModelsOnly;
+				console.log('Cleared public models, remaining private models:', privateModelsOnly);
+			}
 			return;
 		}
 
@@ -111,9 +119,11 @@ import { appHooks } from '$lib/utils/hooks';
 		const availablePrivateModels = $models.filter(model => isPrivateAiModel(model));
 
 		if (availablePrivateModels.length > 0) {
-			// Select the first available private model
-			selectedModels = [availablePrivateModels[0].id];
-			console.log('No private models in selection, auto-selected first private model:', availablePrivateModels[0].id);
+			// Prefer a private model that matches the default prefix if present
+			const defaultAvailable = availablePrivateModels.find(m => m.id.startsWith(PRIVATE_AI_DEFAULT_MODEL_PREFIX));
+			const chosen = defaultAvailable ? defaultAvailable.id : availablePrivateModels[0].id;
+			selectedModels = [chosen];
+			console.log('No private models in selection, auto-selected private model:', chosen);
 		} else {
 			// No private models available at all, fallback to empty selection
 			selectedModels = [''];

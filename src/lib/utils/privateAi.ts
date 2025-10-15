@@ -1,5 +1,5 @@
 import type { Model } from '$lib/stores';
-import { PRIVATE_AI_MODEL_PREFIX } from '$lib/shared/private_ai';
+import { PRIVATE_AI_MODEL_PREFIX } from '$lib/shared/privateAi';
 import { apiFetch } from '$lib/apis/private-ai/fetchClients';
 import { toast } from 'svelte-sonner';
 
