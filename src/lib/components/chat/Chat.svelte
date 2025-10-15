@@ -99,7 +99,7 @@ import Sidebar from '../icons/Sidebar.svelte';
 import { getFunctions } from '$lib/apis/functions';
 import Image from '../common/Image.svelte';
 import { updateFolderById } from '$lib/apis/folders';
-import { PRIVATE_AI_MODEL_PREFIX } from '$lib/shared/private_ai';
+import { PRIVATE_AI_MODEL_PREFIX } from '$lib/shared/privateAi';
 
 export let chatIdProp = '';
 
