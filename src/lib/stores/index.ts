@@ -364,7 +364,7 @@ type Config = {
 	};
 	private_ai: {
 		// citation_document_url is likely temporary until we have multiple sources for rag data.
-		citation_document_url: string;
+		// citation_document_url: string;
 		// If true, some original open web ui interfaces are shown instead of Private AI.
 		enable_upstream_ui: boolean;
 		nh_data_service_url: string;

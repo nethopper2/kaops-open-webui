@@ -89,13 +89,20 @@ import Textarea from '$lib/components/common/Textarea.svelte';
 <!--										: `#`}-->
 <!--								target="_blank"-->
 <!--							>-->
+<!--							<a-->
+<!--								class="hover:text-gray-500 dark:hover:text-gray-100 underline grow line-clamp-1"-->
+<!--								href={document?.metadata?.file_id-->
+<!--											? `${$config?.private_ai.citation_document_url}/${document?.metadata?.file_id}`-->
+<!--											: document.source?.url?.includes('http')-->
+<!--												? document.source.url-->
+<!--												: `#`}-->
+<!--								target="_blank"-->
+<!--							>-->
+<!--								{decodeString(citation?.source?.name)}-->
+<!--							</a>-->
 							<a
 								class="hover:text-gray-500 dark:hover:text-gray-100 underline grow line-clamp-1"
-								href={document?.metadata?.file_id
-											? `${$config?.private_ai.citation_document_url}/${document?.metadata?.file_id}`
-											: document.source?.url?.includes('http')
-												? document.source.url
-												: `#`}
+								href={document.source?.url?.includes('http') ? document.source.url: `#`}
 								target="_blank"
 							>
 								{decodeString(citation?.source?.name)}
@@ -147,13 +154,20 @@ import Textarea from '$lib/components/common/Textarea.svelte';
 <!--												: `#`}-->
 <!--										target="_blank"-->
 <!--									>-->
+<!--									<a-->
+<!--										class="hover:text-gray-500 dark:hover:text-gray-100 underline grow"-->
+<!--										href={document?.metadata?.file_id-->
+<!--											? `${$config?.private_ai.citation_document_url}/${document?.metadata?.file_id}`-->
+<!--											: document.source?.url?.includes('http')-->
+<!--												? document.source.url-->
+<!--												: `#`}-->
+<!--										target="_blank"-->
+<!--									>-->
+<!--										{decodeString(document?.metadata?.name ?? document.source.name)}-->
+<!--									</a>-->
 									<a
 										class="hover:text-gray-500 dark:hover:text-gray-100 underline grow"
-										href={document?.metadata?.file_id
-											? `${$config?.private_ai.citation_document_url}/${document?.metadata?.file_id}`
-											: document.source?.url?.includes('http')
-												? document.source.url
-												: `#`}
+										href={document.source?.url?.includes('http') ? document.source.url: `#`}
 										target="_blank"
 									>
 										{decodeString(document?.metadata?.name ?? document.source.name)}
