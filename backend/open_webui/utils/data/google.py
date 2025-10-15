@@ -354,6 +354,7 @@ def download_and_upload_email(message_id, email_path, auth_token):
 
 def list_files_recursively(folder_id, auth_token, current_path='', all_files=None, drive_name=None):
     """Recursive file listing with path construction using REST API"""
+    global USER_ID
     if all_files is None:
         all_files = []
     
@@ -365,7 +366,7 @@ def list_files_recursively(folder_id, auth_token, current_path='', all_files=Non
         while True:
             params = {
                 'q': f"'{folder_id}' in parents and trashed = false",
-                'fields': "nextPageToken, files(id, name, mimeType, size, modifiedTime, createdTime, parents)",
+                'fields': "nextPageToken, files(id, name, mimeType, size, modifiedTime, createdTime, parents, shortcutDetails)",
                 'pageSize': 1000,
                 'supportsAllDrives': 'true',
                 'includeItemsFromAllDrives': 'true'
@@ -386,11 +387,25 @@ def list_files_recursively(folder_id, auth_token, current_path='', all_files=Non
         
         # Process each file/folder in current directory level
         for file in all_folder_files:
+            # Handle folder
             if file['mimeType'] == 'application/vnd.google-apps.folder':
                 list_files_recursively(
                     file['id'], auth_token, f"{current_path}{file['name']}/", 
                     all_files, drive_name
                 )
+            # Resolve folder shortcuts: follow targetId if the shortcut points to a folder
+            elif file['mimeType'] == 'application/vnd.google-apps.shortcut':
+                shortcut = file.get('shortcutDetails') or {}
+                target_mime = shortcut.get('targetMimeType')
+                target_id = shortcut.get('targetId')
+                if target_mime == 'application/vnd.google-apps.folder' and target_id:
+                    # Recurse into the shortcut target, keeping the shortcut's visible name in path
+                    list_files_recursively(
+                        target_id, auth_token, f"{current_path}{file['name']}/", all_files, drive_name
+                    )
+                else:
+                    # Skip file shortcuts for now to avoid permission/403 issues
+                    print(f"🔗 Skipping Drive file shortcut: {current_path}{file['name']}")
             else:
                 # Case-insensitive exclusion check
                 if any(file['name'].lower() == pattern.lower() for pattern in EXCLUDED_FILES):
@@ -412,13 +427,9 @@ def list_files_recursively(folder_id, auth_token, current_path='', all_files=Non
                 
                 # Add file to list with full path
                 file_info = file.copy()
-                global USER_ID
                 
-                # Include USER_ID and "Google Drive" folder in the path
-                if drive_name:
-                    file_info['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/{drive_name}/{current_path}{file['name']}"
-                else:
-                    file_info['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/{current_path}{file['name']}"
+                # Build path relative to the "Google Drive" root; process_folder supplies top-level segments
+                file_info['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/{current_path}{file['name']}"
                 
                 all_files.append(file_info)
     
@@ -441,8 +452,8 @@ def get_user_drive_folders(auth_token):
         
         while True:
             params = {
-                'q': "sharedWithMe = true",
-                'fields': "nextPageToken, files(id, name, mimeType)",
+                'q': "sharedWithMe = true and trashed = false",
+                'fields': "nextPageToken, files(id, name, mimeType, driveId, size, modifiedTime, createdTime, parents)",
                 'supportsAllDrives': 'true',
                 'includeItemsFromAllDrives': 'true',
                 'pageSize': 100
@@ -452,7 +463,10 @@ def get_user_drive_folders(auth_token):
                 params['pageToken'] = page_token
                 
             shared_response = make_request(f"{DRIVE_API_BASE}/files", params=params, auth_token=auth_token)
-            shared_folders.extend(shared_response.get('files', []))
+            # Process all shared-with-me items (both files and folders)
+            for f in shared_response.get('files', []):
+                # Include ALL shared-with-me items, even if they belong to shared drives
+                shared_folders.append(f)
             
             page_token = shared_response.get('nextPageToken')
             if not page_token:
@@ -486,11 +500,13 @@ def get_user_drive_folders(auth_token):
             page_token = None
             
             while True:
+                # Only fetch top-level folders in this shared drive by using the driveId as parent
                 params = {
                     'driveId': drive['id'],
                     'supportsAllDrives': 'true',
                     'includeItemsFromAllDrives': 'true',
                     'corpora': "drive",
+                    'q': f"'{drive['id']}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'",
                     'pageSize': 100,
                     'fields': 'nextPageToken, files(id, name, mimeType)'
                 }
@@ -524,6 +540,40 @@ def get_user_drive_folders(auth_token):
     except Exception as error:
         print(f"Error getting drive folders: {str(error)}")
         return None
+
+def get_my_drive_top_level_folders(auth_token):
+    """List all top-level folders directly under My Drive (root)."""
+    try:
+        top_level_folders = []
+        page_token = None
+
+        while True:
+            params = {
+                'q': "'root' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'",
+                'fields': "nextPageToken, files(id, name, mimeType)",
+                'pageSize': 1000,
+                'supportsAllDrives': 'true',
+                'includeItemsFromAllDrives': 'true'
+            }
+
+            if page_token:
+                params['pageToken'] = page_token
+
+            url = f"{DRIVE_API_BASE}/files"
+            results = make_request(url, params=params, auth_token=auth_token)
+
+            folders = results.get('files', [])
+            top_level_folders.extend(folders)
+
+            page_token = results.get('nextPageToken')
+            if not page_token:
+                break
+
+        return top_level_folders
+
+    except Exception as error:
+        print(f"Error getting My Drive top-level folders: {str(error)}")
+        return []
 
 def download_file(file_id, auth_token, mime_type=None):
     """Download file content from Google Drive, handling Google's proprietary formats"""
@@ -594,19 +644,29 @@ def download_file(file_id, auth_token, mime_type=None):
     file_content.seek(0)
     return file_content
 
-def process_folder(folder_id, folder_name, auth_token, all_files, drive_name=None):
+def process_folder(folder_id, folder_name, auth_token, all_files, drive_name=None, folder_type=None):
     """Process a single folder and its contents"""
     try:
         folder_display_name = folder_name
         if drive_name:
             folder_display_name = f"{drive_name}/{folder_name}"
         
-        print(f"Processing folder: {folder_display_name} (ID: {folder_id})")
+        print(f"Processing folder: {folder_display_name} (ID: {folder_id}, Type: {folder_type})")
+        
+        # Determine top-level directory name based on folder type
+        if folder_type == 'my_drive':
+            top_level = "My Drive"
+        elif folder_type == 'shared_with_me':
+            top_level = "Shared with me"
+        elif folder_type == 'shared_drive':
+            top_level = "Shared drives"
+        else:
+            top_level = "My Drive"  # Default fallback
         
         if drive_name:
-            return list_files_recursively(folder_id, auth_token, f"{folder_name}/", all_files, drive_name)
+            return list_files_recursively(folder_id, auth_token, f"{top_level}/{drive_name}/{folder_name}/", all_files, drive_name)
         else:
-            return list_files_recursively(folder_id, auth_token, f"{folder_name}/", all_files)
+            return list_files_recursively(folder_id, auth_token, f"{top_level}/{folder_name}/", all_files)
     except Exception as error:
         print(f'Listing failed for folder {folder_id}: {str(error)}')
         log.error(f"Error in process_folder for {folder_id}:", exc_info=True)
@@ -630,65 +690,77 @@ async def sync_drive_to_storage(auth_token, user_id):
         
         # Process My Drive and shared folders in parallel
         all_files = []
-        
-        # Add My Drive with root processing
-        folders_to_process = [
-            {'id': drive_folders['my_drive'], 'name': 'My Drive'}
-        ]
-        
-        # Add all shared folders
-        folders_to_process.extend(drive_folders['shared_folders'])
+
+        # Scope control: set GOOGLE_DRIVE_SYNC_SCOPE to limit sync scope
+        sync_scope = os.environ.get('GOOGLE_DRIVE_SYNC_SCOPE', 'all').lower()
+        include_my_drive = sync_scope in ('all', 'my_drive')
+        include_shared_with_me = sync_scope in ('all', 'shared_with_me')
+        include_shared_drives = sync_scope in ('all', 'shared_drives')
+
+        folders_to_process = []
+
+        if include_my_drive:
+            # Discover top-level folders under My Drive (root) and process each independently
+            my_drive_top_level = get_my_drive_top_level_folders(auth_token)
+            folders_to_process.extend([
+                {'id': f['id'], 'name': f['name'], 'type': 'my_drive'} for f in my_drive_top_level
+            ])
+
+        if include_shared_with_me:
+            # Process shared-with-me items (both files and folders) in single pass
+            for item in drive_folders['shared_folders']:
+                item['type'] = 'shared_with_me'
+                if item['mimeType'] == 'application/vnd.google-apps.folder':
+                    # It's a folder - add to folders_to_process
+                    folders_to_process.append(item)
+                else:
+                    # It's a file - add directly to all_files with sanitized path
+                    safe_name = item['name'].replace('/', '-')
+                    item['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/Shared with me/{safe_name}"
+                    all_files.append(item)
+
+        # Add shared drive folders to the main processing queue
+        if include_shared_drives:
+            drive_id_to_name = {d['id']: d['name'] for d in drive_folders['shared_drives']}
+            for folder in drive_folders['shared_drives_folders']:
+                drive_id = folder.get('driveId')
+                if drive_id:
+                    folder['type'] = 'shared_drive'
+                    folder['driveName'] = drive_id_to_name.get(drive_id, folder.get('driveName') or 'Unknown Drive')
+                    folders_to_process.append(folder)
 
         # Process folders in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            future_to_folder = {
-                executor.submit(process_folder, folder['id'], folder['name'], auth_token, []): folder 
-                for folder in folders_to_process
-            }
+            future_to_folder = {}
+            for folder in folders_to_process:
+                if folder.get('type') == 'shared_drive':
+                    future = executor.submit(
+                        process_folder, folder['id'], folder['name'], 
+                        auth_token, [], folder.get('driveName'), 'shared_drive'
+                    )
+                else:
+                    future = executor.submit(
+                        process_folder, folder['id'], folder['name'], 
+                        auth_token, [], None, folder.get('type')
+                    )
+                future_to_folder[future] = folder
             
             # Process completed futures
             for future in concurrent.futures.as_completed(future_to_folder):
                 folder = future_to_folder[future]
                 try:
                     folder_files = future.result()
-                    print(f"Completed folder: {folder['name']} with {len(folder_files)} files")
+                    folder_type = folder.get('type', 'unknown')
+                    if folder_type == 'shared_drive':
+                        drive_name = folder.get('driveName', 'Unknown Drive')
+                        print(f"Completed shared drive folder: {drive_name}/{folder['name']} with {len(folder_files)} files")
+                    else:
+                        print(f"Completed folder: {folder['name']} with {len(folder_files)} files")
                     all_files.extend(folder_files)
                 except Exception as e:
                     print(f"Error processing folder {folder['name']}: {str(e)}")
         
-        # Process shared drive folders separately
-        shared_drive_folders = {}
-        for folder in drive_folders['shared_drives_folders']:
-            drive_name = folder.get('driveName')
-            if drive_name:
-                if drive_name not in shared_drive_folders:
-                    shared_drive_folders[drive_name] = []
-                shared_drive_folders[drive_name].append(folder)
-        
-        # Process each shared drive's folders
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            shared_drive_futures = []
-            
-            for drive_name, folders in shared_drive_folders.items():
-                for folder in folders:
-                    future = executor.submit(
-                        process_folder, folder['id'], folder['name'], 
-                        auth_token, [], drive_name
-                    )
-                    shared_drive_futures.append((future, folder, drive_name))
-            
-            # Process completed futures
-            for future, folder, drive_name in shared_drive_futures:
-                try:
-                    drive_folder_files = future.result()
-                    print(f"Completed shared drive folder: {drive_name}/{folder['name']} with {len(drive_folder_files)} files")
-                    all_files.extend(drive_folder_files)
-                except Exception as e:
-                    print(f"Error processing shared drive folder {drive_name}/{folder['name']}: {str(e)}")
-        
         print(f"Found {len(all_files)} files across all directories (after size filtering)")
-
-        global USER_ID
         
         # List all existing files using unified interface
         user_prefix = f"userResources/{USER_ID}/Google/Google Drive/"
@@ -701,7 +773,14 @@ async def sync_drive_to_storage(auth_token, user_id):
             if file_name:
                 existing_file_map[file_name] = file
         
-        drive_file_paths = {file['fullPath'] for file in all_files}
+        # Ensure all files have fullPath before creating the set (shared-with-me files already have it)
+        for file in all_files:
+            if not file.get('fullPath'):
+                # This shouldn't happen for files from folder traversal
+                print(f"Warning: File missing fullPath: {file.get('name', 'unknown')}")
+                continue
+        
+        drive_file_paths = {file['fullPath'] for file in all_files if file.get('fullPath')}
 
         # Delete orphaned files using unified interface
         for file_name, file_info in existing_file_map.items():
@@ -720,6 +799,9 @@ async def sync_drive_to_storage(auth_token, user_id):
             futures = []
             
             for file in all_files:
+                # Skip files without fullPath (shouldn't happen after our validation)
+                if not file.get('fullPath'):
+                    continue
                 # Check if file exists
                 existing_file = existing_file_map.get(file['fullPath'])
                 
@@ -824,9 +906,14 @@ def download_and_upload_file(file, auth_token, exists, reason):
         return upload_result
         
     except Exception as e:
-        print(f"Error processing file {file['fullPath']}: {str(e)}")
-        log.error(f"Error in download_and_upload_file for {file['fullPath']}:", exc_info=True)
-        return None
+        error_msg = str(e)
+        if "403" in error_msg or "Forbidden" in error_msg:
+            print(f"🔒 Skipped read-only file: {file['fullPath']} (permission denied)")
+            return None
+        else:
+            print(f"Error processing file {file['fullPath']}: {error_msg}")
+            log.error(f"Error in download_and_upload_file for {file['fullPath']}:", exc_info=True)
+            return None
 
 # ============================================================================
 # MAIN EXECUTION FUNCTION
