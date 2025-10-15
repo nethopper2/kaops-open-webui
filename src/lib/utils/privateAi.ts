@@ -50,7 +50,14 @@ export async function downloadProxyResource(
 		}
 
 		// Allowlist for common development hostnames
-		const devHostnames = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
+		const devHostnames = new Set<String>([]);
+
+		if (import.meta.env.DEV === true) {
+  		devHostnames.add('localhost');
+  		devHostnames.add('127.0.0.1');
+  		devHostnames.add('0.0.0.0');
+		}
+
 		const pageIsLocal = devHostnames.has(window.location.hostname);
 		const targetIsLocal = devHostnames.has(targetUrl.hostname);
 		const serviceIsLocal = devHostnames.has(serviceBase.hostname);

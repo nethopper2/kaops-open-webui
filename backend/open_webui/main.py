@@ -1797,7 +1797,7 @@ async def get_app_config(request: Request):
             ),
         },
         "private_ai": {
-            "citation_document_url": f"https://storage.cloud.google.com/{GCS_BUCKET_NAME}",
+            # "citation_document_url": f"https://storage.cloud.google.com/{GCS_BUCKET_NAME}",
             "enable_upstream_ui": app.state.config.NH_ENABLE_UPSTREAM_UI,
             "webui_custom": app.state.NH_WEBUI_CUSTOM,
             "docker_image": app.state.NH_DOCKER_IMAGE,
