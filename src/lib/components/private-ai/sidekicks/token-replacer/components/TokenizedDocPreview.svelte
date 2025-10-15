@@ -509,7 +509,7 @@ onDestroy(() => {
   /* Original mode base look: Unselected uses Incomplete styling (same as token-none) */
   :global(.preview-html.mode-original .token) {
     background: rgba(234, 179, 8, 0.20); /* yellow-500/20 */
-    color: #111827 !important; /* gray-900 for readability */
+    color: #fde68a !important; /* gray-900 for readability */
     border-color: rgba(234, 179, 8, 0.35);
   }
 
@@ -524,7 +524,7 @@ onDestroy(() => {
   /* +Values mode base and unselected state tints */
   :global(.preview-html.mode-values .token) {
     background: rgba(234, 179, 8, 0.20); /* warning: yellow-500/20 */
-    color: #111827 !important; /* gray-900 for readability */
+    color: #fde68a !important; /* gray-900 for readability */
     border-color: rgba(234, 179, 8, 0.35);
   }
 

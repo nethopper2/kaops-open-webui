@@ -1,12 +1,14 @@
 <script lang="ts">
-import { getContext } from 'svelte';
+import { getContext, onMount, tick } from 'svelte';
 import Modal from '$lib/components/common/Modal.svelte';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
+import { WEBUI_API_BASE_URL } from '$lib/constants';
+
 import { config } from '$lib/stores';
 import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue';
 
-	import XMark from '$lib/components/icons/XMark.svelte';
-	import Textarea from '$lib/components/common/Textarea.svelte';
+import XMark from '$lib/components/icons/XMark.svelte';
+import Textarea from '$lib/components/common/Textarea.svelte';
 
  let TModalRef: Modal
 
@@ -67,7 +69,44 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 	<div>
 		<div class=" flex justify-between dark:text-gray-300 px-5 pt-4 pb-2">
 			<div class=" text-lg font-medium self-center capitalize">
-				{$i18n.t('Citation')}
+				{#if citation?.source?.name}
+					{@const document = mergedDocuments?.[0]}
+					{#if document?.metadata?.file_id || document.source?.url?.includes('http')}
+						<Tooltip
+							className="w-fit"
+							content={document.source?.url?.includes('http')
+								? $i18n.t('Open link')
+								: $i18n.t('Open file')}
+							placement="top-start"
+							tippyOptions={{ duration: [500, 0] }}
+						>
+<!--							<a-->
+<!--								class="hover:text-gray-500 dark:hover:text-gray-100 underline grow line-clamp-1"-->
+<!--								href={document?.metadata?.file_id-->
+<!--									? `${WEBUI_API_BASE_URL}/files/${document?.metadata?.file_id}/content${document?.metadata?.page !== undefined ? `#page=${document.metadata.page + 1}` : ''}`-->
+<!--									: document.source?.url?.includes('http')-->
+<!--										? document.source.url-->
+<!--										: `#`}-->
+<!--								target="_blank"-->
+<!--							>-->
+							<a
+								class="hover:text-gray-500 dark:hover:text-gray-100 underline grow line-clamp-1"
+								href={document?.metadata?.file_id
+											? `${$config?.private_ai.citation_document_url}/${document?.metadata?.file_id}`
+											: document.source?.url?.includes('http')
+												? document.source.url
+												: `#`}
+								target="_blank"
+							>
+								{decodeString(citation?.source?.name)}
+							</a>
+						</Tooltip>
+					{:else}
+						{decodeString(citation?.source?.name)}
+					{/if}
+				{:else}
+					{$i18n.t('Citation')}
+				{/if}
 			</div>
 			<button
 				class="self-center"
@@ -80,11 +119,13 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 		</div>
 
 		<div class="flex flex-col md:flex-row w-full px-6 pb-5 md:space-x-4">
+			<!-- NOTE: this div used to have a max height max-h-[22rem] -->
 			<div
-				class="flex flex-col w-full dark:text-gray-200 overflow-y-scroll max-h-[22rem] scrollbar-hidden"
+				class="flex flex-col w-full dark:text-gray-200 overflow-y-scroll max-h-[22rem] scrollbar-thin gap-1"
 			>
 				{#each mergedDocuments as document, documentIdx}
-					<div class="flex flex-col w-full">
+					<div class="flex flex-col w-full gap-2">
+						{#if document?.metadata}
 						<div class="text-sm font-medium dark:text-gray-300">
 							{$i18n.t('Source')}
 						</div>
@@ -106,7 +147,6 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 <!--												: `#`}-->
 <!--										target="_blank"-->
 <!--									>-->
-									<!-- TODO: cleanup - adjust this for when there are multiple sources -->
 									<a
 										class="hover:text-gray-500 dark:hover:text-gray-100 underline grow"
 										href={document?.metadata?.file_id
@@ -128,7 +168,7 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 									<button
 										class="flex text-xs items-center space-x-1 px-2 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-200 transition"
 										on:click={() => {
-											// Stop the focus trap in teh Modal so the vue Dialog can be clicked.
+											// Stop the focus trap in the Modal so the vue Dialog can be clicked.
 											TModalRef.deactivateFocusTrap()
 
 											TRefFilePopup.show({
@@ -145,21 +185,28 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 								</div>
 							</Tooltip>
 							{#if document.metadata?.parameters}
-								<div class="text-sm font-medium dark:text-gray-300 mt-2 mb-0.5">
-									{$i18n.t('Parameters')}
-								</div>
+								<div>
+									<div class="text-sm font-medium dark:text-gray-300 mt-2 mb-0.5">
+										{$i18n.t('Parameters')}
+									</div>
 
-								<Textarea readonly value={JSON.stringify(document.metadata.parameters, null, 2)}
-								></Textarea>
-							{/if}
-							{#if showRelevance}
-								<div class="text-sm font-medium dark:text-gray-300 mt-2">
-									{$i18n.t('Relevance')}
+									<Textarea readonly value={JSON.stringify(document.metadata.parameters, null, 2)}
+									></Textarea>
 								</div>
-								{#if document.distance !== undefined}
+							{/if}
+						{/if}
+					{/if}
+
+						<div>
+							<div
+								class=" text-sm font-medium dark:text-gray-300 flex items-center gap-2 w-fit mb-1"
+							>
+								{$i18n.t('Content')}
+
+								{#if showRelevance && document.distance !== undefined}
 									<Tooltip
 										className="w-fit"
-										content={$i18n.t('Semantic distance to query')}
+										content={$i18n.t('Relevance')}
 										placement="top-start"
 										tippyOptions={{ duration: [500, 0] }}
 									>
@@ -174,12 +221,6 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 														{percentage.toFixed(2)}%
 													</span>
 												{/if}
-
-												{#if typeof document?.distance === 'number'}
-													<span class="text-gray-500 dark:text-gray-500">
-														({(document?.distance ?? 0).toFixed(4)})
-													</span>
-												{/if}
 											{:else if typeof document?.distance === 'number'}
 												<span class="text-gray-500 dark:text-gray-500">
 													({(document?.distance ?? 0).toFixed(4)})
@@ -187,46 +228,40 @@ import type { FileItem } from '$lib/components-vue/storage/PopupMetadataEdit.vue
 											{/if}
 										</div>
 									</Tooltip>
-								{:else}
-									<div class="text-sm dark:text-gray-400">
-										{$i18n.t('No distance available')}
-									</div>
 								{/if}
-							{/if}
-						{:else}
-							<div class="text-sm dark:text-gray-400">
-								{$i18n.t('No source available')}
-							</div>
-						{/if}
-					</div>
-					<div class="flex flex-col w-full">
-						<div class=" text-sm font-medium dark:text-gray-300 mt-2">
-							{$i18n.t('Content')}
-						</div>
-						{#if document.metadata?.html}
-							<iframe
-								class="w-full border-0 h-auto rounded-none"
-								sandbox="allow-scripts allow-forms allow-same-origin"
-								srcdoc={document.document}
-								title={$i18n.t('Content')}
-							></iframe>
-						{:else}
-							<pre class="text-sm dark:text-gray-400 whitespace-pre-line">
-                {document.document}
-              </pre>
-						{/if}
-					</div>
 
-					{#if documentIdx !== mergedDocuments.length - 1}
-						<hr class="border-gray-100 dark:border-gray-850 my-3" />
-					{/if}
+								{#if Number.isInteger(document?.metadata?.page)}
+									<span class="text-sm text-gray-500 dark:text-gray-400">
+										({$i18n.t('page')}
+										{document.metadata.page + 1})
+									</span>
+								{/if}
+							</div>
+
+							{#if document.metadata?.html}
+								<iframe
+									class="w-full border-0 h-auto rounded-none"
+									sandbox="allow-scripts allow-forms allow-same-origin"
+									srcdoc={document.document}
+									title={$i18n.t('Content')}
+								></iframe>
+							{:else}
+								<pre class="text-sm dark:text-gray-400 whitespace-pre-line">
+                {document.document}
+              	</pre>
+							{/if}
+						</div>
+					</div>
 				{/each}
 			</div>
 		</div>
 	</div>
 
+	<!-- NOTE: This popup sometimes takes up space even when hidden, if this issue returns, would like to be able to catch the vue event to show/hide this div to remedy the issue. -->
+	<!--	<div style:display={isPopupMetadataEditVisible ? 'block' : 'none'}>-->
 	<popup-metadata-edit
 		bind:this={TRefFilePopup}
 		i18n={$i18n}
 	/>
+<!--	</div>-->
 </Modal>
