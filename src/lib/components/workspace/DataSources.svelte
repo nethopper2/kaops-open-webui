@@ -2,7 +2,7 @@
 	import { onMount, getContext, onDestroy } from 'svelte';
 	import { WEBUI_NAME, socket, config } from '$lib/stores';
 	import Search from '../icons/Search.svelte';
-	import Spinner from '../common/Spinner.svelte';
+	import PulsingDots from '../common/PulsingDots.svelte';
 	import Microsoft from '../icons/Microsoft.svelte';
 	import Slack from '../icons/Slack.svelte';
 	import GoogleDrive from '../icons/GoogleDrive.svelte';
@@ -26,7 +26,7 @@
 	import Mineral from '../icons/Mineral.svelte';
 	import JiraProjectSelector from './JiraProjectSelector.svelte';
 	import JiraSelfHostedAuth from './JiraSelfHostedAuth.svelte';
-	import SyncProgressBar from './SyncProgressBar.svelte';
+	import DataSyncProgressBar from './DataSyncProgressBar.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -446,7 +446,17 @@
 		const key = `${dataSource.action}-${dataSource.layer}`;
 		// If we have real-time progress data, use it
 		if (syncProgress[key]) {
-			return syncProgress[key];
+			return {
+				files_processed: syncProgress[key].files_processed || 0,
+				files_total: syncProgress[key].files_total || 0,
+				mb_processed: syncProgress[key].mb_processed || 0,
+				mb_total: syncProgress[key].mb_total || 0,
+				sync_start_time: syncProgress[key].sync_start_time || 0,
+				folders_found: syncProgress[key].folders_found || 0,
+				files_found: syncProgress[key].files_found || 0,
+				total_size: syncProgress[key].total_size || 0,
+				phase: syncProgress[key].phase || 'processing'
+			};
 		}
 		// For syncing state, start with 0 progress, not final values
 		if (dataSource.sync_status === 'syncing') {
@@ -455,7 +465,11 @@
 				files_total: dataSource.files_total || 0,
 				mb_processed: 0,
 				mb_total: dataSource.mb_total || 0,
-				sync_start_time: Date.now() // Always use current time for new sync
+				sync_start_time: Date.now(), // Always use current time for new sync
+				folders_found: 0,
+				files_found: 0,
+				total_size: 0,
+				phase: 'processing' // Default to processing if no real-time data
 			};
 		}
 		// For other states, use the stored values
@@ -464,7 +478,11 @@
 			files_total: dataSource.files_total || 0,
 			mb_processed: dataSource.mb_processed || 0,
 			mb_total: dataSource.mb_total || 0,
-			sync_start_time: dataSource.sync_start_time || 0
+			sync_start_time: dataSource.sync_start_time || 0,
+			folders_found: 0,
+			files_found: 0,
+			total_size: 0,
+			phase: 'processing'
 		};
 	};
 
@@ -669,7 +687,7 @@
 										</div>
 									</div>
 								</td>
-								<td class="py-3 px-4 col-status">
+								<td class="py-3 px-4 col-status h-20">
 									<div class="space-y-2">
 										<!-- Status Badge -->
 										<div class="flex items-center gap-2">
@@ -691,9 +709,7 @@
 												{/if}
 											</span>
 											{#if dataSource.sync_status === 'syncing'}
-												<div class="w-3 h-3">
-													<Spinner className="w-3 h-3" />
-												</div>
+												<PulsingDots />
 											{/if}
 										</div>
 										
@@ -733,10 +749,10 @@
 										{/if}
 									</div>
 								</td>
-								<td class="py-3 px-4 col-actions">
-									{#if dataSource.sync_status === 'syncing'}
-										<SyncProgressBar {...getProgressData(dataSource)} />
-									{:else}
+								<td class="py-3 px-4 col-actions h-20">
+		{#if dataSource.sync_status === 'syncing'}
+			<DataSyncProgressBar {...getProgressData(dataSource)} />
+		{:else}
 										<div class="text-xs text-gray-500 dark:text-gray-400">
 											{dataSource.sync_status}
 										</div>
@@ -808,27 +824,14 @@
 									{/if}
 								</span>
 								{#if dataSource.sync_status === 'syncing'}
-									<div class="w-3 h-3">
-										<Spinner className="w-3 h-3" />
-									</div>
+									<PulsingDots />
 								{/if}
 							</div>
 							
-							<!-- Phase Description for syncing -->
-							{#if dataSource.sync_status === 'syncing'}
-								{@const key = `${dataSource.action}-${dataSource.layer}`}
-								{@const progressData = syncProgress[key]}
-								<!-- Phase Description for syncing -->
-								<div class="text-xs text-gray-500 dark:text-gray-400">
-									{#if progressData && progressData.phase_description}
-										{syncProgress[key].phase_description}
-									{/if}
-								</div>
-							{/if}
 
 							<!-- State-specific information -->
 							{#if dataSource.sync_status === 'syncing'}
-								<SyncProgressBar {...getProgressData(dataSource)} />
+								<DataSyncProgressBar {...getProgressData(dataSource)} />
 							{:else if dataSource.sync_status === 'deleting'}
 								<div class="text-xs text-gray-500 dark:text-gray-400">
 									Deleting data...
@@ -881,6 +884,6 @@
 	</div>
 {:else}
 	<div class="w-full h-full flex justify-center items-center">
-		<Spinner />
+		<PulsingDots />
 	</div>
 {/if}

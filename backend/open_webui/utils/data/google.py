@@ -783,7 +783,7 @@ async def sync_drive_to_storage(auth_token, user_id):
     print(f'📋 Phase 1: Starting - Initializing sync process...')
     print(f'----------------------------------------------------------------------')
     
-    # Emit phase update
+    # Emit initial phase update with discovery fields
     await emit_sync_progress(USER_ID, 'google', 'google_drive', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',
@@ -792,7 +792,10 @@ async def sync_drive_to_storage(auth_token, user_id):
         'files_total': 0,
         'mb_processed': 0,
         'mb_total': 0,
-        'sync_start_time': sync_start_time
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
     })
     
     # Initialize skip counters
@@ -814,6 +817,11 @@ async def sync_drive_to_storage(auth_token, user_id):
     mb_processed = 0
     mb_total = 0
     
+    # Discovery tracking
+    folders_found = 0
+    files_found = 0
+    total_size = 0
+    
     try:
         # Get user's folders (both My Drive and shared folders)
         drive_folders = get_user_drive_folders(auth_token)
@@ -830,6 +838,21 @@ async def sync_drive_to_storage(auth_token, user_id):
         include_shared_drives = sync_scope in ('all', 'shared_drives')
 
         folders_to_process = []
+        
+        # Emit initial discovery update
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'starting',
+            'phase_name': 'Phase 1: Starting',
+            'phase_description': 'Discovering folders and files...',
+            'files_processed': 0,
+            'files_total': 0,
+            'mb_processed': 0,
+            'mb_total': 0,
+            'sync_start_time': sync_start_time,
+            'folders_found': 0,
+            'files_found': 0,
+            'total_size': 0
+        })
 
         if include_my_drive:
             # Discover top-level folders under My Drive (root) and process each independently
@@ -837,6 +860,7 @@ async def sync_drive_to_storage(auth_token, user_id):
             folders_to_process.extend([
                 {'id': f['id'], 'name': f['name'], 'type': 'my_drive'} for f in my_drive_top_level
             ])
+            folders_found += len(my_drive_top_level)
 
             # Also include root-level files under My Drive
             my_drive_root_files = list_my_drive_root_files(auth_token)
@@ -844,6 +868,8 @@ async def sync_drive_to_storage(auth_token, user_id):
                 safe_name = f.get('name', '').replace('/', '-')
                 f['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/My Drive/{safe_name}"
                 all_files.append(f)
+                files_found += 1
+                total_size += int(f.get('size', 0) or 0)
 
         if include_shared_with_me:
             # Process shared-with-me items (both files and folders) in single pass
@@ -852,11 +878,14 @@ async def sync_drive_to_storage(auth_token, user_id):
                 if item['mimeType'] == 'application/vnd.google-apps.folder':
                     # It's a folder - add to folders_to_process
                     folders_to_process.append(item)
+                    folders_found += 1
                 else:
                     # It's a file - add directly to all_files with sanitized path
                     safe_name = item['name'].replace('/', '-')
                     item['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/Shared with me/{safe_name}"
                     all_files.append(item)
+                    files_found += 1
+                    total_size += int(item.get('size', 0) or 0)
 
         # Add shared drive folders and files to the main processing queue
         if include_shared_drives:
@@ -869,6 +898,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                     folder['type'] = 'shared_drive'
                     folder['driveName'] = drive_id_to_name.get(drive_id, folder.get('driveName') or 'Unknown Drive')
                     folders_to_process.append(folder)
+                    folders_found += 1
 
             # Root-level files
             for d in drive_folders['shared_drives']:
@@ -881,6 +911,23 @@ async def sync_drive_to_storage(auth_token, user_id):
                     safe_name = f.get('name', '').replace('/', '-')
                     f['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/Shared drives/{drive_name}/{safe_name}"
                     all_files.append(f)
+                    files_found += 1
+                    total_size += int(f.get('size', 0) or 0)
+
+        # Emit discovery progress update after initial collection
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'starting',
+            'phase_name': 'Phase 1: Starting',
+            'phase_description': f'Found {folders_found} folders, {files_found} files, {format_bytes(total_size)} total',
+            'files_processed': 0,
+            'files_total': 0,
+            'mb_processed': 0,
+            'mb_total': 0,
+            'sync_start_time': sync_start_time,
+            'folders_found': folders_found,
+            'files_found': files_found,
+            'total_size': total_size
+        })
 
         # Process folders in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -910,6 +957,26 @@ async def sync_drive_to_storage(auth_token, user_id):
                     else:
                         print(f"Completed folder: {folder['name']} with {len(folder_files)} files")
                     all_files.extend(folder_files)
+                    
+                    # Update discovery counts
+                    files_found += len(folder_files)
+                    for f in folder_files:
+                        total_size += int(f.get('size', 0) or 0)
+                    
+                    # Emit discovery progress update
+                    await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+                        'phase': 'starting',
+                        'phase_name': 'Phase 1: Starting',
+                        'phase_description': f'Found {folders_found} folders, {files_found} files, {format_bytes(total_size)} total',
+                        'files_processed': 0,
+                        'files_total': 0,
+                        'mb_processed': 0,
+                        'mb_total': 0,
+                        'sync_start_time': sync_start_time,
+                        'folders_found': folders_found,
+                        'files_found': files_found,
+                        'total_size': total_size
+                    })
                 except Exception as e:
                     print(f"Error processing folder {folder['name']}: {str(e)}")
         
