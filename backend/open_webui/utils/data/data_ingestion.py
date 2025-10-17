@@ -664,7 +664,12 @@ async def update_data_source_sync_status(
     user_id: str,
     source_action: str,
     layer: str,
-    status: str
+    status: str,
+    files_processed: Optional[int] = None,
+    files_total: Optional[int] = None,
+    mb_processed: Optional[int] = None,
+    mb_total: Optional[int] = None,
+    sync_start_time: Optional[int] = None
 ) -> Optional[DataSourceModel]:
     """Updates the sync status and last sync timestamp for a data source"""
     log.info(f"Attempting to update sync status for user {user_id}, source action '{source_action}' to '{status}'")
@@ -687,7 +692,12 @@ async def update_data_source_sync_status(
             source_name=target_data_source_name,
             layer_name=layer,
             sync_status=status,
-            last_sync=int(time.time())
+            last_sync=int(time.time()),
+            files_processed=files_processed,
+            files_total=files_total,
+            mb_processed=mb_processed,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
         )
         
         if updated_source:

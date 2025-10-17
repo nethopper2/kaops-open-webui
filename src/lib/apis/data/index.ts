@@ -301,20 +301,31 @@ export const manualDataSync = async (
 	token: string,
 	action: string,
 	layer: string
-): Promise<any> => {
+): Promise<{ message?: string; url?: string; detail?: { reauth_url?: string } } | null> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/${action}/sync?layer=${layer}`, {
+	const url = `${DATA_API_BASE_URL}/${action}/sync?layer=${layer}`;
+	
+	const res = await fetch(url, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) {
+				// Check if response is JSON
+				const contentType = res.headers.get('content-type');
+				if (contentType && contentType.includes('application/json')) {
+					throw await res.json();
+				} else {
+					// Response is HTML (redirect, error page, etc.)
+					throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+				}
+			}
 			return res.json();
 		})
 		.catch((err) => {
-			console.log(err);
-			error = err.detail;
+			console.log('API Error:', err);
+			error = err.detail || err.message || 'Unknown error';
 			return null;
 		});
 
@@ -369,9 +380,9 @@ export const getJiraProjects = async (token: string) => {
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
-			console.log(err);
-			return null;
+		error = err.detail;
+		console.log(err);
+		return null;
 		});
 
 	if (error) {
@@ -405,9 +416,9 @@ export const syncSelectedJiraProjects = async (
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
-			console.log(err);
-			return null;
+		error = err.detail;
+		console.log(err);
+		return null;
 		});
 
 	if (error) {

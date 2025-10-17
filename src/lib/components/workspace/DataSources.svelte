@@ -13,6 +13,7 @@
 		getDataSources,
 		initializeDataSync,
 		manualDataSync,
+		updateSyncStatus,
 		disconnectDataSync
 	} from '$lib/apis/data';
 	import Atlassian from '../icons/Atlassian.svelte';
@@ -25,6 +26,7 @@
 	import Mineral from '../icons/Mineral.svelte';
 	import JiraProjectSelector from './JiraProjectSelector.svelte';
 	import JiraSelfHostedAuth from './JiraSelfHostedAuth.svelte';
+	import SyncProgressBar from './SyncProgressBar.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -33,6 +35,9 @@
 
 	let dataSources: Array<DataSource> = [];
 	let processingActions = new Set<string>();
+	
+	// Progress tracking
+	let syncProgress: Record<string, any> = {};
 
 	// Project selector state
 	let showProjectSelector = false;
@@ -75,19 +80,23 @@
 	const getSyncStatusColor = (status: string) => {
 		switch (status) {
 			case 'synced':
-				return 'bg-green-500/20 text-green-700 dark:text-green-200';
+				return 'text-green-700 dark:text-green-200';
 			case 'embedded':
-				return 'bg-green-500/20 text-green-700 dark:text-green-200';
+				return 'text-green-700 dark:text-green-200';
 			case 'syncing':
-				return 'bg-blue-500/20 text-blue-700 dark:text-blue-200';
+				return 'text-blue-700 dark:text-blue-200';
 			case 'embedding':
-				return 'bg-blue-500/20 text-blue-700 dark:text-blue-200';
+				return 'text-blue-700 dark:text-blue-200';
+			case 'deleting':
+				return 'text-orange-700 dark:text-orange-200';
+			case 'deleted':
+				return 'text-gray-700 dark:text-gray-200';
 			case 'error':
-				return 'bg-red-500/20 text-red-700 dark:text-red-200';
+				return 'text-red-700 dark:text-red-200';
 			case 'unsynced':
-				return 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-200';
+				return 'text-yellow-700 dark:text-yellow-200';
 			default:
-				return 'bg-gray-500/20 text-gray-700 dark:text-gray-200';
+				return 'text-gray-700 dark:text-gray-200';
 		}
 	};
 
@@ -124,7 +133,6 @@
 		processingActions = processingActions;
 
 		try {
-			console.log('Syncing:', dataSource.name);
 
 			// Special handling for Mineral
 			if (dataSource.action === 'mineral') {
@@ -160,12 +168,8 @@
 	};
 
 	const initializeJiraSync = async (dataSource: DataSource) => {
-		console.log('Initializing Jira sync...');
-
 		// Check if self-hosted is enabled
 		const isSelfHosted = $config?.features.atlassian_self_hosted_enabled;
-
-		console.log('Is self-hosted enabled?', isSelfHosted);
 
 		if (isSelfHosted) {
 			// Show self-hosted auth modal
@@ -184,7 +188,6 @@
 
 				const messageHandler = async (event: MessageEvent) => {
 					if (event.data?.type === 'atlassian_connected' && event.data?.layer === 'jira') {
-						console.log('Atlassian OAuth completed, showing project selector');
 						window.removeEventListener('message', messageHandler);
 						dataSources = await getDataSources(localStorage.token);
 						projectSelectorDataSource = dataSource;
@@ -205,8 +208,6 @@
 	};
 
 	const handleSelfHostedAuthSuccess = async (event: CustomEvent) => {
-		console.log('Self-hosted auth successful:', event.detail);
-
 		// Refresh data sources
 		dataSources = await getDataSources(localStorage.token);
 
@@ -328,7 +329,6 @@
 	};
 
 	const initializeSync = async (action: string, layer: string) => {
-		console.log('Initializing sync for:', action);
 
 		let syncDetails = await initializeDataSync(localStorage.token, action, layer);
 
@@ -340,9 +340,25 @@
 	};
 
 	const updateSync = async (action: string, layer: string) => {
-		console.log('Manual sync initiated for:', action);
+		// Clear any stale progress data for this action/layer
+		const key = `${action}-${layer}`;
+		delete syncProgress[key];
+		syncProgress = syncProgress; // Trigger reactivity
 
+		// Use the manual sync endpoint that actually triggers the sync process
 		let syncDetails = await manualDataSync(localStorage.token, action, layer);
+
+		// Handle case where syncDetails is null (error occurred)
+		if (!syncDetails) {
+			console.error('Sync failed - no details returned. This usually means the sync is already in progress or there was an authentication error.');
+			return;
+		}
+
+		// Handle case where backend returns a message instead of sync details (e.g., "sync already in progress")
+		if (syncDetails.message && !syncDetails.url) {
+			console.warn('Sync not started:', syncDetails.message);
+			return;
+		}
 
 		if (syncDetails.detail?.reauth_url) {
 			if (action === 'mineral') {
@@ -370,8 +386,6 @@
 			const action = dataSource.action;
 			const layer = dataSource.layer;
 
-			console.log('Disconnecting sync for:', action);
-
 			await disconnectDataSync(localStorage.token, action as string, layer as string);
 			dataSources = await getDataSources(localStorage.token);
 		} finally {
@@ -380,7 +394,27 @@
 		}
 	};
 
-	const getSyncStatusText = (status: string) => {
+	const getPhaseDisplayText = (phaseName: string) => {
+		// Map backend phase names to user-friendly display text
+		const phaseMap: Record<string, string> = {
+			'Phase 1: Starting': 'Initializing',
+			'Phase 2: Discovery': 'Analyzing',
+			'Phase 3: Processing': 'Processing',
+			'Phase 4: Summarizing': 'Finalizing'
+		};
+		return phaseMap[phaseName] || phaseName;
+	};
+
+
+	const getSyncStatusText = (status: string, dataSource?: DataSource) => {
+		// If syncing and we have phase data, show the mapped phase name
+		if (status === 'syncing' && dataSource) {
+			const key = `${dataSource.action}-${dataSource.layer}`;
+			if (syncProgress[key] && syncProgress[key].phase_name) {
+				return getPhaseDisplayText(syncProgress[key].phase_name);
+			}
+		}
+		
 		switch (status) {
 			case 'synced':
 				return 'Synced';
@@ -390,6 +424,10 @@
 				return 'Syncing...';
 			case 'embedded':
 				return 'Synced';
+			case 'deleting':
+				return 'Deleting...';
+			case 'deleted':
+				return 'Deleted';
 			case 'error':
 				return 'Error';
 			case 'unsynced':
@@ -401,11 +439,37 @@
 
 	const isProcessing = (dataSource: DataSource) => {
 		const actionKey = getActionKey(dataSource);
-		return processingActions.has(actionKey) || dataSource.sync_status === 'syncing';
+		return processingActions.has(actionKey) || dataSource.sync_status === 'syncing' || dataSource.sync_status === 'deleting';
 	};
 
+	$: getProgressData = (dataSource: DataSource) => {
+		const key = `${dataSource.action}-${dataSource.layer}`;
+		// If we have real-time progress data, use it
+		if (syncProgress[key]) {
+			return syncProgress[key];
+		}
+		// For syncing state, start with 0 progress, not final values
+		if (dataSource.sync_status === 'syncing') {
+			return {
+				files_processed: 0,
+				files_total: dataSource.files_total || 0,
+				mb_processed: 0,
+				mb_total: dataSource.mb_total || 0,
+				sync_start_time: Date.now() // Always use current time for new sync
+			};
+		}
+		// For other states, use the stored values
+		return {
+			files_processed: dataSource.files_processed || 0,
+			files_total: dataSource.files_total || 0,
+			mb_processed: dataSource.mb_processed || 0,
+			mb_total: dataSource.mb_total || 0,
+			sync_start_time: dataSource.sync_start_time || 0
+		};
+	};
+
+
 	const handleProjectSyncStarted = async (event: CustomEvent) => {
-		console.log('Project sync started:', event.detail);
 		showProjectSelector = false;
 		projectSelectorDataSource = null;
 
@@ -431,7 +495,6 @@
 				return res.json();
 			})
 			.catch((err) => {
-				console.log(err);
 				error = err;
 				return null;
 			});
@@ -448,15 +511,59 @@
 		$socket?.on('data-source-updated', async (data) => {
 			updateDataSourceSyncStatus(data);
 		});
+		$socket?.on('sync_progress', (data) => {
+			const key = `${data.provider}-${data.layer}`;
+			syncProgress[key] = data;
+			syncProgress = syncProgress; // Trigger reactivity
+		});
 		loaded = true;
 	});
 
 	onDestroy(() => {
 		if ($socket) {
 			$socket.off('data-source-updated');
+			$socket.off('sync_progress');
 		}
 	});
 </script>
+
+<style>
+	/* Data Sources Table Column Configuration */
+	.data-sources-table {
+		/* Column 1: Name/Description - adjust as needed */
+		--col-name-width: 16rem;       /* Wide enough to prevent text wrapping */
+		
+		/* Column 2: Status - adjust as needed */
+		--col-status-width: 12rem;      /* Try: 6rem, 8rem, 10rem, 12rem, etc. */
+		
+		/* Column 3: Actions - takes remaining space */
+		--col-actions-width: 1fr;      /* Expands to fill remaining space */
+	}
+
+	.data-sources-table .col-name {
+		width: var(--col-name-width);
+		white-space: nowrap;  /* Prevent text wrapping for main content */
+	}
+	
+	/* Allow caption text to wrap */
+	.data-sources-table .col-name .text-xs {
+		white-space: normal;  /* Allow caption text to wrap */
+	}
+
+	.data-sources-table .col-status {
+		width: var(--col-status-width);
+		white-space: nowrap;  /* Prevent text wrapping for main status text */
+	}
+	
+	/* Allow only the phase description text to wrap, not the status badge */
+	.data-sources-table .col-status .text-gray-500 {
+		white-space: normal;  /* Allow only caption text to wrap */
+	}
+
+	.data-sources-table .col-actions {
+		width: var(--col-actions-width);
+	}
+</style>
 
 <svelte:head>
 	<title>
@@ -508,18 +615,15 @@
 		{#if filteredItems.length > 0}
 			<!-- Desktop Table View -->
 			<div class="hidden lg:block overflow-x-auto">
-				<table class="w-full">
+				<table class="w-full table-fixed data-sources-table">
 					<thead>
 						<tr class="border-b border-gray-200 dark:border-gray-700">
-							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300"> </th>
-							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
-								{$i18n.t('Sync Status')}
+							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300 col-name"> </th>
+							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300 col-status">
+								{$i18n.t('Status')}
 							</th>
-							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
-								{$i18n.t('Last Sync')}
-							</th>
-							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
-								{$i18n.t('Actions')}
+							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300 col-actions">
+								<!-- Actions column - takes remaining space -->
 							</th>
 						</tr>
 					</thead>
@@ -528,7 +632,7 @@
 							<tr
 								class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
 							>
-								<td class="py-3 px-4">
+								<td class="py-3 px-4 col-name">
 									<div class="flex items-center gap-3">
 										<div
 											class="flex-shrink-0 w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center"
@@ -545,47 +649,98 @@
 											<div class="text-xs text-gray-500 dark:text-gray-400">
 												{dataSource.context}
 											</div>
+											<!-- Small duplicate actions under caption -->
+											<div class="flex items-center gap-1 mt-1">
+												<button
+													class="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+													disabled={isProcessing(dataSource)}
+													on:click={() => handleSync(dataSource)}
+												>
+													Sync
+												</button>
+												<button
+													class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+													disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
+													on:click={() => handleDelete(dataSource)}
+												>
+													Delete
+												</button>
+											</div>
 										</div>
 									</div>
 								</td>
-								<td class="py-3 px-4">
-									<div class="flex items-center gap-2">
-										<span
-											class="text-xs font-bold px-2 py-1 rounded-full uppercase {getSyncStatusColor(
-												dataSource.sync_status
-											)}"
-										>
-											{getSyncStatusText(dataSource.sync_status)}
-										</span>
+								<td class="py-3 px-4 col-status">
+									<div class="space-y-2">
+										<!-- Status Badge -->
+										<div class="flex items-center gap-2">
+											<span
+												class="text-xs font-medium uppercase {getSyncStatusColor(
+													dataSource.sync_status
+												)}"
+											>
+												{#if dataSource.sync_status === 'syncing'}
+													{@const key = `${dataSource.action}-${dataSource.layer}`}
+													{@const progressData = syncProgress[key]}
+													{#if progressData && progressData.phase_name}
+														{getPhaseDisplayText(progressData.phase_name)}
+													{:else}
+														{getSyncStatusText(dataSource.sync_status)}
+													{/if}
+												{:else}
+													{getSyncStatusText(dataSource.sync_status)}
+												{/if}
+											</span>
+											{#if dataSource.sync_status === 'syncing'}
+												<div class="w-3 h-3">
+													<Spinner className="w-3 h-3" />
+												</div>
+											{/if}
+										</div>
+										
+										<!-- Phase Description for syncing -->
 										{#if dataSource.sync_status === 'syncing'}
-											<div class="w-3 h-3">
-												<Spinner className="w-3 h-3" />
+											{@const key = `${dataSource.action}-${dataSource.layer}`}
+											{@const progressData = syncProgress[key]}
+											<!-- Phase Description for syncing -->
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												{#if progressData && progressData.phase_description}
+													{syncProgress[key].phase_description}
+												{/if}
+											</div>
+										{/if}
+										
+										<!-- State-specific information -->
+										{#if dataSource.sync_status === 'deleting'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												Deleting data...
+											</div>
+										{:else if dataSource.sync_status === 'synced'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Never'}
+											</div>
+										{:else if dataSource.sync_status === 'deleted'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												Deleted: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+											</div>
+										{:else if dataSource.sync_status === 'error'}
+											<div class="text-xs text-red-500 dark:text-red-400">
+												Failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+											</div>
+										{:else if dataSource.sync_status === 'unsynced'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												Not synced
 											</div>
 										{/if}
 									</div>
 								</td>
-								<td class="py-3 px-4">
-									<div class="text-sm text-gray-700 dark:text-gray-300">
-										{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Never'}
-									</div>
-								</td>
-								<td class="py-3 px-4">
-									<div class="flex items-center gap-2">
-										<button
-											class="px-2 py-1.5 text-xs font-medium rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-											disabled={isProcessing(dataSource)}
-											on:click={() => handleSync(dataSource)}
-										>
-											{isProcessing(dataSource) ? 'Processing...' : 'Sync'}
-										</button>
-										<button
-											class="px-2 py-1.5 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-											disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
-											on:click={() => handleDelete(dataSource)}
-										>
-											{isProcessing(dataSource) ? 'Processing...' : 'Delete'}
-										</button>
-									</div>
+								<td class="py-3 px-4 col-actions">
+									{#if dataSource.sync_status === 'syncing'}
+										<SyncProgressBar {...getProgressData(dataSource)} />
+									{:else}
+										<div class="text-xs text-gray-500 dark:text-gray-400">
+											{dataSource.sync_status}
+										</div>
+									{/if}
 								</td>
 							</tr>
 						{/each}
@@ -612,17 +767,45 @@
 								<div class="text-xs text-gray-500 dark:text-gray-400 truncate">
 									{dataSource.context}
 								</div>
+								<!-- Small duplicate actions under caption -->
+								<div class="flex items-center gap-1 mt-1">
+									<button
+										class="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+										disabled={isProcessing(dataSource)}
+										on:click={() => handleSync(dataSource)}
+									>
+										Sync
+									</button>
+									<button
+										class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+										disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
+										on:click={() => handleDelete(dataSource)}
+									>
+										Delete
+									</button>
+								</div>
 							</div>
 						</div>
 
-						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+						<div class="space-y-2">
+							<!-- Status Badge -->
 							<div class="flex items-center gap-2">
 								<span
-									class="text-xs font-bold px-2 py-1 rounded-full uppercase {getSyncStatusColor(
+									class="text-xs font-medium uppercase {getSyncStatusColor(
 										dataSource.sync_status
 									)}"
 								>
-									{getSyncStatusText(dataSource.sync_status)}
+									{#if dataSource.sync_status === 'syncing'}
+										{@const key = `${dataSource.action}-${dataSource.layer}`}
+										{@const progressData = syncProgress[key]}
+										{#if progressData && progressData.phase_name}
+											{getPhaseDisplayText(progressData.phase_name)}
+										{:else}
+											{getSyncStatusText(dataSource.sync_status)}
+										{/if}
+									{:else}
+										{getSyncStatusText(dataSource.sync_status)}
+									{/if}
 								</span>
 								{#if dataSource.sync_status === 'syncing'}
 									<div class="w-3 h-3">
@@ -630,10 +813,43 @@
 									</div>
 								{/if}
 							</div>
+							
+							<!-- Phase Description for syncing -->
+							{#if dataSource.sync_status === 'syncing'}
+								{@const key = `${dataSource.action}-${dataSource.layer}`}
+								{@const progressData = syncProgress[key]}
+								<!-- Phase Description for syncing -->
+								<div class="text-xs text-gray-500 dark:text-gray-400">
+									{#if progressData && progressData.phase_description}
+										{syncProgress[key].phase_description}
+									{/if}
+								</div>
+							{/if}
 
-							<div class="text-xs text-gray-500 dark:text-gray-400">
-								Last sync: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Never'}
-							</div>
+							<!-- State-specific information -->
+							{#if dataSource.sync_status === 'syncing'}
+								<SyncProgressBar {...getProgressData(dataSource)} />
+							{:else if dataSource.sync_status === 'deleting'}
+								<div class="text-xs text-gray-500 dark:text-gray-400">
+									Deleting data...
+								</div>
+							{:else if dataSource.sync_status === 'synced'}
+								<div class="text-xs text-gray-500 dark:text-gray-400">
+									{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Never'}
+								</div>
+							{:else if dataSource.sync_status === 'deleted'}
+								<div class="text-xs text-gray-500 dark:text-gray-400">
+									Deleted: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+								</div>
+							{:else if dataSource.sync_status === 'error'}
+								<div class="text-xs text-red-500 dark:text-red-400">
+									Failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+								</div>
+							{:else if dataSource.sync_status === 'unsynced'}
+								<div class="text-xs text-gray-500 dark:text-gray-400">
+									Not synced
+								</div>
+							{/if}
 						</div>
 
 						<div class="flex gap-2 mt-3">

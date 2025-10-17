@@ -19,8 +19,14 @@ export type DataSource = {
 	name: string;
 	context: string;
 	permission?: string;
-	sync_status: 'synced' | 'syncing' | 'error' | 'embedding' | 'embedded' | 'unsynced';
+	sync_status: 'synced' | 'syncing' | 'error' | 'embedding' | 'embedded' | 'unsynced' | 'deleting' | 'deleted';
 	last_sync: string | null; // ISO date string
+	// Progress tracking fields
+	files_processed?: number;
+	files_total?: number;
+	mb_processed?: number;
+	mb_total?: number;
+	sync_start_time?: number;
 	icon: string; // Icon name or component
 	action?: string; // Optional action text
 	layer?: string; // Optional layer information

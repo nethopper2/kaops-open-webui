@@ -598,10 +598,38 @@ async def create_background_delete_task(request: Request, provider: str, user_id
     
     async def delete_sync():
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
+        result = await loop.run_in_executor(
             None,
             lambda: asyncio.run(delete_folder_unified(folder_path, user_id))  # Using unified delete
         )
+        
+        # Update status to 'deleted' when deletion completes
+        if result:
+            try:
+                DataSources.update_data_source_sync_status_by_name(
+                    user_id=user_id,
+                    source_name=provider.title(),
+                    layer_name=layer or "",
+                    sync_status="deleted",
+                    last_sync=int(time.time())
+                )
+                log.info(f"Successfully updated {provider.title()} data source status to 'deleted'")
+            except Exception as e:
+                log.error(f"Failed to update {provider.title()} data source status to 'deleted': {e}")
+        else:
+            try:
+                DataSources.update_data_source_sync_status_by_name(
+                    user_id=user_id,
+                    source_name=provider.title(),
+                    layer_name=layer or "",
+                    sync_status="error",
+                    last_sync=int(time.time())
+                )
+                log.error(f"Deletion failed, updated {provider.title()} data source status to 'error'")
+            except Exception as e:
+                log.error(f"Failed to update {provider.title()} data source status to 'error': {e}")
+        
+        return result
     
     await create_task(redis_connection, delete_sync(), id=f"delete_{provider}_sync_{user_id}")
 
@@ -688,6 +716,11 @@ async def get_data_sources(user=Depends(get_verified_user)):
                 permission=ds.permission,
                 sync_status=ds.sync_status,
                 last_sync=ds.last_sync,
+                files_processed=ds.files_processed,
+                files_total=ds.files_total,
+                mb_processed=ds.mb_processed,
+                mb_total=ds.mb_total,
+                sync_start_time=ds.sync_start_time,
                 icon=ds.icon,
                 action=ds.action,
                 layer=ds.layer,
@@ -717,6 +750,11 @@ def create_data_source(form_data: DataSourceForm, user=Depends(get_verified_user
                 context=data_source.context,
                 sync_status=data_source.sync_status,
                 last_sync=data_source.last_sync,
+                files_processed=data_source.files_processed,
+                files_total=data_source.files_total,
+                mb_processed=data_source.mb_processed,
+                mb_total=data_source.mb_total,
+                sync_start_time=data_source.sync_start_time,
                 icon=data_source.icon,
                 action=data_source.action,
                 created_at=data_source.created_at,
@@ -752,6 +790,11 @@ def initialize_default_data_sources(user=Depends(get_verified_user)):
                 context=ds.context,
                 sync_status=ds.sync_status,
                 last_sync=ds.last_sync,
+                files_processed=ds.files_processed,
+                files_total=ds.files_total,
+                mb_processed=ds.mb_processed,
+                mb_total=ds.mb_total,
+                sync_start_time=ds.sync_start_time,
                 icon=ds.icon,
                 action=ds.action,
                 created_at=ds.created_at,
@@ -781,6 +824,11 @@ async def get_data_source_by_id(id: str, user=Depends(get_verified_user)):
             context=data_source.context,
             sync_status=data_source.sync_status,
             last_sync=data_source.last_sync,
+            files_processed=data_source.files_processed,
+            files_total=data_source.files_total,
+            mb_processed=data_source.mb_processed,
+            mb_total=data_source.mb_total,
+            sync_start_time=data_source.sync_start_time,
             icon=data_source.icon,
             action=data_source.action,
             created_at=data_source.created_at,
@@ -809,6 +857,11 @@ async def update_data_source_by_id(
                     context=updated_data_source.context,
                     sync_status=updated_data_source.sync_status,
                     last_sync=updated_data_source.last_sync,
+                    files_processed=updated_data_source.files_processed,
+                    files_total=updated_data_source.files_total,
+                    mb_processed=updated_data_source.mb_processed,
+                    mb_total=updated_data_source.mb_total,
+                    sync_start_time=updated_data_source.sync_start_time,
                     icon=updated_data_source.icon,
                     action=updated_data_source.action,
                     created_at=updated_data_source.created_at,
@@ -852,6 +905,11 @@ async def update_sync_status(
                     context=updated_data_source.context,
                     sync_status=updated_data_source.sync_status,
                     last_sync=updated_data_source.last_sync,
+                    files_processed=updated_data_source.files_processed,
+                    files_total=updated_data_source.files_total,
+                    mb_processed=updated_data_source.mb_processed,
+                    mb_total=updated_data_source.mb_total,
+                    sync_start_time=updated_data_source.sync_start_time,
                     icon=updated_data_source.icon,
                     action=updated_data_source.action,
                     created_at=updated_data_source.created_at,
@@ -1769,7 +1827,7 @@ def create_universal_sync_endpoint(provider: str):
             try:
                 log.info(f"Starting manual {provider.title()} sync for user {user.id}")
                 await create_background_sync_task(request, provider, user.id, access_token, layer)
-                return RedirectResponse(url=DATASOURCES_URL, status_code=302)
+                return {"message": f"{provider.title()} sync initiated successfully"}
 
             except Exception as sync_error:
                 log.error(f"{provider.title()} sync failed for user {user.id}: {str(sync_error)}")
@@ -1897,11 +1955,13 @@ def create_universal_disconnect_endpoint(provider: str):
                 updated_ds = DataSources.update_data_source_sync_status_by_name(
                     user_id=user_id,
                     source_name=data_source_found.name,
-                    sync_status="unsynced",
-                    last_sync=int(time.time())
+                    layer_name=layer or "",
+                    sync_status="deleting",
+                    last_sync=int(time.time()),
+                    sync_start_time=int(time.time())
                 )
                 if updated_ds:
-                    msg = f"Successfully updated {provider.title()} data source status to 'unsynced'"
+                    msg = f"Successfully updated {provider.title()} data source status to 'deleting'"
                     log.info(msg)
                     messages.append(msg)
                 else:
@@ -2082,23 +2142,24 @@ async def disconnect_provider_layer(provider: str, user_id: str, layer: str, tea
         log.warning(msg)
         messages.append(msg)
 
-    # Delete layer-specific data from GCS
-    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        msg = "GCS configuration missing. Cannot perform GCS data cleanup."
-        log.error(msg)
+    # Delete layer-specific data from storage (works for both GCS and local storage)
+    try:
+        await create_background_delete_task(request, provider, user_id, layer)
+        msg = f"Successfully initiated data cleanup for {provider.title()} layer '{layer}'"
+        log.info(msg)
+        messages.append(msg)
+    except Exception as e:
+        msg = f"Error during data cleanup for layer '{layer}': {e}"
+        log.exception(msg)
         messages.append(msg)
         overall_success = False
-    else:
-        try:
-            await create_background_delete_task(request, provider, user_id, layer)
-            msg = f"Successfully initiated GCS data cleanup for {provider.title()} layer '{layer}'"
-            log.info(msg)
-            messages.append(msg)
-        except Exception as e:
-            msg = f"Error during GCS data cleanup for layer '{layer}': {e}"
-            log.exception(msg)
-            messages.append(msg)
-            overall_success = False
+
+    # GCS-specific cleanup (optional for local development)
+    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+        msg = "GCS configuration missing. Skipping additional GCS cleanup (local development mode)."
+        log.warning(msg)
+        messages.append(msg)
+        # Don't set overall_success = False for missing GCS config in local dev
 
     if overall_success:
         log.info(f"{provider.title()} layer disconnection completed successfully for user: {user_id}, layer: {layer}")

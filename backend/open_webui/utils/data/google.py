@@ -27,6 +27,31 @@ from open_webui.models.data import DataSources
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
+# Global socketio instance for progress updates
+sio = None
+
+def set_socketio_instance(socketio_instance):
+    """Set the socketio instance for progress updates"""
+    global sio
+    sio = socketio_instance
+
+async def emit_sync_progress(user_id: str, provider: str, layer: str, progress_data: dict):
+    """Emit sync progress update via WebSocket"""
+    global sio
+    if sio:
+        try:
+            log.info(f"Emitting sync progress for user {user_id}: {progress_data}")
+            await sio.emit("sync_progress", {
+                "user_id": user_id,
+                "provider": provider,
+                "layer": layer,
+                **progress_data
+            }, to=f"user_{user_id}")
+        except Exception as e:
+            log.error(f"Failed to emit sync progress: {e}")
+    else:
+        log.warning("Socket.IO instance not available for progress updates")
+
 # Metrics tracking
 total_api_calls = 0
 script_start_time = 0
@@ -750,6 +775,26 @@ async def sync_drive_to_storage(auth_token, user_id):
     current_backend = get_current_backend()
     print(f'🔄 Starting recursive sync process using {current_backend} backend...')
     
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    
+    # Phase 1: Starting
+    print(f'----------------------------------------------------------------------')
+    print(f'📋 Phase 1: Starting - Initializing sync process...')
+    print(f'----------------------------------------------------------------------')
+    
+    # Emit phase update
+    await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'Preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time
+    })
+    
     # Initialize skip counters
     skipped_reasons = {
         'size': 0,
@@ -762,6 +807,12 @@ async def sync_drive_to_storage(auth_token, user_id):
     uploaded_files = []
     deleted_files = []
     skipped_files = 0
+    
+    # Progress tracking
+    files_processed = 0
+    files_total = 0
+    mb_processed = 0
+    mb_total = 0
     
     try:
         # Get user's folders (both My Drive and shared folders)
@@ -864,6 +915,44 @@ async def sync_drive_to_storage(auth_token, user_id):
         
         print(f"Found {len(all_files)} files across all directories (after size filtering)")
         
+        # Set total files and calculate total size for progress tracking
+        files_total = len(all_files)
+        mb_total = sum(int(f.get('size', 0)) for f in all_files)
+        
+        # Update progress in database
+        await update_data_source_sync_status(
+            USER_ID, 'google', 'google_drive', 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        
+        # Emit initial progress
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
+        # Phase 2: Discovery
+        print(f'----------------------------------------------------------------------')
+        print(f'🔍 Phase 2: Discovery - Analyzing existing files and determining sync plan...')
+        print(f'----------------------------------------------------------------------')
+        
+        # Emit phase update
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'Analyzing existing files and determining sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
         # List all existing files using unified interface
         user_prefix = f"userResources/{USER_ID}/Google/Google Drive/"
         existing_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
@@ -895,6 +984,23 @@ async def sync_drive_to_storage(auth_token, user_id):
                         'timeCreated': file_info.get('timeCreated') or file_info.get('created_at')
                     })
                     print(f"[{datetime.now().isoformat()}] Deleted orphan: {file_name}")
+        
+        # Phase 3: Processing
+        print(f'----------------------------------------------------------------------')
+        print(f'⚡ Phase 3: Processing - Uploading new files and deleting orphans...')
+        print(f'----------------------------------------------------------------------')
+        
+        # Emit phase update
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'processing',
+            'phase_name': 'Phase 3: Processing',
+            'phase_description': 'Uploading new files and deleting orphans',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         # Process files in parallel for upload
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -945,8 +1051,49 @@ async def sync_drive_to_storage(auth_token, user_id):
                     result = future.result()
                     if result:
                         uploaded_files.append(result)
+                        # Update progress
+                        files_processed += 1
+                        mb_processed += int(file.get('size', 0))
+                        
+                        # Update database and emit progress after first file, then every 10 files or every 10MB
+                        if files_processed == 1 or files_processed % 10 == 0 or mb_processed % (10 * 1024 * 1024) == 0:
+                            await update_data_source_sync_status(
+                                USER_ID, 'google', 'google_drive', 'syncing',
+                                files_processed=files_processed,
+                                mb_processed=mb_processed
+                            )
+                            
+                            await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+                                'phase': 'processing',
+                                'phase_name': 'Phase 3: Processing',
+                                'phase_description': 'Uploading new files and deleting orphans',
+                                'files_processed': files_processed,
+                                'files_total': files_total,
+                                'mb_processed': mb_processed,
+                                'mb_total': mb_total,
+                                'sync_start_time': sync_start_time
+                            })
                 except Exception as e:
                     print(f"Error uploading {file['fullPath']}: {str(e)}")
+                    # Still count as processed for progress tracking
+                    files_processed += 1
+        
+        # Phase 4: Summarizing
+        print(f'----------------------------------------------------------------------')
+        print(f'📊 Phase 4: Summarizing - Generating sync report...')
+        print(f'----------------------------------------------------------------------')
+        
+        # Emit phase update
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'Generating sync report',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         # Enhanced summary
         print(f'\nSync Summary ({current_backend}):')
@@ -979,7 +1126,22 @@ async def sync_drive_to_storage(auth_token, user_id):
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {total_skipped} skipped")
 
-        await update_data_source_sync_status(user_id, 'google', 'google_drive', 'synced')
+        # Final progress update
+        await update_data_source_sync_status(
+            user_id, 'google', 'google_drive', 'synced',
+            files_processed=files_processed,
+            mb_processed=mb_processed
+        )
+        
+        # Emit final progress
+        await emit_sync_progress(user_id, 'google', 'google_drive', {
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time,
+            'completed': True
+        })
         
     except Exception as error:
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")

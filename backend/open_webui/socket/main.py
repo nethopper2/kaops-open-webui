@@ -324,6 +324,9 @@ async def user_join(sid, data):
     else:
         USER_POOL[user.id] = [sid]
 
+    # Join user-specific room for data sync progress updates
+    await sio.enter_room(sid, f"user_{user.id}")
+    
     # Join all the channels
     channels = Channels.get_channels_by_user_id(user.id)
     log.debug(f"{channels=}")

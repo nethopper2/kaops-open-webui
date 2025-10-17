@@ -1294,6 +1294,11 @@ app.add_middleware(
 
 app.mount("/ws", socket_app)
 
+# Setup Socket.IO for Google sync progress updates
+from open_webui.utils.data.google import set_socketio_instance
+from open_webui.socket.main import sio
+set_socketio_instance(sio)
+
 
 app.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
 app.include_router(openai.router, prefix="/openai", tags=["openai"])
