@@ -68,7 +68,7 @@ class DataSource(Base):
     name = Column(Text)
     context = Column(Text, nullable=True)
     permission = Column(String, nullable=True)  # Store permissions as a string
-    sync_status = Column(String, default="unsynced")  # synced, syncing, embedded, unsynced, deleting, deleted
+    sync_status = Column(String, default="unsynced")  # synced, syncing, embedding, embedded, unsynced, deleting, deleted
     last_sync = Column(BigInteger, nullable=True)
     # Progress tracking fields
     files_processed = Column(BigInteger, default=0)

@@ -88,7 +88,7 @@
 			case 'syncing':
 				return 'text-blue-700 dark:text-blue-200';
 			case 'embedding':
-				return 'text-blue-700 dark:text-blue-200';
+				return 'text-blue-700 dark:text-blue-300';
 			case 'deleting':
 				return 'text-orange-600 dark:text-orange-400';
 			case 'deleted':
@@ -164,6 +164,9 @@
 					break;
 				case 'deleted':
 					await initializeSync(dataSource.action as string, dataSource.layer as string);
+					break;
+				case 'embedding':
+					await updateSync(dataSource.action as string, dataSource.layer as string);
 					break;
 			}
 		} finally {
@@ -427,12 +430,12 @@
 		switch (status) {
 			case 'synced':
 				return 'Synced';
+			case 'embedded':
+				return 'Synced';
 			case 'syncing':
 				return 'Syncing...';
 			case 'embedding':
-				return 'Syncing...';
-			case 'embedded':
-				return 'Synced';
+				return 'Embedding';
 			case 'deleting':
 				return 'Deleting';
 			case 'deleted':
@@ -690,7 +693,7 @@
 												</button>
 												<button
 													class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-													disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
+													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding')}
 													on:click={() => handleDelete(dataSource)}
 												>
 													Delete
@@ -735,12 +738,16 @@
 													{syncProgress[key].phase_description}
 												{/if}
 											</div>
+										{:else if dataSource.sync_status === 'embedding'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												currently a manual process
+											</div>
 										{/if}
 										
 										<!-- State-specific information -->
 										{#if dataSource.sync_status === 'deleting'}
 											<div class="text-xs text-gray-500 dark:text-gray-400">
-												Deleting data...
+												deleting data...
 											</div>
 										{:else if dataSource.sync_status === 'synced'}
 											<div class="text-xs text-gray-500 dark:text-gray-400">
@@ -752,7 +759,7 @@
 											</div>
 										{:else if dataSource.sync_status === 'error'}
 											<div class="text-xs text-red-500 dark:text-red-400">
-												Failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+												failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
 											</div>
 										{:else if dataSource.sync_status === 'unsynced'}
 											<div class="text-xs text-gray-500 dark:text-gray-400">
@@ -764,13 +771,15 @@
 								<td class="py-3 px-4 col-actions h-20">
 									{#if dataSource.sync_status === 'syncing'}
 										<DataSyncProgressBar {...getProgressData(dataSource)} />
-									{:else if dataSource.sync_status === 'synced'}
-										<DataSyncResultsSummary {dataSource} />
-									{:else if dataSource.sync_status === 'deleting'}
-										<!-- No content during deleting state -->
+							{:else if dataSource.sync_status === 'synced'}
+								<DataSyncResultsSummary {dataSource} />
+							{:else if dataSource.sync_status === 'embedding'}
+								<DataSyncResultsSummary {dataSource} />
+							{:else if dataSource.sync_status === 'deleting'}
+								<!-- No content during deleting state -->
 									{:else if dataSource.sync_status === 'error'}
 										<div class="text-xs text-red-500 dark:text-red-400">
-											Failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+											failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
 										</div>
 									{/if}
 								</td>
@@ -813,7 +822,7 @@
 									</button>
 									<button
 										class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-										disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
+										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding')}
 										on:click={() => handleDelete(dataSource)}
 									>
 										Delete
@@ -855,9 +864,11 @@
 								<!-- No content during deleting state -->
 							{:else if dataSource.sync_status === 'synced'}
 								<DataSyncResultsSummary {dataSource} />
+							{:else if dataSource.sync_status === 'embedding'}
+								<DataSyncResultsSummary {dataSource} />
 							{:else if dataSource.sync_status === 'error'}
 								<div class="text-xs text-red-500 dark:text-red-400">
-									Failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+									failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
 								</div>
 							{/if}
 						</div>
@@ -872,7 +883,7 @@
 							</button>
 							<button
 								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
+								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding')}
 								on:click={() => handleDelete(dataSource)}
 							>
 								{isProcessing(dataSource) ? 'Processing...' : 'Delete'}
