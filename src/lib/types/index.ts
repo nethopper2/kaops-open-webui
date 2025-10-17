@@ -27,6 +27,24 @@ export type DataSource = {
 	mb_processed?: number;
 	mb_total?: number;
 	sync_start_time?: number;
+	sync_results?: {
+		latest_sync?: {
+			added: number;
+			updated: number;
+			removed: number;
+			skipped: number;
+			runtime_ms: number;
+			api_calls: number;
+			skip_reasons: Record<string, number>;
+			sync_timestamp: number;
+		};
+		overall_profile?: {
+			total_files: number;
+			total_size_bytes: number;
+			last_updated: number;
+			folders_count: number;
+		};
+	};
 	icon: string; // Icon name or component
 	action?: string; // Optional action text
 	layer?: string; // Optional layer information

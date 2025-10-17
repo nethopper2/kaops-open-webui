@@ -20,10 +20,11 @@
 
 	$: files_percentage = files_total > 0 ? Math.round((files_processed / files_total) * 100) : 0;
 	$: mb_percentage = mb_total > 0 ? Math.round((mb_processed / mb_total) * 100) : 0;
+	
 </script>
 
 <div class="flex flex-col h-full">
-	{#if phase === 'starting'}
+	{#if phase === 'starting' || phase === 'discovery'}
 		<!-- During initialization phase: show discovery info only -->
 		<div class="flex-1">
 			<DataSyncDiscoveryInfo 

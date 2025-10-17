@@ -918,7 +918,7 @@ async def sync_drive_to_storage(auth_token, user_id):
         await emit_sync_progress(USER_ID, 'google', 'google_drive', {
             'phase': 'starting',
             'phase_name': 'Phase 1: Starting',
-            'phase_description': f'Found {folders_found} folders, {files_found} files, {format_bytes(total_size)} total',
+            'phase_description': 'Preparing sync process',
             'files_processed': 0,
             'files_total': 0,
             'mb_processed': 0,
@@ -967,7 +967,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                     await emit_sync_progress(USER_ID, 'google', 'google_drive', {
                         'phase': 'starting',
                         'phase_name': 'Phase 1: Starting',
-                        'phase_description': f'Found {folders_found} folders, {files_found} files, {format_bytes(total_size)} total',
+                        'phase_description': 'Preparing sync process',
                         'files_processed': 0,
                         'files_total': 0,
                         'mb_processed': 0,
@@ -1193,11 +1193,32 @@ async def sync_drive_to_storage(auth_token, user_id):
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {total_skipped} skipped")
 
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": len([f for f in uploaded_files if f['type'] == 'new']),
+                "updated": len([f for f in uploaded_files if f['type'] == 'updated']),
+                "removed": len(deleted_files),
+                "skipped": total_skipped,
+                "runtime_ms": int((time.time() - script_start_time) * 1000),
+                "api_calls": total_api_calls,
+                "skip_reasons": skipped_reasons,
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(all_files),
+                "total_size_bytes": sum(int(f.get('size', 0) or 0) for f in all_files),
+                "last_updated": int(time.time()),
+                "folders_count": len([f for f in all_files if f.get('mimeType') == 'application/vnd.google-apps.folder'])
+            }
+        }
+
         # Final progress update
         await update_data_source_sync_status(
             user_id, 'google', 'google_drive', 'synced',
             files_processed=files_processed,
-            mb_processed=mb_processed
+            mb_processed=mb_processed,
+            sync_results=sync_results
         )
         
         # Emit final progress

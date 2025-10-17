@@ -669,7 +669,8 @@ async def update_data_source_sync_status(
     files_total: Optional[int] = None,
     mb_processed: Optional[int] = None,
     mb_total: Optional[int] = None,
-    sync_start_time: Optional[int] = None
+    sync_start_time: Optional[int] = None,
+    sync_results: Optional[dict] = None
 ) -> Optional[DataSourceModel]:
     """Updates the sync status and last sync timestamp for a data source"""
     log.info(f"Attempting to update sync status for user {user_id}, source action '{source_action}' to '{status}'")
@@ -697,7 +698,8 @@ async def update_data_source_sync_status(
             files_total=files_total,
             mb_processed=mb_processed,
             mb_total=mb_total,
-            sync_start_time=sync_start_time
+            sync_start_time=sync_start_time,
+            sync_results=sync_results
         )
         
         if updated_source:

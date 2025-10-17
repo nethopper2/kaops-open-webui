@@ -27,6 +27,7 @@
 	import JiraProjectSelector from './JiraProjectSelector.svelte';
 	import JiraSelfHostedAuth from './JiraSelfHostedAuth.svelte';
 	import DataSyncProgressBar from './DataSyncProgressBar.svelte';
+	import DataSyncResultsSummary from './DataSyncResultsSummary.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -77,6 +78,7 @@
 		return date.toLocaleDateString();
 	};
 
+
 	const getSyncStatusColor = (status: string) => {
 		switch (status) {
 			case 'synced':
@@ -88,9 +90,9 @@
 			case 'embedding':
 				return 'text-blue-700 dark:text-blue-200';
 			case 'deleting':
-				return 'text-orange-700 dark:text-orange-200';
+				return 'text-orange-600 dark:text-orange-400';
 			case 'deleted':
-				return 'text-gray-700 dark:text-gray-200';
+				return 'text-red-700 dark:text-red-300';
 			case 'error':
 				return 'text-red-700 dark:text-red-200';
 			case 'unsynced':
@@ -158,6 +160,9 @@
 					await updateSync(dataSource.action as string, dataSource.layer as string);
 					break;
 				case 'unsynced':
+					await initializeSync(dataSource.action as string, dataSource.layer as string);
+					break;
+				case 'deleted':
 					await initializeSync(dataSource.action as string, dataSource.layer as string);
 					break;
 			}
@@ -316,7 +321,7 @@
 
 	const updateDataSourceSyncStatus = (sourceData: {
 		source: string;
-		status: 'synced' | 'syncing' | 'error' | 'unsynced';
+		status: 'synced' | 'syncing' | 'error' | 'unsynced' | 'deleting' | 'deleted';
 		message: string;
 		timestamp: string;
 	}) => {
@@ -387,7 +392,11 @@
 			const layer = dataSource.layer;
 
 			await disconnectDataSync(localStorage.token, action as string, layer as string);
+			// Add a small delay to allow backend to update status
+			await new Promise(resolve => setTimeout(resolve, 500));
 			dataSources = await getDataSources(localStorage.token);
+		} catch (error) {
+			console.error('Error in handleDelete:', error);
 		} finally {
 			processingActions.delete(actionKey);
 			processingActions = processingActions;
@@ -425,7 +434,7 @@
 			case 'embedded':
 				return 'Synced';
 			case 'deleting':
-				return 'Deleting...';
+				return 'Deleting';
 			case 'deleted':
 				return 'Deleted';
 			case 'error':
@@ -554,8 +563,8 @@
 		/* Column 2: Status - adjust as needed */
 		--col-status-width: 12rem;      /* Try: 6rem, 8rem, 10rem, 12rem, etc. */
 		
-		/* Column 3: Actions - takes remaining space */
-		--col-actions-width: 1fr;      /* Expands to fill remaining space */
+		/* Column 3: Actions - fixed width */
+		--col-actions-width: 20rem;    /* Fixed width to prevent floating */
 	}
 
 	.data-sources-table .col-name {
@@ -635,13 +644,16 @@
 			<div class="hidden lg:block overflow-x-auto">
 				<table class="w-full table-fixed data-sources-table">
 					<thead>
-						<tr class="border-b border-gray-200 dark:border-gray-700">
+						<tr>
 							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300 col-name"> </th>
 							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300 col-status">
-								{$i18n.t('Status')}
+								<!-- Status column - no header text -->
 							</th>
 							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300 col-actions">
-								<!-- Actions column - takes remaining space -->
+								<!-- Actions column - fixed width -->
+							</th>
+							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
+								<!-- Empty column - takes remaining space -->
 							</th>
 						</tr>
 					</thead>
@@ -736,7 +748,7 @@
 											</div>
 										{:else if dataSource.sync_status === 'deleted'}
 											<div class="text-xs text-gray-500 dark:text-gray-400">
-												Deleted: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+												{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
 											</div>
 										{:else if dataSource.sync_status === 'error'}
 											<div class="text-xs text-red-500 dark:text-red-400">
@@ -744,19 +756,26 @@
 											</div>
 										{:else if dataSource.sync_status === 'unsynced'}
 											<div class="text-xs text-gray-500 dark:text-gray-400">
-												Not synced
+												never synced
 											</div>
 										{/if}
 									</div>
 								</td>
 								<td class="py-3 px-4 col-actions h-20">
-		{#if dataSource.sync_status === 'syncing'}
-			<DataSyncProgressBar {...getProgressData(dataSource)} />
-		{:else}
-										<div class="text-xs text-gray-500 dark:text-gray-400">
-											{dataSource.sync_status}
+									{#if dataSource.sync_status === 'syncing'}
+										<DataSyncProgressBar {...getProgressData(dataSource)} />
+									{:else if dataSource.sync_status === 'synced'}
+										<DataSyncResultsSummary {dataSource} />
+									{:else if dataSource.sync_status === 'deleting'}
+										<!-- No content during deleting state -->
+									{:else if dataSource.sync_status === 'error'}
+										<div class="text-xs text-red-500 dark:text-red-400">
+											Failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
 										</div>
 									{/if}
+								</td>
+								<td class="py-3 px-4">
+									<!-- Empty cell - takes remaining space -->
 								</td>
 							</tr>
 						{/each}
@@ -833,24 +852,12 @@
 							{#if dataSource.sync_status === 'syncing'}
 								<DataSyncProgressBar {...getProgressData(dataSource)} />
 							{:else if dataSource.sync_status === 'deleting'}
-								<div class="text-xs text-gray-500 dark:text-gray-400">
-									Deleting data...
-								</div>
+								<!-- No content during deleting state -->
 							{:else if dataSource.sync_status === 'synced'}
-								<div class="text-xs text-gray-500 dark:text-gray-400">
-									{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Never'}
-								</div>
-							{:else if dataSource.sync_status === 'deleted'}
-								<div class="text-xs text-gray-500 dark:text-gray-400">
-									Deleted: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
-								</div>
+								<DataSyncResultsSummary {dataSource} />
 							{:else if dataSource.sync_status === 'error'}
 								<div class="text-xs text-red-500 dark:text-red-400">
 									Failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
-								</div>
-							{:else if dataSource.sync_status === 'unsynced'}
-								<div class="text-xs text-gray-500 dark:text-gray-400">
-									Not synced
 								</div>
 							{/if}
 						</div>

@@ -349,10 +349,10 @@ export const disconnectDataSync = async (
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
-			return res.json();
+			const result = await res.json();
+			return result;
 		})
 		.catch((err) => {
-			console.log(err);
 			error = err.detail;
 			return null;
 		});

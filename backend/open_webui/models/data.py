@@ -76,6 +76,7 @@ class DataSource(Base):
     mb_processed = Column(BigInteger, default=0)  # bytes
     mb_total = Column(BigInteger, default=0)      # bytes
     sync_start_time = Column(BigInteger, nullable=True)  # timestamp when sync started
+    sync_results = Column(JSON, nullable=True, default={})  # JSON field for sync summary and overall profile
     icon = Column(String)
     action = Column(String, nullable=True)
     layer = Column(String, nullable=True)
@@ -100,6 +101,7 @@ class DataSourceModel(BaseModel):
     mb_processed: Optional[int] = 0  # bytes
     mb_total: Optional[int] = 0      # bytes
     sync_start_time: Optional[int] = None  # timestamp when sync started
+    sync_results: Optional[dict] = {}  # JSON field for sync summary and overall profile
     icon: str
     action: Optional[str] = None
     layer: Optional[str] = None
@@ -126,6 +128,7 @@ class DataSourceForm(BaseModel):
     mb_processed: Optional[int] = 0  # bytes
     mb_total: Optional[int] = 0      # bytes
     sync_start_time: Optional[int] = None  # timestamp when sync started
+    sync_results: Optional[dict] = {}  # JSON field for sync summary and overall profile
     icon: str
     action: Optional[str] = None
     layer: Optional[str] = None
@@ -145,6 +148,7 @@ class DataSourceResponse(BaseModel):
     mb_processed: Optional[int] = None
     mb_total: Optional[int] = None
     sync_start_time: Optional[int] = None
+    sync_results: Optional[dict] = None  # JSON field for sync summary and overall profile
     icon: str
     action: Optional[str] = None
     layer: Optional[str] = None
@@ -405,7 +409,8 @@ class DataSourcesTable:
         files_total: Optional[int] = None,
         mb_processed: Optional[int] = None,
         mb_total: Optional[int] = None,
-        sync_start_time: Optional[int] = None
+        sync_start_time: Optional[int] = None,
+        sync_results: Optional[dict] = None
     ) -> Optional[DataSourceModel]:
         """
         Updates the sync status and last sync time for a data source,
@@ -421,6 +426,7 @@ class DataSourcesTable:
             mb_processed (Optional[int]): Number of bytes processed so far.
             mb_total (Optional[int]): Total number of bytes to process.
             sync_start_time (Optional[int]): Timestamp when sync started.
+            sync_results (Optional[dict]): JSON object containing sync summary and overall profile.
 
         Returns:
             Optional[DataSourceModel]: The updated DataSourceModel if found and updated, None otherwise.
@@ -449,6 +455,8 @@ class DataSourcesTable:
                         data_source.mb_total = mb_total
                     if sync_start_time is not None:
                         data_source.sync_start_time = sync_start_time
+                    if sync_results is not None:
+                        data_source.sync_results = sync_results
                     else:
                         data_source.last_sync = int(time.time()) # Set to current time if not provided
 

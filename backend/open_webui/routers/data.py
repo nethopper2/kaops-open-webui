@@ -577,7 +577,7 @@ async def create_background_sync_task(request: Request, provider: str, user_id: 
         
         await create_task(redis_connection, run_mineral_sync(), id=f"mineral_sync_{user_id}")
 
-async def create_background_delete_task(request: Request, provider: str, user_id: str, layer: str = None):
+async def create_background_delete_task(request: Request, provider: str, user_id: str, layer: str = None, data_source_name: str = None):
     """Create background storage cleanup task using unified delete function."""
     redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
     
@@ -608,26 +608,49 @@ async def create_background_delete_task(request: Request, provider: str, user_id
             try:
                 DataSources.update_data_source_sync_status_by_name(
                     user_id=user_id,
-                    source_name=provider.title(),
+                    source_name=data_source_name or provider.title(),
                     layer_name=layer or "",
                     sync_status="deleted",
                     last_sync=int(time.time())
                 )
-                log.info(f"Successfully updated {provider.title()} data source status to 'deleted'")
+                print(f'----------------------------------------------------------------------')
+                print(f'✅ Delete Phase: Completed - Data source successfully deleted')
+                print(f'----------------------------------------------------------------------')
+                msg = f"Successfully updated {provider.title()} data source status to 'deleted'"
+                log.info(msg)
+                
+                # Emit WebSocket update for delete completion
+                try:
+                    from open_webui.utils.data.data_ingestion import send_user_notification
+                    await send_user_notification(
+                        user_id=user_id,
+                        event_name="data-source-updated",
+                        data={
+                            "source": data_source_name or provider.title(),
+                            "status": "deleted",
+                            "message": "Data source deletion completed",
+                            "timestamp": str(int(time.time()))
+                        }
+                    )
+                except Exception as e:
+                    log.warning(f"Failed to emit delete completion update: {e}")
             except Exception as e:
-                log.error(f"Failed to update {provider.title()} data source status to 'deleted': {e}")
+                msg = f"Failed to update {provider.title()} data source status to 'deleted': {e}"
+                log.error(msg)
         else:
             try:
                 DataSources.update_data_source_sync_status_by_name(
                     user_id=user_id,
-                    source_name=provider.title(),
+                    source_name=data_source_name or provider.title(),
                     layer_name=layer or "",
                     sync_status="error",
                     last_sync=int(time.time())
                 )
-                log.error(f"Deletion failed, updated {provider.title()} data source status to 'error'")
+                msg = f"Deletion failed, updated {provider.title()} data source status to 'error'"
+                log.error(msg)
             except Exception as e:
-                log.error(f"Failed to update {provider.title()} data source status to 'error': {e}")
+                msg = f"Failed to update {provider.title()} data source status to 'error': {e}"
+                log.error(msg)
         
         return result
     
@@ -721,6 +744,7 @@ async def get_data_sources(user=Depends(get_verified_user)):
                 mb_processed=ds.mb_processed,
                 mb_total=ds.mb_total,
                 sync_start_time=ds.sync_start_time,
+                sync_results=ds.sync_results,
                 icon=ds.icon,
                 action=ds.action,
                 layer=ds.layer,
@@ -1961,9 +1985,29 @@ def create_universal_disconnect_endpoint(provider: str):
                     sync_start_time=int(time.time())
                 )
                 if updated_ds:
+                    print(f'----------------------------------------------------------------------')
+                    print(f'🗑️  Delete Phase: Deleting - Removing data source and files...')
+                    print(f'----------------------------------------------------------------------')
                     msg = f"Successfully updated {provider.title()} data source status to 'deleting'"
                     log.info(msg)
                     messages.append(msg)
+                    
+                    # Emit WebSocket update for delete start
+                    try:
+                        from open_webui.utils.data.data_ingestion import send_user_notification
+                        await send_user_notification(
+                            user_id=user_id,
+                            event_name="data-source-updated",
+                            data={
+                                "source": data_source_found.name,
+                                "status": "deleting",
+                                "message": "Data source deletion started",
+                                "timestamp": str(int(time.time()))
+                            }
+                        )
+                    except Exception as e:
+                        log.warning(f"Failed to emit delete start update: {e}")
+                    
                 else:
                     msg = f"Failed to update {provider.title()} data source status"
                     log.error(msg)
@@ -1980,7 +2024,7 @@ def create_universal_disconnect_endpoint(provider: str):
             messages.append(msg)
 
         try:
-            await create_background_delete_task(request, provider, user_id, layer)
+            await create_background_delete_task(request, provider, user_id, layer, data_source_found.name if data_source_found else None)
             msg = f"Successfully initiated data cleanup for user {user_id}'s {provider.title()} folder"
             log.info(msg)
             messages.append(msg)
@@ -2120,13 +2164,32 @@ async def disconnect_provider_layer(provider: str, user_id: str, layer: str, tea
                 user_id=user_id,
                 source_name=data_source_found.name,
                 layer_name=layer,
-                sync_status="unsynced",
+                sync_status="deleting",
                 last_sync=int(time.time())
             )
             if updated_ds:
-                msg = f"Successfully updated {provider.title()} data source status to 'unsynced' for layer {layer}"
+                print(f'----------------------------------------------------------------------')
+                print(f'🗑️  Delete Phase: Deleting - Removing data source and files...')
+                print(f'----------------------------------------------------------------------')
+                msg = f"Successfully updated {provider.title()} data source status to 'deleting' for layer {layer}"
                 log.info(msg)
                 messages.append(msg)
+                
+                # Emit WebSocket update for delete start
+                try:
+                    from open_webui.utils.data.data_ingestion import send_user_notification
+                    await send_user_notification(
+                        user_id=user_id,
+                        event_name="data-source-updated",
+                        data={
+                            "source": data_source_found.name,
+                            "status": "deleting",
+                            "message": "Data source deletion started",
+                            "timestamp": str(int(time.time()))
+                        }
+                    )
+                except Exception as e:
+                    log.warning(f"Failed to emit delete start update: {e}")
             else:
                 msg = f"Failed to update {provider.title()} data source status for layer {layer}"
                 log.error(msg)
@@ -2144,7 +2207,7 @@ async def disconnect_provider_layer(provider: str, user_id: str, layer: str, tea
 
     # Delete layer-specific data from storage (works for both GCS and local storage)
     try:
-        await create_background_delete_task(request, provider, user_id, layer)
+        await create_background_delete_task(request, provider, user_id, layer, data_source_found.name if data_source_found else None)
         msg = f"Successfully initiated data cleanup for {provider.title()} layer '{layer}'"
         log.info(msg)
         messages.append(msg)
