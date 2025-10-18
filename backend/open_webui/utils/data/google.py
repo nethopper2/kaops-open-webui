@@ -27,6 +27,31 @@ from open_webui.models.data import DataSources
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
+# Global socketio instance for progress updates
+sio = None
+
+def set_socketio_instance(socketio_instance):
+    """Set the socketio instance for progress updates"""
+    global sio
+    sio = socketio_instance
+
+async def emit_sync_progress(user_id: str, provider: str, layer: str, progress_data: dict):
+    """Emit sync progress update via WebSocket"""
+    global sio
+    if sio:
+        try:
+            log.info(f"Emitting sync progress for user {user_id}: {progress_data}")
+            await sio.emit("sync_progress", {
+                "user_id": user_id,
+                "provider": provider,
+                "layer": layer,
+                **progress_data
+            }, to=f"user_{user_id}")
+        except Exception as e:
+            log.error(f"Failed to emit sync progress: {e}")
+    else:
+        log.warning("Socket.IO instance not available for progress updates")
+
 # Metrics tracking
 total_api_calls = 0
 script_start_time = 0
@@ -82,15 +107,20 @@ def is_file_size_valid(size):
 # GMAIL SYNC FUNCTIONS
 # ============================================================================
 
-def list_gmail_messages(auth_token, query='', max_results=500):
+def list_gmail_messages(auth_token, query='', max_results=1000):
     """List Gmail messages with optional query filter"""
     try:
         all_messages = []
         next_page_token = None
         
         while True:
+            # Check if we've already reached the max_results limit
+            if len(all_messages) >= max_results:
+                break
+                
+            remaining = max_results - len(all_messages)
             params = {
-                'maxResults': min(max_results - len(all_messages), 500), # Gmail API limit is 500
+                'maxResults': min(remaining, 500), # Gmail API limit is 500
                 'q': query
             }
             
@@ -104,7 +134,7 @@ def list_gmail_messages(auth_token, query='', max_results=500):
             all_messages.extend(messages)
             
             next_page_token = response.get('nextPageToken')
-            if not next_page_token or len(all_messages) >= max_results:
+            if not next_page_token:
                 break
         
         return all_messages[:max_results]
@@ -204,30 +234,100 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=1000, user_id=N
     global USER_ID, total_api_calls
     
     current_backend = get_current_backend()
-    print(f'🔄 Starting Gmail sync process using {current_backend} backend...')
+    script_start_time = time.time()
     
-    uploaded_files = []
-    skipped_files = 0
+    # Initialize counters
+    files_added = 0
+    files_updated = 0
+    total_skipped = 0
+    total_api_calls = 0
+    skipped_reasons = {}
     
     try:
+        # Phase 1: Starting
+        print("----------------------------------------------------------------------")
+        print("📋 Phase 1: Starting - Initializing Gmail sync process...")
+        print("----------------------------------------------------------------------")
+        
+        await emit_sync_progress(USER_ID, 'google', 'gmail', {
+            'phase': 'starting',
+            'phase_name': 'Phase 1: Starting',
+            'phase_description': 'preparing Gmail sync process',
+            'files_processed': 0,
+            'files_total': 0,
+            'mb_processed': 0,
+            'mb_total': 0,
+            'sync_start_time': int(script_start_time)
+        })
+        
         # Get list of Gmail messages
         print(f"Fetching Gmail messages with query: '{query}' (max: {max_emails})")
         messages = list_gmail_messages(auth_token, query, max_emails)
         print(f"Found {len(messages)} Gmail messages")
+        total_api_calls += 1
+        
+        # Calculate total size for progress tracking
+        # Start with a reasonable estimate (50KB average per email)
+        estimated_size_per_email = 50 * 1024  # 50KB
+        total_size = len(messages) * estimated_size_per_email
+        
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔍 Phase 2: Discovery - Analyzing existing emails and determining sync plan...")
+        print("----------------------------------------------------------------------")
+        
+        await emit_sync_progress(USER_ID, 'google', 'gmail', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing existing emails and determining sync plan',
+            'files_processed': 0,
+            'files_total': len(messages),
+            'mb_processed': 0,
+            'mb_total': total_size,
+            'sync_start_time': int(script_start_time),
+            'folders_found': 0,
+            'files_found': len(messages),
+            'total_size': total_size
+        })
         
         # Get existing Gmail files using unified interface
         print("Checking existing Gmail files in storage...")
         gmail_prefix = f"userResources/{USER_ID}/Google/Gmail/"
-        existing_files = list_files_unified(prefix=gmail_prefix, user_id=USER_ID)
+        existing_files = list_files_unified(prefix=gmail_prefix, max_results=1000, user_id=USER_ID)
+        total_api_calls += 1
         
-        # Handle different response formats from backends
+        # Handle different response formats from backends - create a map like Google Drive
         existing_email_files = set()
+        existing_email_map = {}
         for file in existing_files:
             file_name = file.get('name') or file.get('key', '')
             if file_name and file_name.startswith(gmail_prefix):
                 existing_email_files.add(file_name)
+                existing_email_map[file_name] = file
         
         print(f"Found {len(existing_email_files)} existing Gmail files in storage")
+        
+        # Phase 3: Processing
+        print("----------------------------------------------------------------------")
+        print("⚡ Phase 3: Processing - Uploading new emails and processing changes...")
+        print("----------------------------------------------------------------------")
+        
+        await emit_sync_progress(USER_ID, 'google', 'gmail', {
+            'phase': 'processing',
+            'phase_name': 'Phase 3: Processing',
+            'phase_description': 'uploading new emails and processing changes',
+            'files_processed': 0,
+            'files_total': len(messages),
+            'mb_processed': 0,
+            'mb_total': total_size,
+            'sync_start_time': int(script_start_time)
+        })
+        
+        uploaded_files = []
+        processed_count = 0
+        mb_processed = 0
+        last_progress_update = 0
+        PROGRESS_UPDATE_INTERVAL = 2  # Update every 2 seconds
         
         # Process messages in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -241,10 +341,26 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=1000, user_id=N
                 # Create file path for email
                 email_path = f"userResources/{USER_ID}/Google/Gmail/email_{message_id}.txt"
                 
-                # Check if email already exists
-                if email_path in existing_email_files:
+                # Check if email needs upload (like Google Drive logic)
+                existing_file = existing_email_map.get(email_path)
+                needs_upload = False
+                reason = ''
+                
+                if not existing_file:
+                    needs_upload = True
+                    reason = 'New email'
+                else:
+                    # For Gmail, we don't have modification times in the message list
+                    # So we'll skip existing emails for now (they don't change once created)
                     print(f"⏭️  Skipping existing email: {message_id}")
-                    skipped_files += 1
+                    total_skipped += 1
+                    reason = 'Email already exists'
+                    if reason not in skipped_reasons:
+                        skipped_reasons[reason] = 0
+                    skipped_reasons[reason] += 1
+                    continue
+                
+                if not needs_upload:
                     continue
                 
                 # Submit email processing task
@@ -266,24 +382,109 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=1000, user_id=N
                     result = future.result()
                     if result:
                         uploaded_files.append(result)
+                        files_added += 1
+                        processed_count += 1
+                        # Use actual email size from result
+                        actual_size = result.get('size', 0)
+                        mb_processed += actual_size
+                        
+                        # Dynamically adjust total size estimate based on actual sizes
+                        if processed_count > 0:
+                            # Calculate average size so far
+                            avg_size_so_far = mb_processed / processed_count
+                            # Update total estimate based on average
+                            total_size = int(avg_size_so_far * len(messages))
+                        
+                        # Emit progress update (throttled to every 2 seconds)
+                        current_time = time.time()
+                        if current_time - last_progress_update >= PROGRESS_UPDATE_INTERVAL:
+                            await emit_sync_progress(USER_ID, 'google', 'gmail', {
+                                'phase': 'processing',
+                                'phase_name': 'Phase 3: Processing',
+                                'phase_description': 'uploading new emails and processing changes',
+                                'files_processed': processed_count,
+                                'files_total': len(messages),
+                                'mb_processed': mb_processed,
+                                'mb_total': total_size,
+                                'sync_start_time': int(script_start_time)
+                            })
+                            last_progress_update = current_time
                     else:
-                        skipped_files += 1
+                        total_skipped += 1
+                        reason = 'Failed to process email'
+                        if reason not in skipped_reasons:
+                            skipped_reasons[reason] = 0
+                        skipped_reasons[reason] += 1
                 except Exception as e:
                     print(f"Error processing email {message_id}: {str(e)}")
                     log.error(f"Error processing email {message_id}:", exc_info=True)
-                    skipped_files += 1
+                    total_skipped += 1
+                    reason = f'Error: {str(e)}'
+                    if reason not in skipped_reasons:
+                        skipped_reasons[reason] = 0
+                    skipped_reasons[reason] += 1
+        
+        # Emit final progress update to show 100% completion
+        await emit_sync_progress(USER_ID, 'google', 'gmail', {
+            'phase': 'processing',
+            'phase_name': 'Phase 3: Processing',
+            'phase_description': 'uploading new emails and processing changes',
+            'files_processed': processed_count,
+            'files_total': len(messages),
+            'mb_processed': mb_processed,
+            'mb_total': total_size,
+            'sync_start_time': int(script_start_time)
+        })
+        
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - Finalizing Gmail sync results...")
+        print("----------------------------------------------------------------------")
+        
+        await emit_sync_progress(USER_ID, 'google', 'gmail', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing Gmail sync results',
+            'files_processed': len(messages),
+            'files_total': len(messages),
+            'mb_processed': total_size,
+            'mb_total': total_size,
+            'sync_start_time': int(script_start_time)
+        })
+        
+        # Create sync_results
+        sync_results = {
+            "latest_sync": {
+                "added": files_added,
+                "updated": files_updated,
+                "removed": 0,  # Gmail doesn't support deletion in this context
+                "skipped": total_skipped,
+                "runtime_ms": int((time.time() - script_start_time) * 1000),
+                "api_calls": total_api_calls,
+                "skip_reasons": skipped_reasons,
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(existing_email_files) + files_added,  # All emails in storage
+                "total_size_bytes": total_size,  # Actual total size from processing
+                "last_updated": int(time.time()),
+                "folders_count": 0  # Gmail doesn't have folders in this context
+            }
+        }
         
         # Summary
         print(f"\nGmail Sync Summary ({current_backend}):")
         print(f"📧 Emails processed: {len(messages)}")
         print(f"📤 Emails uploaded: {len(uploaded_files)}")
-        print(f"⏭️  Emails skipped: {skipped_files}")
+        print(f"⏭️  Emails skipped: {total_skipped}")
+        print(f"🔄 API calls made: {total_api_calls}")
+        print(f"⏱️  Total runtime: {int((time.time() - script_start_time) * 1000)}ms")
 
-        await update_data_source_sync_status(user_id, 'google', 'gmail', 'synced')
+        await update_data_source_sync_status(user_id, 'google', 'gmail', 'embedding', sync_results=sync_results)
         
         return {
             'uploaded': len(uploaded_files),
-            'skipped': skipped_files,
+            'skipped': total_skipped,
             'total_processed': len(messages),
             'backend': current_backend
         }
@@ -340,7 +541,7 @@ def download_and_upload_email(message_id, email_path, auth_token):
             'backend': get_current_backend()
         }
         
-        print(f"[{datetime.now().isoformat()}] Uploaded email: {email_data.get('subject', 'No Subject')}")
+        print(f"[{datetime.now().isoformat()}] Uploaded email: {email_data.get('subject', 'No Subject')} | {format_bytes(content_size)} | {int((time.time() - start_time) * 1000)}ms")
         return upload_result
         
     except Exception as e:
@@ -446,11 +647,14 @@ def get_user_drive_folders(auth_token):
     """Get both user's My Drive root folder and shared folders"""
     try:
         # Get user's root folder ID (my drive)
+        print("Getting user's My Drive root folder...")
         params = {'fields': "id"}
         my_drive = make_request(f"{DRIVE_API_BASE}/files/root", params=params, auth_token=auth_token)
         my_drive_id = my_drive.get('id')
+        print(f"Found My Drive ID: {my_drive_id}")
         
         # Get shared folders with pagination
+        print("Getting shared folders...")
         shared_folders = []
         page_token = None
         
@@ -477,6 +681,7 @@ def get_user_drive_folders(auth_token):
                 break
         
         # Get shared drives with pagination
+        print("Getting shared drives...")
         shared_drives = []
         page_token = None
         
@@ -497,6 +702,7 @@ def get_user_drive_folders(auth_token):
                 break
         
         # Get folders from shared drives with pagination
+        print(f"Getting folders from {len(shared_drives)} shared drives...")
         shared_drives_folders = []
         
         for drive in shared_drives:
@@ -534,15 +740,20 @@ def get_user_drive_folders(auth_token):
             
             shared_drives_folders.extend(drive_folders)
         
-        return {
+        result = {
             'my_drive': my_drive_id,
             'shared_folders': shared_folders,
             'shared_drives': shared_drives,
             'shared_drives_folders': shared_drives_folders
         }
         
+        print(f"Successfully retrieved drive folders: My Drive={my_drive_id}, Shared folders={len(shared_folders)}, Shared drives={len(shared_drives)}, Shared drive folders={len(shared_drives_folders)}")
+        return result
+        
     except Exception as error:
         print(f"Error getting drive folders: {str(error)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 # Helpers to fetch top-level files (not folders) for My Drive and Shared Drives
@@ -750,6 +961,29 @@ async def sync_drive_to_storage(auth_token, user_id):
     current_backend = get_current_backend()
     print(f'🔄 Starting recursive sync process using {current_backend} backend...')
     
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    
+    # Phase 1: Starting
+    print(f'----------------------------------------------------------------------')
+    print(f'📋 Phase 1: Starting - Initializing sync process...')
+    print(f'----------------------------------------------------------------------')
+    
+    # Emit initial phase update with discovery fields
+    await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
+    
     # Initialize skip counters
     skipped_reasons = {
         'size': 0,
@@ -763,6 +997,17 @@ async def sync_drive_to_storage(auth_token, user_id):
     deleted_files = []
     skipped_files = 0
     
+    # Progress tracking
+    files_processed = 0
+    files_total = 0
+    mb_processed = 0
+    mb_total = 0
+    
+    # Discovery tracking
+    folders_found = 0
+    files_found = 0
+    total_size = 0
+    
     try:
         # Get user's folders (both My Drive and shared folders)
         drive_folders = get_user_drive_folders(auth_token)
@@ -771,7 +1016,7 @@ async def sync_drive_to_storage(auth_token, user_id):
         
         # Process My Drive and shared folders in parallel
         all_files = []
-
+        
         # Scope control: set GOOGLE_DRIVE_SYNC_SCOPE to limit sync scope
         sync_scope = os.environ.get('GOOGLE_DRIVE_SYNC_SCOPE', 'all').lower()
         include_my_drive = sync_scope in ('all', 'my_drive')
@@ -779,6 +1024,21 @@ async def sync_drive_to_storage(auth_token, user_id):
         include_shared_drives = sync_scope in ('all', 'shared_drives')
 
         folders_to_process = []
+        
+        # Emit initial discovery update
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'starting',
+            'phase_name': 'Phase 1: Starting',
+            'phase_description': 'discovering folders and files...',
+            'files_processed': 0,
+            'files_total': 0,
+            'mb_processed': 0,
+            'mb_total': 0,
+            'sync_start_time': sync_start_time,
+            'folders_found': 0,
+            'files_found': 0,
+            'total_size': 0
+        })
 
         if include_my_drive:
             # Discover top-level folders under My Drive (root) and process each independently
@@ -786,6 +1046,7 @@ async def sync_drive_to_storage(auth_token, user_id):
             folders_to_process.extend([
                 {'id': f['id'], 'name': f['name'], 'type': 'my_drive'} for f in my_drive_top_level
             ])
+            folders_found += len(my_drive_top_level)
 
             # Also include root-level files under My Drive
             my_drive_root_files = list_my_drive_root_files(auth_token)
@@ -793,6 +1054,8 @@ async def sync_drive_to_storage(auth_token, user_id):
                 safe_name = f.get('name', '').replace('/', '-')
                 f['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/My Drive/{safe_name}"
                 all_files.append(f)
+                files_found += 1
+                total_size += int(f.get('size', 0) or 0)
 
         if include_shared_with_me:
             # Process shared-with-me items (both files and folders) in single pass
@@ -801,11 +1064,14 @@ async def sync_drive_to_storage(auth_token, user_id):
                 if item['mimeType'] == 'application/vnd.google-apps.folder':
                     # It's a folder - add to folders_to_process
                     folders_to_process.append(item)
+                    folders_found += 1
                 else:
                     # It's a file - add directly to all_files with sanitized path
                     safe_name = item['name'].replace('/', '-')
                     item['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/Shared with me/{safe_name}"
                     all_files.append(item)
+                    files_found += 1
+                    total_size += int(item.get('size', 0) or 0)
 
         # Add shared drive folders and files to the main processing queue
         if include_shared_drives:
@@ -818,6 +1084,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                     folder['type'] = 'shared_drive'
                     folder['driveName'] = drive_id_to_name.get(drive_id, folder.get('driveName') or 'Unknown Drive')
                     folders_to_process.append(folder)
+                    folders_found += 1
 
             # Root-level files
             for d in drive_folders['shared_drives']:
@@ -830,6 +1097,23 @@ async def sync_drive_to_storage(auth_token, user_id):
                     safe_name = f.get('name', '').replace('/', '-')
                     f['fullPath'] = f"userResources/{USER_ID}/Google/Google Drive/Shared drives/{drive_name}/{safe_name}"
                     all_files.append(f)
+                    files_found += 1
+                    total_size += int(f.get('size', 0) or 0)
+
+        # Emit discovery progress update after initial collection
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'starting',
+            'phase_name': 'Phase 1: Starting',
+            'phase_description': 'preparing sync process',
+            'files_processed': 0,
+            'files_total': 0,
+            'mb_processed': 0,
+            'mb_total': 0,
+            'sync_start_time': sync_start_time,
+            'folders_found': folders_found,
+            'files_found': files_found,
+            'total_size': total_size
+        })
 
         # Process folders in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -859,13 +1143,71 @@ async def sync_drive_to_storage(auth_token, user_id):
                     else:
                         print(f"Completed folder: {folder['name']} with {len(folder_files)} files")
                     all_files.extend(folder_files)
+                    
+                    # Update discovery counts
+                    files_found += len(folder_files)
+                    for f in folder_files:
+                        total_size += int(f.get('size', 0) or 0)
+                    
+                    # Emit discovery progress update
+                    await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+                        'phase': 'starting',
+                        'phase_name': 'Phase 1: Starting',
+                        'phase_description': 'preparing sync process',
+                        'files_processed': 0,
+                        'files_total': 0,
+                        'mb_processed': 0,
+                        'mb_total': 0,
+                        'sync_start_time': sync_start_time,
+                        'folders_found': folders_found,
+                        'files_found': files_found,
+                        'total_size': total_size
+                    })
                 except Exception as e:
                     print(f"Error processing folder {folder['name']}: {str(e)}")
         
         print(f"Found {len(all_files)} files across all directories (after size filtering)")
         
+        # Set total files and calculate total size for progress tracking
+        files_total = len(all_files)
+        mb_total = sum(int(f.get('size', 0)) for f in all_files)
+        
+        # Update progress in database
+        await update_data_source_sync_status(
+            USER_ID, 'google', 'google_drive', 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        
+        # Emit initial progress
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
+        # Phase 2: Discovery
+        print(f'----------------------------------------------------------------------')
+        print(f'🔍 Phase 2: Discovery - Analyzing existing files and determining sync plan...')
+        print(f'----------------------------------------------------------------------')
+        
+        # Emit phase update
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing existing files and determining sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
         # List all existing files using unified interface
-        user_prefix = f"userResources/{USER_ID}/Google/Google Drive/"
+        user_prefix = f"userResources/{USER_ID}/Google/Google Drive/My Drive/"
         existing_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
         
         # Create file maps for comparison - handle different response formats
@@ -875,6 +1217,7 @@ async def sync_drive_to_storage(auth_token, user_id):
             if file_name:
                 existing_file_map[file_name] = file
         
+        
         # Ensure all files have fullPath before creating the set (shared-with-me files already have it)
         for file in all_files:
             if not file.get('fullPath'):
@@ -883,6 +1226,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                 continue
         
         drive_file_paths = {file['fullPath'] for file in all_files if file.get('fullPath')}
+
 
         # Delete orphaned files using unified interface
         for file_name, file_info in existing_file_map.items():
@@ -896,7 +1240,27 @@ async def sync_drive_to_storage(auth_token, user_id):
                     })
                     print(f"[{datetime.now().isoformat()}] Deleted orphan: {file_name}")
         
+        # Phase 3: Processing
+        print(f'----------------------------------------------------------------------')
+        print(f'⚡ Phase 3: Processing - Uploading new files and deleting orphans...')
+        print(f'----------------------------------------------------------------------')
+        
+        # Emit phase update
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'processing',
+            'phase_name': 'Phase 3: Processing',
+            'phase_description': 'uploading new files and deleting orphans',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
         # Process files in parallel for upload
+        files_added = 0
+        files_updated = 0
+        
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = []
             
@@ -913,6 +1277,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                 if not existing_file:
                     needs_upload = True
                     reason = 'New file'
+                    files_added += 1
                 else:
                     # Compare modification times - handle different response formats
                     existing_updated = parse_date(
@@ -925,6 +1290,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                     if drive_modified and existing_updated and drive_modified > existing_updated:
                         needs_upload = True
                         reason = f"Drive version newer ({file['modifiedTime']} > {existing_file.get('updated', existing_file.get('lastModified', 'unknown'))})"
+                        files_updated += 1
                 
                 if needs_upload:
                     futures.append(
@@ -945,8 +1311,49 @@ async def sync_drive_to_storage(auth_token, user_id):
                     result = future.result()
                     if result:
                         uploaded_files.append(result)
+                        # Update progress
+                        files_processed += 1
+                        mb_processed += int(file.get('size', 0))
+                        
+                        # Update database and emit progress after first file, then every 10 files or every 10MB
+                        if files_processed == 1 or files_processed % 10 == 0 or mb_processed % (10 * 1024 * 1024) == 0:
+                            await update_data_source_sync_status(
+                                USER_ID, 'google', 'google_drive', 'syncing',
+                                files_processed=files_processed,
+                                mb_processed=mb_processed
+                            )
+                            
+                            await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+                                'phase': 'processing',
+                                'phase_name': 'Phase 3: Processing',
+                                'phase_description': 'uploading new files and deleting orphans',
+                                'files_processed': files_processed,
+                                'files_total': files_total,
+                                'mb_processed': mb_processed,
+                                'mb_total': mb_total,
+                                'sync_start_time': sync_start_time
+                            })
                 except Exception as e:
                     print(f"Error uploading {file['fullPath']}: {str(e)}")
+                    # Still count as processed for progress tracking
+                    files_processed += 1
+        
+        # Phase 4: Summarizing
+        print(f'----------------------------------------------------------------------')
+        print(f'📊 Phase 4: Summarizing - Generating sync report...')
+        print(f'----------------------------------------------------------------------')
+        
+        # Emit phase update
+        await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'generating sync report',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         # Enhanced summary
         print(f'\nSync Summary ({current_backend}):')
@@ -967,6 +1374,8 @@ async def sync_drive_to_storage(auth_token, user_id):
         print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
         print(f"📊 Billable API Calls: {total_api_calls}")
         print(f"📦 Files Processed: {len(all_files)}")
+        print(f"➕ Files Added: {files_added}")
+        print(f"🔄 Files Updated: {files_updated}")
         print(f"🗑️  Orphans Removed: {len(deleted_files)}")
         
         total_skipped = sum(skipped_reasons.values())
@@ -979,7 +1388,43 @@ async def sync_drive_to_storage(auth_token, user_id):
               f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_files)} removed, {total_skipped} skipped")
 
-        await update_data_source_sync_status(user_id, 'google', 'google_drive', 'synced')
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": files_added,
+                "updated": files_updated,
+                "removed": len(deleted_files),
+                "skipped": total_skipped,
+                "runtime_ms": int((time.time() - script_start_time) * 1000),
+                "api_calls": total_api_calls,
+                "skip_reasons": skipped_reasons,
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(all_files),
+                "total_size_bytes": sum(int(f.get('size', 0) or 0) for f in all_files),
+                "last_updated": int(time.time()),
+                "folders_count": len([f for f in all_files if f.get('mimeType') == 'application/vnd.google-apps.folder'])
+            }
+        }
+
+        # Final progress update
+        await update_data_source_sync_status(
+            user_id, 'google', 'google_drive', 'embedding',
+            files_processed=files_processed,
+            mb_processed=mb_processed,
+            sync_results=sync_results
+        )
+        
+        # Emit final progress
+        await emit_sync_progress(user_id, 'google', 'google_drive', {
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time,
+            'completed': True
+        })
         
     except Exception as error:
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
@@ -1026,9 +1471,9 @@ def download_and_upload_file(file, auth_token, exists, reason, skipped_reasons):
             return None
         else:
             print(f"Error processing file {file['fullPath']}: {error_msg}")
-            log.error(f"Error in download_and_upload_file for {file['fullPath']}:", exc_info=True)
-            skipped_reasons['other'] += 1
-            return None
+        log.error(f"Error in download_and_upload_file for {file['fullPath']}:", exc_info=True)
+        skipped_reasons['other'] += 1
+        return None
 
 # ============================================================================
 # MAIN EXECUTION FUNCTION

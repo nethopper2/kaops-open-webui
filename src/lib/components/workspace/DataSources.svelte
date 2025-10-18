@@ -2,7 +2,7 @@
 	import { onMount, getContext, onDestroy } from 'svelte';
 	import { WEBUI_NAME, socket, config } from '$lib/stores';
 	import Search from '../icons/Search.svelte';
-	import Spinner from '../common/Spinner.svelte';
+	import PulsingDots from '../common/PulsingDots.svelte';
 	import Microsoft from '../icons/Microsoft.svelte';
 	import Slack from '../icons/Slack.svelte';
 	import GoogleDrive from '../icons/GoogleDrive.svelte';
@@ -13,6 +13,7 @@
 		getDataSources,
 		initializeDataSync,
 		manualDataSync,
+		updateSyncStatus,
 		disconnectDataSync
 	} from '$lib/apis/data';
 	import Atlassian from '../icons/Atlassian.svelte';
@@ -25,6 +26,8 @@
 	import Mineral from '../icons/Mineral.svelte';
 	import JiraProjectSelector from './JiraProjectSelector.svelte';
 	import JiraSelfHostedAuth from './JiraSelfHostedAuth.svelte';
+	import DataSyncProgressBar from './DataSyncProgressBar.svelte';
+	import DataSyncResultsSummary from './DataSyncResultsSummary.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -33,6 +36,9 @@
 
 	let dataSources: Array<DataSource> = [];
 	let processingActions = new Set<string>();
+	
+	// Progress tracking
+	let syncProgress: Record<string, any> = {};
 
 	// Project selector state
 	let showProjectSelector = false;
@@ -72,22 +78,36 @@
 		return date.toLocaleDateString();
 	};
 
+	const formatDuration = (milliseconds: number) => {
+		const totalSeconds = Math.floor(milliseconds / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+		
+		return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+	};
+
+
 	const getSyncStatusColor = (status: string) => {
 		switch (status) {
 			case 'synced':
-				return 'bg-green-500/20 text-green-700 dark:text-green-200';
+				return 'text-green-700 dark:text-green-200';
 			case 'embedded':
-				return 'bg-green-500/20 text-green-700 dark:text-green-200';
+				return 'text-green-700 dark:text-green-200';
 			case 'syncing':
-				return 'bg-blue-500/20 text-blue-700 dark:text-blue-200';
+				return 'text-blue-700 dark:text-blue-200';
 			case 'embedding':
-				return 'bg-blue-500/20 text-blue-700 dark:text-blue-200';
+				return 'text-blue-700 dark:text-blue-300';
+			case 'deleting':
+				return 'text-orange-600 dark:text-orange-400';
+			case 'deleted':
+				return 'text-red-700 dark:text-red-300';
 			case 'error':
-				return 'bg-red-500/20 text-red-700 dark:text-red-200';
+				return 'text-red-700 dark:text-red-200';
 			case 'unsynced':
-				return 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-200';
+				return 'text-yellow-700 dark:text-yellow-200';
 			default:
-				return 'bg-gray-500/20 text-gray-700 dark:text-gray-200';
+				return 'text-gray-700 dark:text-gray-200';
 		}
 	};
 
@@ -124,7 +144,6 @@
 		processingActions = processingActions;
 
 		try {
-			console.log('Syncing:', dataSource.name);
 
 			// Special handling for Mineral
 			if (dataSource.action === 'mineral') {
@@ -152,6 +171,12 @@
 				case 'unsynced':
 					await initializeSync(dataSource.action as string, dataSource.layer as string);
 					break;
+				case 'deleted':
+					await initializeSync(dataSource.action as string, dataSource.layer as string);
+					break;
+				case 'embedding':
+					await updateSync(dataSource.action as string, dataSource.layer as string);
+					break;
 			}
 		} finally {
 			processingActions.delete(actionKey);
@@ -160,12 +185,8 @@
 	};
 
 	const initializeJiraSync = async (dataSource: DataSource) => {
-		console.log('Initializing Jira sync...');
-
 		// Check if self-hosted is enabled
 		const isSelfHosted = $config?.features.atlassian_self_hosted_enabled;
-
-		console.log('Is self-hosted enabled?', isSelfHosted);
 
 		if (isSelfHosted) {
 			// Show self-hosted auth modal
@@ -184,7 +205,6 @@
 
 				const messageHandler = async (event: MessageEvent) => {
 					if (event.data?.type === 'atlassian_connected' && event.data?.layer === 'jira') {
-						console.log('Atlassian OAuth completed, showing project selector');
 						window.removeEventListener('message', messageHandler);
 						dataSources = await getDataSources(localStorage.token);
 						projectSelectorDataSource = dataSource;
@@ -205,8 +225,6 @@
 	};
 
 	const handleSelfHostedAuthSuccess = async (event: CustomEvent) => {
-		console.log('Self-hosted auth successful:', event.detail);
-
 		// Refresh data sources
 		dataSources = await getDataSources(localStorage.token);
 
@@ -315,20 +333,25 @@
 
 	const updateDataSourceSyncStatus = (sourceData: {
 		source: string;
-		status: 'synced' | 'syncing' | 'error' | 'unsynced';
+		status: 'synced' | 'syncing' | 'error' | 'unsynced' | 'deleting' | 'deleted' | 'embedding';
 		message: string;
 		timestamp: string;
+		sync_results?: any;
 	}) => {
 		dataSources = dataSources.map((ds) => {
 			if (ds.name === sourceData.source) {
-				return { ...ds, sync_status: sourceData.status, last_sync: sourceData.timestamp };
+				return { 
+					...ds, 
+					sync_status: sourceData.status, 
+					last_sync: sourceData.timestamp,
+					sync_results: sourceData.sync_results || ds.sync_results
+				};
 			}
 			return ds;
 		});
 	};
 
 	const initializeSync = async (action: string, layer: string) => {
-		console.log('Initializing sync for:', action);
 
 		let syncDetails = await initializeDataSync(localStorage.token, action, layer);
 
@@ -340,9 +363,25 @@
 	};
 
 	const updateSync = async (action: string, layer: string) => {
-		console.log('Manual sync initiated for:', action);
+		// Clear any stale progress data for this action/layer
+		const key = `${action}-${layer}`;
+		delete syncProgress[key];
+		syncProgress = syncProgress; // Trigger reactivity
 
+		// Use the manual sync endpoint that actually triggers the sync process
 		let syncDetails = await manualDataSync(localStorage.token, action, layer);
+
+		// Handle case where syncDetails is null (error occurred)
+		if (!syncDetails) {
+			console.error('Sync failed - no details returned. This usually means the sync is already in progress or there was an authentication error.');
+			return;
+		}
+
+		// Handle case where backend returns a message instead of sync details (e.g., "sync already in progress")
+		if (syncDetails.message && !syncDetails.url) {
+			console.warn('Sync not started:', syncDetails.message);
+			return;
+		}
 
 		if (syncDetails.detail?.reauth_url) {
 			if (action === 'mineral') {
@@ -370,26 +409,52 @@
 			const action = dataSource.action;
 			const layer = dataSource.layer;
 
-			console.log('Disconnecting sync for:', action);
-
 			await disconnectDataSync(localStorage.token, action as string, layer as string);
+			// Add a small delay to allow backend to update status
+			await new Promise(resolve => setTimeout(resolve, 500));
 			dataSources = await getDataSources(localStorage.token);
+		} catch (error) {
+			console.error('Error in handleDelete:', error);
 		} finally {
 			processingActions.delete(actionKey);
 			processingActions = processingActions;
 		}
 	};
 
-	const getSyncStatusText = (status: string) => {
+	const getPhaseDisplayText = (phaseName: string) => {
+		// Map backend phase names to user-friendly display text
+		const phaseMap: Record<string, string> = {
+			'Phase 1: Starting': 'Initializing',
+			'Phase 2: Discovery': 'Analyzing',
+			'Phase 3: Processing': 'Processing',
+			'Phase 4: Summarizing': 'Finalizing'
+		};
+		return phaseMap[phaseName] || phaseName;
+	};
+
+
+	const getSyncStatusText = (status: string, dataSource?: DataSource) => {
+		// If syncing and we have phase data, show the mapped phase name
+		if (status === 'syncing' && dataSource) {
+			const key = `${dataSource.action}-${dataSource.layer}`;
+			if (syncProgress[key] && syncProgress[key].phase_name) {
+				return getPhaseDisplayText(syncProgress[key].phase_name);
+			}
+		}
+		
 		switch (status) {
 			case 'synced':
+				return 'Synced';
+			case 'embedded':
 				return 'Synced';
 			case 'syncing':
 				return 'Syncing...';
 			case 'embedding':
-				return 'Syncing...';
-			case 'embedded':
-				return 'Synced';
+				return 'Embedding';
+			case 'deleting':
+				return 'Deleting';
+			case 'deleted':
+				return 'Deleted';
 			case 'error':
 				return 'Error';
 			case 'unsynced':
@@ -401,11 +466,55 @@
 
 	const isProcessing = (dataSource: DataSource) => {
 		const actionKey = getActionKey(dataSource);
-		return processingActions.has(actionKey) || dataSource.sync_status === 'syncing';
+		return processingActions.has(actionKey) || dataSource.sync_status === 'syncing' || dataSource.sync_status === 'deleting';
 	};
 
+	$: getProgressData = (dataSource: DataSource) => {
+		const key = `${dataSource.action}-${dataSource.layer}`;
+		// If we have real-time progress data, use it
+		if (syncProgress[key]) {
+			return {
+				files_processed: syncProgress[key].files_processed || 0,
+				files_total: syncProgress[key].files_total || 0,
+				mb_processed: syncProgress[key].mb_processed || 0,
+				mb_total: syncProgress[key].mb_total || 0,
+				sync_start_time: syncProgress[key].sync_start_time || 0,
+				folders_found: syncProgress[key].folders_found || 0,
+				files_found: syncProgress[key].files_found || 0,
+				total_size: syncProgress[key].total_size || 0,
+				phase: syncProgress[key].phase || 'processing'
+			};
+		}
+		// For syncing state, start with 0 progress, not final values
+		if (dataSource.sync_status === 'syncing') {
+			return {
+				files_processed: 0,
+				files_total: dataSource.files_total || 0,
+				mb_processed: 0,
+				mb_total: dataSource.mb_total || 0,
+				sync_start_time: Date.now(), // Always use current time for new sync
+				folders_found: 0,
+				files_found: 0,
+				total_size: 0,
+				phase: 'processing' // Default to processing if no real-time data
+			};
+		}
+		// For other states, use the stored values
+		return {
+			files_processed: dataSource.files_processed || 0,
+			files_total: dataSource.files_total || 0,
+			mb_processed: dataSource.mb_processed || 0,
+			mb_total: dataSource.mb_total || 0,
+			sync_start_time: dataSource.sync_start_time || 0,
+			folders_found: 0,
+			files_found: 0,
+			total_size: 0,
+			phase: 'processing'
+		};
+	};
+
+
 	const handleProjectSyncStarted = async (event: CustomEvent) => {
-		console.log('Project sync started:', event.detail);
 		showProjectSelector = false;
 		projectSelectorDataSource = null;
 
@@ -431,7 +540,6 @@
 				return res.json();
 			})
 			.catch((err) => {
-				console.log(err);
 				error = err;
 				return null;
 			});
@@ -448,15 +556,59 @@
 		$socket?.on('data-source-updated', async (data) => {
 			updateDataSourceSyncStatus(data);
 		});
+		$socket?.on('sync_progress', (data) => {
+			const key = `${data.provider}-${data.layer}`;
+			syncProgress[key] = data;
+			syncProgress = syncProgress; // Trigger reactivity
+		});
 		loaded = true;
 	});
 
 	onDestroy(() => {
 		if ($socket) {
 			$socket.off('data-source-updated');
+			$socket.off('sync_progress');
 		}
 	});
 </script>
+
+<style>
+	/* Data Sources Table Column Configuration */
+	.data-sources-table {
+		/* Column 1: Name/Description - adjust as needed */
+		--col-name-width: 16rem;       /* Wide enough to prevent text wrapping */
+		
+		/* Column 2: Status - adjust as needed */
+		--col-status-width: 12rem;      /* Try: 6rem, 8rem, 10rem, 12rem, etc. */
+		
+		/* Column 3: Actions - fixed width */
+		--col-actions-width: 20rem;    /* Fixed width to prevent floating */
+	}
+
+	.data-sources-table .col-name {
+		width: var(--col-name-width);
+		white-space: nowrap;  /* Prevent text wrapping for main content */
+	}
+	
+	/* Allow caption text to wrap */
+	.data-sources-table .col-name .text-xs {
+		white-space: normal;  /* Allow caption text to wrap */
+	}
+
+	.data-sources-table .col-status {
+		width: var(--col-status-width);
+		white-space: nowrap;  /* Prevent text wrapping for main status text */
+	}
+	
+	/* Allow only the phase description text to wrap, not the status badge */
+	.data-sources-table .col-status .text-gray-500 {
+		white-space: normal;  /* Allow only caption text to wrap */
+	}
+
+	.data-sources-table .col-actions {
+		width: var(--col-actions-width);
+	}
+</style>
 
 <svelte:head>
 	<title>
@@ -508,18 +660,18 @@
 		{#if filteredItems.length > 0}
 			<!-- Desktop Table View -->
 			<div class="hidden lg:block overflow-x-auto">
-				<table class="w-full">
+				<table class="w-full table-fixed data-sources-table">
 					<thead>
-						<tr class="border-b border-gray-200 dark:border-gray-700">
-							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300"> </th>
-							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
-								{$i18n.t('Sync Status')}
+						<tr>
+							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300 col-name"> </th>
+							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300 col-status">
+								<!-- Status column - no header text -->
+							</th>
+							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300 col-actions">
+								<!-- Actions column - fixed width -->
 							</th>
 							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
-								{$i18n.t('Last Sync')}
-							</th>
-							<th class="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
-								{$i18n.t('Actions')}
+								<!-- Empty column - takes remaining space -->
 							</th>
 						</tr>
 					</thead>
@@ -528,7 +680,7 @@
 							<tr
 								class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
 							>
-								<td class="py-3 px-4">
+								<td class="py-3 px-4 col-name">
 									<div class="flex items-center gap-3">
 										<div
 											class="flex-shrink-0 w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center"
@@ -545,47 +697,112 @@
 											<div class="text-xs text-gray-500 dark:text-gray-400">
 												{dataSource.context}
 											</div>
+											<!-- Small duplicate actions under caption -->
+											<div class="flex items-center gap-1 mt-1">
+												<button
+													class="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+													disabled={isProcessing(dataSource)}
+													on:click={() => handleSync(dataSource)}
+												>
+													Sync
+												</button>
+												<button
+													class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding')}
+													on:click={() => handleDelete(dataSource)}
+												>
+													Delete
+												</button>
+											</div>
 										</div>
 									</div>
 								</td>
-								<td class="py-3 px-4">
-									<div class="flex items-center gap-2">
-										<span
-											class="text-xs font-bold px-2 py-1 rounded-full uppercase {getSyncStatusColor(
-												dataSource.sync_status
-											)}"
-										>
-											{getSyncStatusText(dataSource.sync_status)}
-										</span>
+								<td class="py-3 px-4 col-status h-20">
+									<div class="space-y-2">
+										<!-- Status Badge -->
+										<div class="flex items-center gap-2">
+											<span
+												class="text-xs font-medium uppercase {getSyncStatusColor(
+													dataSource.sync_status
+												)}"
+											>
+												{#if dataSource.sync_status === 'syncing'}
+													{@const key = `${dataSource.action}-${dataSource.layer}`}
+													{@const progressData = syncProgress[key]}
+													{#if progressData && progressData.phase_name}
+														{getPhaseDisplayText(progressData.phase_name)}
+													{:else}
+														{getSyncStatusText(dataSource.sync_status)}
+													{/if}
+												{:else}
+													{getSyncStatusText(dataSource.sync_status)}
+												{/if}
+											</span>
+											{#if dataSource.sync_status === 'syncing'}
+												<PulsingDots />
+											{/if}
+										</div>
+										
+										<!-- Phase Description for syncing -->
 										{#if dataSource.sync_status === 'syncing'}
-											<div class="w-3 h-3">
-												<Spinner className="w-3 h-3" />
+											{@const key = `${dataSource.action}-${dataSource.layer}`}
+											{@const progressData = syncProgress[key]}
+											<!-- Phase Description for syncing -->
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												{#if progressData && progressData.phase_description}
+													{syncProgress[key].phase_description}
+												{/if}
+											</div>
+										{:else if dataSource.sync_status === 'embedding'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												currently a manual process
+											</div>
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												{dataSource.last_sync ? formatDate(dataSource.last_sync.toString()) : 'Unknown'}
+											</div>
+										{/if}
+										
+										<!-- State-specific information -->
+										{#if dataSource.sync_status === 'deleting'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												deleting data...
+											</div>
+										{:else if dataSource.sync_status === 'synced'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Never'}
+											</div>
+										{:else if dataSource.sync_status === 'deleted'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+											</div>
+										{:else if dataSource.sync_status === 'error'}
+											<div class="text-xs text-red-500 dark:text-red-400">
+												failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+											</div>
+										{:else if dataSource.sync_status === 'unsynced'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												never synced
 											</div>
 										{/if}
 									</div>
 								</td>
-								<td class="py-3 px-4">
-									<div class="text-sm text-gray-700 dark:text-gray-300">
-										{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Never'}
-									</div>
+								<td class="py-3 px-4 col-actions h-20">
+									{#if dataSource.sync_status === 'syncing'}
+										<DataSyncProgressBar {...getProgressData(dataSource)} />
+							{:else if dataSource.sync_status === 'synced'}
+								<DataSyncResultsSummary {dataSource} />
+							{:else if dataSource.sync_status === 'embedding'}
+								<DataSyncResultsSummary {dataSource} />
+							{:else if dataSource.sync_status === 'deleting'}
+								<!-- No content during deleting state -->
+									{:else if dataSource.sync_status === 'error'}
+										<div class="text-xs text-red-500 dark:text-red-400">
+											failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+										</div>
+									{/if}
 								</td>
 								<td class="py-3 px-4">
-									<div class="flex items-center gap-2">
-										<button
-											class="px-2 py-1.5 text-xs font-medium rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-											disabled={isProcessing(dataSource)}
-											on:click={() => handleSync(dataSource)}
-										>
-											{isProcessing(dataSource) ? 'Processing...' : 'Sync'}
-										</button>
-										<button
-											class="px-2 py-1.5 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-											disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
-											on:click={() => handleDelete(dataSource)}
-										>
-											{isProcessing(dataSource) ? 'Processing...' : 'Delete'}
-										</button>
-									</div>
+									<!-- Empty cell - takes remaining space -->
 								</td>
 							</tr>
 						{/each}
@@ -612,28 +829,66 @@
 								<div class="text-xs text-gray-500 dark:text-gray-400 truncate">
 									{dataSource.context}
 								</div>
+								<!-- Small duplicate actions under caption -->
+								<div class="flex items-center gap-1 mt-1">
+									<button
+										class="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+										disabled={isProcessing(dataSource)}
+										on:click={() => handleSync(dataSource)}
+									>
+										Sync
+									</button>
+									<button
+										class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding')}
+										on:click={() => handleDelete(dataSource)}
+									>
+										Delete
+									</button>
+								</div>
 							</div>
 						</div>
 
-						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+						<div class="space-y-2">
+							<!-- Status Badge -->
 							<div class="flex items-center gap-2">
 								<span
-									class="text-xs font-bold px-2 py-1 rounded-full uppercase {getSyncStatusColor(
+									class="text-xs font-medium uppercase {getSyncStatusColor(
 										dataSource.sync_status
 									)}"
 								>
-									{getSyncStatusText(dataSource.sync_status)}
+									{#if dataSource.sync_status === 'syncing'}
+										{@const key = `${dataSource.action}-${dataSource.layer}`}
+										{@const progressData = syncProgress[key]}
+										{#if progressData && progressData.phase_name}
+											{getPhaseDisplayText(progressData.phase_name)}
+										{:else}
+											{getSyncStatusText(dataSource.sync_status)}
+										{/if}
+									{:else}
+										{getSyncStatusText(dataSource.sync_status)}
+									{/if}
 								</span>
 								{#if dataSource.sync_status === 'syncing'}
-									<div class="w-3 h-3">
-										<Spinner className="w-3 h-3" />
-									</div>
+									<PulsingDots />
 								{/if}
 							</div>
+							
 
-							<div class="text-xs text-gray-500 dark:text-gray-400">
-								Last sync: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Never'}
-							</div>
+							<!-- State-specific information -->
+							{#if dataSource.sync_status === 'syncing'}
+								<DataSyncProgressBar {...getProgressData(dataSource)} />
+							{:else if dataSource.sync_status === 'deleting'}
+								<!-- No content during deleting state -->
+							{:else if dataSource.sync_status === 'synced'}
+								<DataSyncResultsSummary {dataSource} />
+							{:else if dataSource.sync_status === 'embedding'}
+								<DataSyncResultsSummary {dataSource} />
+							{:else if dataSource.sync_status === 'error'}
+								<div class="text-xs text-red-500 dark:text-red-400">
+									failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+								</div>
+							{/if}
 						</div>
 
 						<div class="flex gap-2 mt-3">
@@ -646,7 +901,7 @@
 							</button>
 							<button
 								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource) || dataSource.sync_status !== 'synced'}
+								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding')}
 								on:click={() => handleDelete(dataSource)}
 							>
 								{isProcessing(dataSource) ? 'Processing...' : 'Delete'}
@@ -665,6 +920,6 @@
 	</div>
 {:else}
 	<div class="w-full h-full flex justify-center items-center">
-		<Spinner />
+		<PulsingDots />
 	</div>
 {/if}
