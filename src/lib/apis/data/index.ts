@@ -6,10 +6,11 @@ export interface DataSourceResponse {
 	user_id: string;
 	name: string;
 	context: string;
-	sync_status: 'synced' | 'syncing' | 'error' | 'unsynced';
+	sync_status: 'synced' | 'syncing' | 'error' | 'unsynced' | 'embedding' | 'deleting' | 'deleted';
 	last_sync: string | null;
 	icon: string;
 	action: string;
+	layer?: string;
 	created_at: number;
 	updated_at: number;
 }

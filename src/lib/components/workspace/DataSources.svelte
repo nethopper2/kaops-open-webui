@@ -758,7 +758,7 @@
 												currently a manual process
 											</div>
 											<div class="text-xs text-gray-500 dark:text-gray-400">
-												{formatDate(dataSource.last_sync.toString())}
+												{dataSource.last_sync ? formatDate(dataSource.last_sync.toString()) : 'Unknown'}
 											</div>
 										{/if}
 										

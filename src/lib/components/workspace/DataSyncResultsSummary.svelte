@@ -56,9 +56,9 @@
 			{/if}
 		</div>
 
-		<!-- Right Column: Overall Summary -->
+		<!-- Right Column: Source Summary -->
 		<div>
-			<div class="font-medium text-gray-700 dark:text-gray-300 mb-1">Overall Summary</div>
+			<div class="font-medium text-gray-700 dark:text-gray-300 mb-1">Source Summary</div>
 			{#if dataSource.sync_results?.overall_profile}
 				{@const profile = dataSource.sync_results.overall_profile}
 				<div class="space-y-1">
