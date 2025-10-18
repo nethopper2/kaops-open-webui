@@ -1021,7 +1021,7 @@ async def sync_drive_to_storage(auth_token, user_id):
         })
         
         # List all existing files using unified interface
-        user_prefix = f"userResources/{USER_ID}/Google/Google Drive/"
+        user_prefix = f"userResources/{USER_ID}/Google/Google Drive/My Drive/"
         existing_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
         
         # Create file maps for comparison - handle different response formats
@@ -1031,6 +1031,7 @@ async def sync_drive_to_storage(auth_token, user_id):
             if file_name:
                 existing_file_map[file_name] = file
         
+        
         # Ensure all files have fullPath before creating the set (shared-with-me files already have it)
         for file in all_files:
             if not file.get('fullPath'):
@@ -1039,6 +1040,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                 continue
         
         drive_file_paths = {file['fullPath'] for file in all_files if file.get('fullPath')}
+
 
         # Delete orphaned files using unified interface
         for file_name, file_info in existing_file_map.items():
@@ -1070,6 +1072,9 @@ async def sync_drive_to_storage(auth_token, user_id):
         })
         
         # Process files in parallel for upload
+        files_added = 0
+        files_updated = 0
+        
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = []
             
@@ -1086,6 +1091,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                 if not existing_file:
                     needs_upload = True
                     reason = 'New file'
+                    files_added += 1
                 else:
                     # Compare modification times - handle different response formats
                     existing_updated = parse_date(
@@ -1098,6 +1104,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                     if drive_modified and existing_updated and drive_modified > existing_updated:
                         needs_upload = True
                         reason = f"Drive version newer ({file['modifiedTime']} > {existing_file.get('updated', existing_file.get('lastModified', 'unknown'))})"
+                        files_updated += 1
                 
                 if needs_upload:
                     futures.append(
@@ -1181,6 +1188,8 @@ async def sync_drive_to_storage(auth_token, user_id):
         print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
         print(f"📊 Billable API Calls: {total_api_calls}")
         print(f"📦 Files Processed: {len(all_files)}")
+        print(f"➕ Files Added: {files_added}")
+        print(f"🔄 Files Updated: {files_updated}")
         print(f"🗑️  Orphans Removed: {len(deleted_files)}")
         
         total_skipped = sum(skipped_reasons.values())
@@ -1196,8 +1205,8 @@ async def sync_drive_to_storage(auth_token, user_id):
         # Prepare sync results
         sync_results = {
             "latest_sync": {
-                "added": len([f for f in uploaded_files if f['type'] == 'new']),
-                "updated": len([f for f in uploaded_files if f['type'] == 'updated']),
+                "added": files_added,
+                "updated": files_updated,
                 "removed": len(deleted_files),
                 "skipped": total_skipped,
                 "runtime_ms": int((time.time() - script_start_time) * 1000),

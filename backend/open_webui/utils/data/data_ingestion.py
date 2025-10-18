@@ -466,15 +466,21 @@ def list_pai_files(prefix: str = None, auth_token: str = None, max_results: int 
             params['prefix'] = prefix
         if max_results:
             params['maxResults'] = max_results
+        # Add recursive parameter to get all files, not just directory entries
+        params['recursive'] = 'true'
+        
+        headers = get_api_headers(auth_token)
             
         response = make_api_request(
             url, 
             method='GET', 
-            headers=get_api_headers(auth_token),
+            headers=headers,
             params=params
         )
         
-        return response.get('files', [])
+        files = response.get('files', [])
+        
+        return files
         
     except Exception as error:
         print(f"PAI Data Service listing failed: {str(error)}")
@@ -710,7 +716,8 @@ async def update_data_source_sync_status(
                     "source": updated_source.name,
                     "status": updated_source.sync_status,
                     "message": f"{updated_source.name} sync status updated!",
-                    "timestamp": int(time.time())
+                    "timestamp": int(time.time()),
+                    "sync_results": updated_source.sync_results
                 }
             )
 

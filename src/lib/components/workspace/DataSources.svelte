@@ -78,6 +78,15 @@
 		return date.toLocaleDateString();
 	};
 
+	const formatDuration = (milliseconds: number) => {
+		const totalSeconds = Math.floor(milliseconds / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+		
+		return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+	};
+
 
 	const getSyncStatusColor = (status: string) => {
 		switch (status) {
@@ -324,13 +333,19 @@
 
 	const updateDataSourceSyncStatus = (sourceData: {
 		source: string;
-		status: 'synced' | 'syncing' | 'error' | 'unsynced' | 'deleting' | 'deleted';
+		status: 'synced' | 'syncing' | 'error' | 'unsynced' | 'deleting' | 'deleted' | 'embedding';
 		message: string;
 		timestamp: string;
+		sync_results?: any;
 	}) => {
 		dataSources = dataSources.map((ds) => {
 			if (ds.name === sourceData.source) {
-				return { ...ds, sync_status: sourceData.status, last_sync: sourceData.timestamp };
+				return { 
+					...ds, 
+					sync_status: sourceData.status, 
+					last_sync: sourceData.timestamp,
+					sync_results: sourceData.sync_results || ds.sync_results
+				};
 			}
 			return ds;
 		});
@@ -741,6 +756,9 @@
 										{:else if dataSource.sync_status === 'embedding'}
 											<div class="text-xs text-gray-500 dark:text-gray-400">
 												currently a manual process
+											</div>
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												{formatDate(dataSource.last_sync.toString())}
 											</div>
 										{/if}
 										
