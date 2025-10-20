@@ -457,17 +457,16 @@ def delete_gcs_file(file_name, service_account_base64, GCS_BUCKET_NAME):
 # NH DATA SERVICE BACKEND FUNCTIONS (Phase 4)
 # ============================================================================
 
-def list_pai_files(prefix: str = None, auth_token: str = None, max_results: int = 1000) -> List[Dict[str, Any]]:
-    """List files using pai-data-service API"""
+def get_files_summary(prefix: str = None, auth_token: str = None, max_results: int = 1000) -> Dict[str, Any]:
+    """Get file summary statistics using pai-data-service API"""
     try:
-        url = f"{storage_config.pai_base_url}/files"
-        params = {}
+        url = f"{storage_config.pai_base_url}/files/summary"
+        params = {
+            'maxResults': max_results
+        }
+        
         if prefix:
             params['prefix'] = prefix
-        if max_results:
-            params['maxResults'] = max_results
-        # Add recursive parameter to get all files, not just directory entries
-        params['recursive'] = 'true'
         
         headers = get_api_headers(auth_token)
             
@@ -478,9 +477,72 @@ def list_pai_files(prefix: str = None, auth_token: str = None, max_results: int 
             params=params
         )
         
-        files = response.get('files', [])
+        return response
         
-        return files
+    except Exception as error:
+        print(f"PAI Data Service summary failed: {str(error)}")
+        return {
+            'prefix': prefix or '',
+            'totalFiles': 0,
+            'totalSize': 0,
+            'asOf': None,
+            'durationMs': 0
+        }
+
+def list_pai_files(prefix: str = None, auth_token: str = None, max_results: int = None) -> List[Dict[str, Any]]:
+    """List files using pai-data-service API with pagination support"""
+    try:
+        all_files = []
+        next_page_token = None
+        
+        while True:
+            url = f"{storage_config.pai_base_url}/files"
+            params = {
+                'recursive': 'true'  # Get all files in subdirectories
+            }
+            
+            if prefix:
+                params['prefix'] = prefix
+            
+            # Use maxResults=1000 for optimal page size (API limit)
+            params['maxResults'] = 1000
+            
+            if next_page_token:
+                params['pageToken'] = next_page_token
+            
+            headers = get_api_headers(auth_token)
+                
+            response = make_api_request(
+                url, 
+                method='GET', 
+                headers=headers,
+                params=params
+            )
+            
+            files = response.get('files', [])
+            
+            # Filter out directories to get only actual files
+            file_files = [f for f in files if not f.get('isDirectory', False)]
+            all_files.extend(file_files)
+            
+            # Check pagination
+            pagination = response.get('pagination', {})
+            next_page_token = pagination.get('nextPageToken')
+            has_more = pagination.get('hasMore', False)
+            
+            # Stop if no more pages or we've reached the requested limit
+            if not next_page_token or not has_more:
+                break
+            
+            # Stop if we've reached the requested max_results limit
+            if max_results and len(all_files) >= max_results:
+                break
+        
+        # Trim to max_results if specified
+        if max_results and len(all_files) > max_results:
+            all_files = all_files[:max_results]
+        
+        return all_files
         
     except Exception as error:
         print(f"PAI Data Service listing failed: {str(error)}")
@@ -573,7 +635,7 @@ async def delete_pai_folder(folder_path: str, auth_token: str = None) -> bool:
 # UNIFIED STORAGE INTERFACE
 # ============================================================================
 
-def list_files_unified(prefix: str = None, max_results: int = 1000, user_id: str = None) -> List[Dict[str, Any]]:
+def list_files_unified(prefix: str = None, max_results: int = None, user_id: str = None) -> List[Dict[str, Any]]:
     """List files using configured storage backend"""
     if storage_config.backend == StorageBackend.GCS:
         return list_gcs_files(

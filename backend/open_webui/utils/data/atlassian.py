@@ -191,7 +191,7 @@ def list_jira_projects_and_issues(site_url, cloud_id, bearer_token: str, all_ite
 
     try:
         start_at = 0
-        max_results = 50 # Make me configurable later
+        max_results = 1000 # Increased from 50 for better pagination support
         projects = []
         while True:
             params = {
@@ -225,7 +225,7 @@ def list_jira_projects_and_issues(site_url, cloud_id, bearer_token: str, all_ite
 
             log.info(f"Listing issues for Jira project: {project_name} ({project_key})")
             start_at_issue = 0
-            max_results_issue = 100
+            max_results_issue = 1000
             
             while True:
                 jql_query = f"project = \"{project_key}\""
@@ -306,7 +306,7 @@ def list_jira_projects_self_hosted(base_url: str, bearer_token: str = None,
         # Try modern endpoint first (Jira 8.0+)
         try:
             start_at = 0
-            max_results = 50
+            max_results = 1000
             
             while True:
                 params = {
@@ -383,7 +383,7 @@ def list_jira_projects_and_issues_self_hosted(base_url: str, bearer_token: str =
 
     try:
         start_at = 0
-        max_results = 50
+        max_results = 1000
         projects = []
         
         auth_type = 'pat' if bearer_token else 'basic'
@@ -420,7 +420,7 @@ def list_jira_projects_and_issues_self_hosted(base_url: str, bearer_token: str =
 
             log.info(f"Listing issues for project: {project_name} ({project_key})")
             start_at_issue = 0
-            max_results_issue = 100
+            max_results_issue = 1000
             
             while True:
                 jql_query = f'project = "{project_key}"'
@@ -517,7 +517,7 @@ def list_jira_selected_projects_and_issues_self_hosted(base_url: str, bearer_tok
         for project_key in project_keys:
             log.info(f"Listing issues for selected project: {project_key}")
             start_at_issue = 0
-            max_results_issue = 100
+            max_results_issue = 1000
             
             while True:
                 jql_query = f'project = "{project_key}"'
@@ -619,7 +619,7 @@ def list_jira_selected_projects_and_issues(site_url, cloud_id, bearer_token: str
         for project_key in project_keys:
             log.info(f"Listing issues for selected Jira project: {project_key}")
             start_at_issue = 0
-            max_results_issue = 100
+            max_results_issue = 1000
             
             jql_query = f"project = \"{project_key}\""
             params = {
@@ -938,7 +938,7 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, bearer_token: str, all_
         # Step 1: List all accessible spaces
         log.info(f"Listing Confluence spaces for site: {site_url}")
         start_at = 0
-        max_results = 50
+        max_results = 1000
         spaces = []
         while True:
             params = {
@@ -968,7 +968,7 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, bearer_token: str, all_
 
             log.info(f"Listing pages for Confluence space: {space_name} ({space_key})")
             start_at_page = 0
-            max_results_page = 100
+            max_results_page = 1000
             
             while True:
                 params = {
@@ -1051,7 +1051,7 @@ def list_confluence_spaces_and_pages_self_hosted(base_url: str, bearer_token: st
     try:
         # Step 1: List all accessible spaces
         start_at = 0
-        max_results = 50
+        max_results = 1000
         spaces = []
         
         while True:
@@ -1086,7 +1086,7 @@ def list_confluence_spaces_and_pages_self_hosted(base_url: str, bearer_token: st
 
             log.info(f"Listing pages for Confluence space: {space_name} ({space_key})")
             start_at_page = 0
-            max_results_page = 100
+            max_results_page = 1000
             
             while True:
                 params = {

@@ -288,14 +288,17 @@ async def sync_onenote_to_storage(auth_token):
         raise error
 
 # Outlook integration functions
-def list_outlook_messages(auth_token, folder='inbox', query='', max_results=1000):
-    """List Outlook messages from specified folder"""
+def list_outlook_messages(auth_token, folder='inbox', query='', max_results=None):
+    """List Outlook messages from specified folder with pagination support"""
     try:
         all_messages = []
         skip = 0
-        top = min(max_results, 100)
+        top = 100  # Microsoft Graph API limit
         
-        while len(all_messages) < max_results:
+        while True:
+            # Check if we've reached the max_results limit (if specified)
+            if max_results and len(all_messages) >= max_results:
+                break
             params = {
                 '$top': top,
                 '$skip': skip,
@@ -318,7 +321,11 @@ def list_outlook_messages(auth_token, folder='inbox', query='', max_results=1000
             if len(messages) < top:
                 break
         
-        return all_messages[:max_results]
+        # Trim to max_results if specified
+        if max_results and len(all_messages) > max_results:
+            all_messages = all_messages[:max_results]
+        
+        return all_messages
         
     except Exception as error:
         print(f"Error listing Outlook messages: {str(error)}")
