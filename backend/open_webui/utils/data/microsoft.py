@@ -22,6 +22,31 @@ from open_webui.models.data import DataSources
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
+# Global socketio instance for progress updates
+sio = None
+
+async def emit_sync_progress(user_id: str, provider: str, layer: str, progress_data: dict):
+    """Emit sync progress update via WebSocket"""
+    global sio
+    if sio:
+        try:
+            await sio.emit("sync_progress", {
+                "user_id": user_id,
+                "provider": provider,
+                "layer": layer,
+                **progress_data
+            }, to=f"user_{user_id}")
+        except Exception as e:
+            log.error(f"Failed to emit sync progress: {e}")
+    else:
+        log.warning("Socket.IO instance not available for progress updates")
+
+
+def set_socketio_instance(socketio_instance):
+    """Set the socketio instance for progress updates"""
+    global sio
+    sio = socketio_instance
+
 # Global variables
 existing_files_cache = set()
 total_api_calls = 0
@@ -209,6 +234,22 @@ async def sync_onenote_to_storage(auth_token):
     global USER_ID
     
     print('Starting OneNote sync process...')
+
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    await emit_sync_progress(USER_ID, 'microsoft', 'onenote', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
     
     uploaded_files = []
     skipped_files = 0
@@ -258,12 +299,49 @@ async def sync_onenote_to_storage(auth_token):
                             )
                         )
             
+            # Discovery complete - set totals
+            files_total = len(futures)
+            mb_total = 0
+            await update_data_source_sync_status(
+                USER_ID, 'microsoft', 'onenote', 'syncing',
+                files_total=files_total,
+                mb_total=mb_total,
+                sync_start_time=sync_start_time
+            )
+            await emit_sync_progress(USER_ID, 'microsoft', 'onenote', {
+                'phase': 'discovery',
+                'phase_name': 'Phase 2: Discovery',
+                'phase_description': 'analyzing notebooks and preparing pages for sync',
+                'files_processed': 0,
+                'files_total': files_total,
+                'mb_processed': 0,
+                'mb_total': mb_total,
+                'sync_start_time': sync_start_time
+            })
+            
+            files_processed = 0
+            mb_processed = 0
             for future, page_title in futures:
                 try:
                     result = future.result()
                     if result:
                         uploaded_files.append(result)
                         existing_files_cache.add(result['path'])
+                        files_processed += 1
+                        try:
+                            mb_processed += int(result.get('size', 0))
+                        except Exception:
+                            pass
+                        await emit_sync_progress(USER_ID, 'microsoft', 'onenote', {
+                            'phase': 'processing',
+                            'phase_name': 'Phase 3: Processing',
+                            'phase_description': 'synchronizing pages to storage',
+                            'files_processed': files_processed,
+                            'files_total': files_total,
+                            'mb_processed': mb_processed,
+                            'mb_total': mb_total,
+                            'sync_start_time': sync_start_time
+                        })
                     else:
                         skipped_files += 1
                 except Exception as e:
@@ -271,11 +349,58 @@ async def sync_onenote_to_storage(auth_token):
                     log.error(f"Error processing OneNote page {page_title}:", exc_info=True)
                     skipped_files += 1
         
+        await emit_sync_progress(USER_ID, 'microsoft', 'onenote', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing and updating status',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
         print(f"\nOneNote Sync Summary:")
         print(f"Pages uploaded: {len(uploaded_files)}")
         print(f"Pages skipped: {skipped_files}")
 
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'onenote', 'synced')
+        # Accounting Metrics (align with Google)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        print("\nAccounting Metrics:")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
+        print(f"📊 Billable API Calls: {total_api_calls}")
+        print(f"📦 Files Processed: {files_total}")
+        print(f"➕ Files Added: {len(uploaded_files)}")
+        print(f"🔄 Files Updated: 0")
+        print(f"🗑️  Orphans Removed: 0")
+        print(f"⛔ Skipped Files: {skipped_files}")
+
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": len(uploaded_files),
+                "updated": 0,
+                "removed": 0,
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": files_total,
+                "total_size_bytes": 0,
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'onenote', 'embedding', sync_results=sync_results)
         
         return {
             'uploaded': len(uploaded_files),
@@ -429,6 +554,22 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
     global USER_ID
     
     print(f'Starting Outlook sync process for folder: {folder}...')
+
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    await emit_sync_progress(USER_ID, 'microsoft', 'outlook', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
     
     uploaded_files = []
     skipped_files = 0
@@ -437,6 +578,26 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
         print(f"Fetching Outlook messages from {folder} (max: {max_emails})")
         messages = list_outlook_messages(auth_token, folder, query, max_emails)
         print(f"Found {len(messages)} Outlook messages")
+
+        # Discovery complete - set totals
+        files_total = len(messages)
+        mb_total = 0
+        await update_data_source_sync_status(
+            USER_ID, 'microsoft', 'outlook', 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        await emit_sync_progress(USER_ID, 'microsoft', 'outlook', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing messages and preparing sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = []
@@ -469,12 +630,29 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
                     )
                 )
             
+            files_processed = 0
+            mb_processed = 0
             for future, message_id in futures:
                 try:
                     result = future.result()
                     if result:
                         uploaded_files.append(result)
                         existing_files_cache.add(result['path'])
+                        files_processed += 1
+                        try:
+                            mb_processed += int(result.get('size', 0))
+                        except Exception:
+                            pass
+                        await emit_sync_progress(USER_ID, 'microsoft', 'outlook', {
+                            'phase': 'processing',
+                            'phase_name': 'Phase 3: Processing',
+                            'phase_description': 'synchronizing emails to storage',
+                            'files_processed': files_processed,
+                            'files_total': files_total,
+                            'mb_processed': mb_processed,
+                            'mb_total': mb_total,
+                            'sync_start_time': sync_start_time
+                        })
                     else:
                         skipped_files += 1
                 except Exception as e:
@@ -482,11 +660,58 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
                     log.error(f"Error processing Outlook message {message_id}:", exc_info=True)
                     skipped_files += 1
         
+        await emit_sync_progress(USER_ID, 'microsoft', 'outlook', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing and updating status',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
         print(f"\nOutlook Sync Summary:")
         print(f"Emails uploaded: {len(uploaded_files)}")
         print(f"Emails skipped: {skipped_files}")
 
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'synced')
+        # Accounting Metrics (align with Google)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        print("\nAccounting Metrics:")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
+        print(f"📊 Billable API Calls: {total_api_calls}")
+        print(f"📦 Files Processed: {files_total}")
+        print(f"➕ Files Added: {len(uploaded_files)}")
+        print(f"🔄 Files Updated: 0")
+        print(f"🗑️  Orphans Removed: 0")
+        print(f"⛔ Skipped Files: {skipped_files}")
+
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": len(uploaded_files),
+                "updated": 0,
+                "removed": 0,
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": files_total,
+                "total_size_bytes": 0,
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'embedding', sync_results=sync_results)
         
         return {
             'uploaded': len(uploaded_files),
@@ -647,6 +872,22 @@ async def sync_onedrive_to_storage(auth_token):
     global total_api_calls, USER_ID
     
     print('Starting OneDrive sync process...')
+
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    await emit_sync_progress(USER_ID, 'microsoft', 'onedrive', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
     
     uploaded_files = []
     deleted_files = []
@@ -655,6 +896,26 @@ async def sync_onedrive_to_storage(auth_token):
     try:
         all_files = list_onedrive_files_recursively('root', auth_token)
         print(f"Found {len(all_files)} files in OneDrive (after size filtering)")
+
+        # Discovery complete - set totals
+        files_total = len(all_files)
+        mb_total = sum(int(f.get('size', 0)) for f in all_files)
+        await update_data_source_sync_status(
+            USER_ID, 'microsoft', 'onedrive', 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        await emit_sync_progress(USER_ID, 'microsoft', 'onedrive', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing existing files and determining sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         user_prefix = f"userResources/{USER_ID}/Microsoft/OneDrive/"
         existing_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
@@ -715,14 +976,44 @@ async def sync_onedrive_to_storage(auth_token):
                 else:
                     skipped_files += 1
             
+            files_processed = 0
+            mb_processed = 0
             for future, file in futures:
                 try:
                     result = future.result()
                     if result:
                         uploaded_files.append(result)
+                        files_processed += 1
+                        try:
+                            mb_processed += int(result.get('size', 0))
+                        except Exception:
+                            pass
+                        # Emit processing progress update
+                        await emit_sync_progress(USER_ID, 'microsoft', 'onedrive', {
+                            'phase': 'processing',
+                            'phase_name': 'Phase 3: Processing',
+                            'phase_description': 'synchronizing files to storage',
+                            'files_processed': files_processed,
+                            'files_total': files_total,
+                            'mb_processed': mb_processed,
+                            'mb_total': mb_total,
+                            'sync_start_time': sync_start_time
+                        })
                 except Exception as e:
                     print(f"Error uploading {file['fullPath']}: {str(e)}")
                     log.error(f"Error uploading {file['fullPath']}:", exc_info=True)
+        
+        # Emit summarizing phase before printing summary
+        await emit_sync_progress(USER_ID, 'microsoft', 'onedrive', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing and updating status',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         print('\nOneDrive Sync Summary:')
         for file in uploaded_files:
@@ -732,18 +1023,47 @@ async def sync_onedrive_to_storage(auth_token):
         for file in deleted_files:
             print(f" - {file['name']} | {format_bytes(file['size'])} | Created: {file['timeCreated']}")
         
-        total_runtime = int((time.time() - script_start_time) * 1000)
+        # Accounting Metrics (align with Google)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        files_added = len([f for f in uploaded_files if f['type'] == 'new'])
+        files_updated = len([f for f in uploaded_files if f['type'] == 'updated'])
+
         print("\nAccounting Metrics:")
-        print(f"Total Runtime: {(total_runtime/1000):.2f} seconds")
-        print(f"Billable API Calls: {total_api_calls}")
-        print(f"Files Processed: {len(all_files)}")
-        print(f"Orphans Removed: {len(deleted_files)}")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
+        print(f"📊 Billable API Calls: {total_api_calls}")
+        print(f"📦 Files Processed: {len(all_files)}")
+        print(f"➕ Files Added: {files_added}")
+        print(f"🔄 Files Updated: {files_updated}")
+        print(f"🗑️  Orphans Removed: {len(deleted_files)}")
         
-        print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
-              f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
-              f"-{len(deleted_files)} removed, {skipped_files} skipped")
+        print(f"\nTotal: +{files_added} added, ^{files_updated} updated, -{len(deleted_files)} removed, {skipped_files} skipped")
         
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'synced')
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": files_added,
+                "updated": files_updated,
+                "removed": len(deleted_files),
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(all_files),
+                "total_size_bytes": sum(int(f.get('size', 0) or 0) for f in all_files),
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+        
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'embedding', sync_results=sync_results)
               
         return {
             'uploaded': len(uploaded_files),
@@ -958,6 +1278,22 @@ async def sync_sharepoint_to_storage(auth_token):
     global total_api_calls, USER_ID
     
     print('Starting SharePoint sync process...')
+
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    await emit_sync_progress(USER_ID, 'microsoft', 'sharepoint', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
     
     uploaded_files = []
     deleted_files = []
@@ -996,6 +1332,26 @@ async def sync_sharepoint_to_storage(auth_token):
                 all_files.extend(site_files)
         
         print(f"Found {len(all_files)} files across all SharePoint sites (after size filtering)")
+
+        # Discovery complete - set totals
+        files_total = len(all_files)
+        mb_total = sum(int(f.get('size', 0)) for f in all_files)
+        await update_data_source_sync_status(
+            USER_ID, 'microsoft', 'sharepoint', 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        await emit_sync_progress(USER_ID, 'microsoft', 'sharepoint', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing existing files and determining sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         user_prefix = f"userResources/{USER_ID}/Microsoft/SharePoint/"
         existing_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
@@ -1056,14 +1412,42 @@ async def sync_sharepoint_to_storage(auth_token):
                 else:
                     skipped_files += 1
             
+            files_processed = 0
+            mb_processed = 0
             for future, file in futures:
                 try:
                     result = future.result()
                     if result:
                         uploaded_files.append(result)
+                        files_processed += 1
+                        try:
+                            mb_processed += int(result.get('size', 0))
+                        except Exception:
+                            pass
+                        await emit_sync_progress(USER_ID, 'microsoft', 'sharepoint', {
+                            'phase': 'processing',
+                            'phase_name': 'Phase 3: Processing',
+                            'phase_description': 'synchronizing files to storage',
+                            'files_processed': files_processed,
+                            'files_total': files_total,
+                            'mb_processed': mb_processed,
+                            'mb_total': mb_total,
+                            'sync_start_time': sync_start_time
+                        })
                 except Exception as e:
                     print(f"Error uploading {file['fullPath']}: {str(e)}")
                     log.error(f"Error uploading {file['fullPath']}:", exc_info=True)
+        
+        await emit_sync_progress(USER_ID, 'microsoft', 'sharepoint', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing and updating status',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         print('\nSharePoint Sync Summary:')
         for file in uploaded_files:
@@ -1073,18 +1457,47 @@ async def sync_sharepoint_to_storage(auth_token):
         for file in deleted_files:
             print(f" - {file['name']} | {format_bytes(file['size'])} | Created: {file['timeCreated']}")
         
-        total_runtime = int((time.time() - script_start_time) * 1000)
+        # Accounting Metrics (align with Google)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        files_added = len([f for f in uploaded_files if f['type'] == 'new'])
+        files_updated = len([f for f in uploaded_files if f['type'] == 'updated'])
+
         print("\nAccounting Metrics:")
-        print(f"Total Runtime: {(total_runtime/1000):.2f} seconds")
-        print(f"Billable API Calls: {total_api_calls}")
-        print(f"Files Processed: {len(all_files)}")
-        print(f"Orphans Removed: {len(deleted_files)}")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
+        print(f"📊 Billable API Calls: {total_api_calls}")
+        print(f"📦 Files Processed: {len(all_files)}")
+        print(f"➕ Files Added: {files_added}")
+        print(f"🔄 Files Updated: {files_updated}")
+        print(f"🗑️  Orphans Removed: {len(deleted_files)}")
         
-        print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
-              f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
-              f"-{len(deleted_files)} removed, {skipped_files} skipped")
+        print(f"\nTotal: +{files_added} added, ^{files_updated} updated, -{len(deleted_files)} removed, {skipped_files} skipped")
         
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'sharepoint', 'synced')
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": files_added,
+                "updated": files_updated,
+                "removed": len(deleted_files),
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(all_files),
+                "total_size_bytes": sum(int(f.get('size', 0) or 0) for f in all_files),
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+        
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'sharepoint', 'embedding', sync_results=sync_results)
         
         return {
             'uploaded': len(uploaded_files),
