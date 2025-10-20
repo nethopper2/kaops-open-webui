@@ -107,20 +107,26 @@ def is_file_size_valid(size):
 # GMAIL SYNC FUNCTIONS
 # ============================================================================
 
-def list_gmail_messages(auth_token, query='', max_results=1000):
-    """List Gmail messages with optional query filter"""
+def list_gmail_messages(auth_token, query='', max_results=None):
+    """List Gmail messages with optional query filter and pagination support"""
     try:
         all_messages = []
         next_page_token = None
         
         while True:
-            # Check if we've already reached the max_results limit
-            if len(all_messages) >= max_results:
+            # Check if we've already reached the max_results limit (if specified)
+            if max_results and len(all_messages) >= max_results:
                 break
                 
-            remaining = max_results - len(all_messages)
+            # Calculate remaining messages to fetch
+            if max_results:
+                remaining = max_results - len(all_messages)
+                page_size = min(remaining, 500)  # Gmail API limit is 500
+            else:
+                page_size = 500  # Use full page size if no limit
+            
             params = {
-                'maxResults': min(remaining, 500), # Gmail API limit is 500
+                'maxResults': page_size,
                 'q': query
             }
             
@@ -137,7 +143,11 @@ def list_gmail_messages(auth_token, query='', max_results=1000):
             if not next_page_token:
                 break
         
-        return all_messages[:max_results]
+        # Trim to max_results if specified
+        if max_results and len(all_messages) > max_results:
+            all_messages = all_messages[:max_results]
+        
+        return all_messages
         
     except Exception as error:
         print(f"Error listing Gmail messages: {str(error)}")
@@ -229,7 +239,7 @@ def convert_email_to_text(email_data):
         log.error(f"Error in convert_email_to_text:", exc_info=True)
         return ""
 
-async def sync_gmail_to_storage(auth_token, query='', max_emails=1000, user_id=None):
+async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=None):
     """Sync Gmail messages to configured storage backend"""
     global USER_ID, total_api_calls
     
@@ -261,15 +271,33 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=1000, user_id=N
         })
         
         # Get list of Gmail messages
-        print(f"Fetching Gmail messages with query: '{query}' (max: {max_emails})")
+        max_display = max_emails if max_emails else "unlimited"
+        print(f"Fetching Gmail messages with query: '{query}' (max: {max_display})")
         messages = list_gmail_messages(auth_token, query, max_emails)
         print(f"Found {len(messages)} Gmail messages")
         total_api_calls += 1
         
+        # Get existing Gmail files using unified interface
+        print("Checking existing Gmail files in storage...")
+        gmail_prefix = f"userResources/{USER_ID}/Google/Gmail/"
+        existing_files = list_files_unified(prefix=gmail_prefix, user_id=USER_ID)
+        total_api_calls += 1
+        
+        # Get accurate file summary for progress tracking
+        print("Getting Gmail file summary from storage...")
+        from .data_ingestion import get_files_summary
+        summary = get_files_summary(prefix=gmail_prefix, auth_token=None)
+        total_api_calls += 1
+        
+        # Use summary data for accurate totals
+        existing_file_count = summary.get('totalFiles', 0)
+        existing_total_size = summary.get('totalSize', 0)
+        
         # Calculate total size for progress tracking
-        # Start with a reasonable estimate (50KB average per email)
+        # Use existing storage size + estimated size for new emails
         estimated_size_per_email = 50 * 1024  # 50KB
-        total_size = len(messages) * estimated_size_per_email
+        new_emails_estimated_size = len(messages) * estimated_size_per_email
+        total_size = existing_total_size + new_emails_estimated_size
         
         # Phase 2: Discovery
         print("----------------------------------------------------------------------")
@@ -290,12 +318,6 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=1000, user_id=N
             'total_size': total_size
         })
         
-        # Get existing Gmail files using unified interface
-        print("Checking existing Gmail files in storage...")
-        gmail_prefix = f"userResources/{USER_ID}/Google/Gmail/"
-        existing_files = list_files_unified(prefix=gmail_prefix, max_results=1000, user_id=USER_ID)
-        total_api_calls += 1
-        
         # Handle different response formats from backends - create a map like Google Drive
         existing_email_files = set()
         existing_email_map = {}
@@ -305,7 +327,7 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=1000, user_id=N
                 existing_email_files.add(file_name)
                 existing_email_map[file_name] = file
         
-        print(f"Found {len(existing_email_files)} existing Gmail files in storage")
+        print(f"Found {existing_file_count} existing Gmail files in storage ({existing_total_size} bytes total)")
         
         # Phase 3: Processing
         print("----------------------------------------------------------------------")
@@ -465,8 +487,8 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=1000, user_id=N
                 "sync_timestamp": int(time.time())
             },
             "overall_profile": {
-                "total_files": len(existing_email_files) + files_added,  # All emails in storage
-                "total_size_bytes": total_size,  # Actual total size from processing
+                "total_files": existing_file_count + files_added,  # Accurate count from summary + new files
+                "total_size_bytes": existing_total_size + (files_added * estimated_size_per_email),  # Accurate size from summary + new files
                 "last_updated": int(time.time()),
                 "folders_count": 0  # Gmail doesn't have folders in this context
             }
@@ -1170,7 +1192,8 @@ async def sync_drive_to_storage(auth_token, user_id):
         
         # Set total files and calculate total size for progress tracking
         files_total = len(all_files)
-        mb_total = sum(int(f.get('size', 0)) for f in all_files)
+        new_files_size = sum(int(f.get('size', 0)) for f in all_files)
+        mb_total = new_files_size  # Will be updated with existing size after summary call
         
         # Update progress in database
         await update_data_source_sync_status(
@@ -1210,12 +1233,26 @@ async def sync_drive_to_storage(auth_token, user_id):
         user_prefix = f"userResources/{USER_ID}/Google/Google Drive/My Drive/"
         existing_files = list_files_unified(prefix=user_prefix, user_id=USER_ID)
         
+        # Get accurate file summary for progress tracking
+        print("Getting Google Drive file summary from storage...")
+        from .data_ingestion import get_files_summary
+        summary = get_files_summary(prefix=user_prefix, auth_token=None)
+        
+        # Use summary data for accurate totals
+        existing_file_count = summary.get('totalFiles', 0)
+        existing_total_size = summary.get('totalSize', 0)
+        
+        # Update mb_total with existing size
+        mb_total = existing_total_size + new_files_size
+        
         # Create file maps for comparison - handle different response formats
         existing_file_map = {}
         for file in existing_files:
             file_name = file.get('name') or file.get('key', '')
             if file_name:
                 existing_file_map[file_name] = file
+        
+        print(f"Found {existing_file_count} existing Google Drive files in storage ({existing_total_size} bytes total)")
         
         
         # Ensure all files have fullPath before creating the set (shared-with-me files already have it)
@@ -1401,8 +1438,8 @@ async def sync_drive_to_storage(auth_token, user_id):
                 "sync_timestamp": int(time.time())
             },
             "overall_profile": {
-                "total_files": len(all_files),
-                "total_size_bytes": sum(int(f.get('size', 0) or 0) for f in all_files),
+                "total_files": existing_file_count + files_added,  # Accurate count from summary + new files
+                "total_size_bytes": existing_total_size + new_files_size,  # Accurate size from summary + new files
                 "last_updated": int(time.time()),
                 "folders_count": len([f for f in all_files if f.get('mimeType') == 'application/vnd.google-apps.folder'])
             }
@@ -1487,7 +1524,7 @@ async def initiate_google_file_sync(
     sync_drive=True, 
     sync_gmail=True, 
     gmail_query='', 
-    max_emails=1000,
+    max_emails=None,
     storage_backend: str = None
 ):
     """

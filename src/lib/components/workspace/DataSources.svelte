@@ -46,13 +46,14 @@
 	let showSelfHostedAuth = false;
 	let selfHostedAuthDataSource: DataSource | null = null;
 
-	// Sort data sources by action, then by name
-	$: sortedDataSources = [...dataSources].sort((a, b) => {
-		if (a.action === b.action) {
-			return a.sync_status.localeCompare(b.sync_status);
-		}
-		return (a.action || '').localeCompare(b.action || '');
-	});
+    // Stable sort: by action, then by layer, then by name/id (no status)
+    $: sortedDataSources = [...dataSources].sort((a, b) => {
+        const actionCmp = (a.action || '').localeCompare(b.action || '');
+        if (actionCmp !== 0) return actionCmp;
+        const layerCmp = (a.layer || '').localeCompare(b.layer || '');
+        if (layerCmp !== 0) return layerCmp;
+        return (a.name || a.id).localeCompare(b.name || b.id);
+    });
 
 	$: filteredItems = sortedDataSources.filter(
 		(ds) =>
