@@ -364,7 +364,43 @@ async def sync_onenote_to_storage(auth_token):
         print(f"Pages uploaded: {len(uploaded_files)}")
         print(f"Pages skipped: {skipped_files}")
 
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'onenote', 'synced')
+        # Accounting Metrics (align with Google)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        print("\nAccounting Metrics:")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
+        print(f"📊 Billable API Calls: {total_api_calls}")
+        print(f"📦 Files Processed: {files_total}")
+        print(f"➕ Files Added: {len(uploaded_files)}")
+        print(f"🔄 Files Updated: 0")
+        print(f"🗑️  Orphans Removed: 0")
+        print(f"⛔ Skipped Files: {skipped_files}")
+
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": len(uploaded_files),
+                "updated": 0,
+                "removed": 0,
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": files_total,
+                "total_size_bytes": 0,
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'onenote', 'embedding', sync_results=sync_results)
         
         return {
             'uploaded': len(uploaded_files),
@@ -632,7 +668,43 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
         print(f"Emails uploaded: {len(uploaded_files)}")
         print(f"Emails skipped: {skipped_files}")
 
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'synced')
+        # Accounting Metrics (align with Google)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        print("\nAccounting Metrics:")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
+        print(f"📊 Billable API Calls: {total_api_calls}")
+        print(f"📦 Files Processed: {files_total}")
+        print(f"➕ Files Added: {len(uploaded_files)}")
+        print(f"🔄 Files Updated: 0")
+        print(f"🗑️  Orphans Removed: 0")
+        print(f"⛔ Skipped Files: {skipped_files}")
+
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": len(uploaded_files),
+                "updated": 0,
+                "removed": 0,
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": files_total,
+                "total_size_bytes": 0,
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'embedding', sync_results=sync_results)
         
         return {
             'uploaded': len(uploaded_files),
@@ -944,18 +1016,47 @@ async def sync_onedrive_to_storage(auth_token):
         for file in deleted_files:
             print(f" - {file['name']} | {format_bytes(file['size'])} | Created: {file['timeCreated']}")
         
-        total_runtime = int((time.time() - script_start_time) * 1000)
+        # Accounting Metrics (align with Google)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        files_added = len([f for f in uploaded_files if f['type'] == 'new'])
+        files_updated = len([f for f in uploaded_files if f['type'] == 'updated'])
+
         print("\nAccounting Metrics:")
-        print(f"Total Runtime: {(total_runtime/1000):.2f} seconds")
-        print(f"Billable API Calls: {total_api_calls}")
-        print(f"Files Processed: {len(all_files)}")
-        print(f"Orphans Removed: {len(deleted_files)}")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
+        print(f"📊 Billable API Calls: {total_api_calls}")
+        print(f"📦 Files Processed: {len(all_files)}")
+        print(f"➕ Files Added: {files_added}")
+        print(f"🔄 Files Updated: {files_updated}")
+        print(f"🗑️  Orphans Removed: {len(deleted_files)}")
         
-        print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
-              f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
-              f"-{len(deleted_files)} removed, {skipped_files} skipped")
+        print(f"\nTotal: +{files_added} added, ^{files_updated} updated, -{len(deleted_files)} removed, {skipped_files} skipped")
         
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'synced')
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": files_added,
+                "updated": files_updated,
+                "removed": len(deleted_files),
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(all_files),
+                "total_size_bytes": sum(int(f.get('size', 0) or 0) for f in all_files),
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+        
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'embedding', sync_results=sync_results)
               
         return {
             'uploaded': len(uploaded_files),
@@ -1349,18 +1450,47 @@ async def sync_sharepoint_to_storage(auth_token):
         for file in deleted_files:
             print(f" - {file['name']} | {format_bytes(file['size'])} | Created: {file['timeCreated']}")
         
-        total_runtime = int((time.time() - script_start_time) * 1000)
+        # Accounting Metrics (align with Google)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        files_added = len([f for f in uploaded_files if f['type'] == 'new'])
+        files_updated = len([f for f in uploaded_files if f['type'] == 'updated'])
+
         print("\nAccounting Metrics:")
-        print(f"Total Runtime: {(total_runtime/1000):.2f} seconds")
-        print(f"Billable API Calls: {total_api_calls}")
-        print(f"Files Processed: {len(all_files)}")
-        print(f"Orphans Removed: {len(deleted_files)}")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
+        print(f"📊 Billable API Calls: {total_api_calls}")
+        print(f"📦 Files Processed: {len(all_files)}")
+        print(f"➕ Files Added: {files_added}")
+        print(f"🔄 Files Updated: {files_updated}")
+        print(f"🗑️  Orphans Removed: {len(deleted_files)}")
         
-        print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
-              f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
-              f"-{len(deleted_files)} removed, {skipped_files} skipped")
+        print(f"\nTotal: +{files_added} added, ^{files_updated} updated, -{len(deleted_files)} removed, {skipped_files} skipped")
         
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'sharepoint', 'synced')
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": files_added,
+                "updated": files_updated,
+                "removed": len(deleted_files),
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(all_files),
+                "total_size_bytes": sum(int(f.get('size', 0) or 0) for f in all_files),
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+        
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'sharepoint', 'embedding', sync_results=sync_results)
         
         return {
             'uploaded': len(uploaded_files),
