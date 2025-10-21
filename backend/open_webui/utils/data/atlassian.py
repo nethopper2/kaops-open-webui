@@ -735,6 +735,10 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
     
     # Initialize progress tracking
     sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
     await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',
@@ -808,6 +812,10 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
             mb_total=mb_total,
             sync_start_time=sync_start_time
         )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing existing items and determining sync plan...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
             'phase': 'discovery',
             'phase_name': 'Phase 2: Discovery',
@@ -901,6 +909,10 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
             # Process completed uploads
             files_processed = 0
             mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing items to storage...")
+            print("----------------------------------------------------------------------")
             for future, item_for_log in futures:
                 try:
                     result = future.result()
@@ -981,6 +993,10 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
             }
         }
         
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
         await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'embedding', sync_results=sync_results)
     
     except Exception as error:
@@ -1647,6 +1663,10 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
     
     # Initialize progress tracking
     sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
     await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',
@@ -1803,6 +1823,10 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
             mb_total=mb_total,
             sync_start_time=sync_start_time
         )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing existing items and determining sync plan...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
             'phase': 'discovery',
             'phase_name': 'Phase 2: Discovery',
@@ -1899,6 +1923,10 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
             # Process completed uploads
             files_processed = 0
             mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing items to storage...")
+            print("----------------------------------------------------------------------")
             for future, item_for_log in futures:
                 try:
                     result = future.result()
@@ -1923,6 +1951,10 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
                     log.error(f"Error processing future for {item_for_log.get('fullPath')}: {str(e)}", exc_info=True)
         
         # Emit summarizing phase before printing summary
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing Atlassian sync results...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
             'phase': 'summarizing',
             'phase_name': 'Phase 4: Summarizing',
@@ -2012,6 +2044,10 @@ async def initiate_atlassian_sync_selected_self_hosted(user_id: str, credentials
 
     # Initialize progress tracking
     sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
     await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',

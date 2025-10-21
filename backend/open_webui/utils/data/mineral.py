@@ -344,6 +344,10 @@ async def sync_mineral_to_storage(auth_token, base_url):
 
     # Initialize progress tracking
     sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
     await emit_sync_progress(USER_ID, 'mineral', 'handbooks', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',
@@ -376,6 +380,10 @@ async def sync_mineral_to_storage(auth_token, base_url):
             mb_total=mb_total,
             sync_start_time=sync_start_time
         )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing handbooks and preparing sync plan...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'mineral', 'handbooks', {
             'phase': 'discovery',
             'phase_name': 'Phase 2: Discovery',
@@ -426,6 +434,10 @@ async def sync_mineral_to_storage(auth_token, base_url):
             # Process completed uploads
             files_processed = 0
             mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing handbooks to storage...")
+            print("----------------------------------------------------------------------")
             for future, title in futures:
                 try:
                     result = future.result()
@@ -456,6 +468,10 @@ async def sync_mineral_to_storage(auth_token, base_url):
                     skipped_files += 1
         
         # Emit summarizing phase before printing summary
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing Mineral sync results...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'mineral', 'handbooks', {
             'phase': 'summarizing',
             'phase_name': 'Phase 4: Summarizing',
@@ -516,6 +532,10 @@ async def sync_mineral_to_storage(auth_token, base_url):
         }
 
         # Final state: Embedding (to match Google)
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
         await update_data_source_sync_status(
             USER_ID, 'mineral', 'handbooks', 'embedding',
             files_total=sync_results['overall_profile']['total_files'],
