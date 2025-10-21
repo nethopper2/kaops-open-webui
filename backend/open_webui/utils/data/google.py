@@ -312,11 +312,48 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         })
         
         # Get list of Gmail messages
-        max_display = max_emails if max_emails else "unlimited"
+        # Get Gmail email limit from config
+        from open_webui.main import app
+        gmail_limit = app.state.NH_DATA_SOURCE_GMAIL_MAX_EMAIL_SYNC
+        max_display = max_emails if max_emails else gmail_limit
         print(f"Fetching Gmail messages with query: '{query}' (max: {max_display})")
-        messages = list_gmail_messages(auth_token, query, max_emails)
+        messages = list_gmail_messages(auth_token, query, max_emails or gmail_limit)
         print(f"Found {len(messages)} Gmail messages")
         total_api_calls += 1
+        
+        # Calculate metadata for newest and oldest emails
+        if messages:
+            oldest_timestamp = None
+            newest_timestamp = None
+            current_time = time.time()  # Calculate once
+            
+            try:
+                # Get oldest email (last message in the list)
+                last_message = messages[-1]
+                oldest_details = get_gmail_message(last_message['id'], auth_token)
+                
+                # Get newest email (first message in the list)
+                first_message = messages[0]
+                newest_details = get_gmail_message(first_message['id'], auth_token)
+                
+                # Process oldest email
+                if oldest_details and oldest_details.get('internalDate'):
+                    oldest_timestamp = int(oldest_details['internalDate']) / 1000
+                    oldest_email_date = datetime.fromtimestamp(oldest_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                    oldest_email_age_days = int((current_time - oldest_timestamp) // 86400)
+                
+                # Process newest email
+                if newest_details and newest_details.get('internalDate'):
+                    newest_timestamp = int(newest_details['internalDate']) / 1000
+                    newest_email_date = datetime.fromtimestamp(newest_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                    newest_email_age_days = int((current_time - newest_timestamp) // 86400)
+                
+                # Calculate email range in days (newest - oldest)
+                if oldest_timestamp and newest_timestamp:
+                    email_range_days = int((newest_timestamp - oldest_timestamp) // 86400)
+                    
+            except Exception as e:
+                log.warning(f"Could not fetch email metadata: {e}")
         
         # Get existing Gmail files using unified interface
         print("Checking existing Gmail files in storage...")
@@ -533,6 +570,14 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
                 "total_size_bytes": existing_total_size + (files_added * estimated_size_per_email),  # Accurate size from summary + new files
                 "last_updated": int(time.time()),
                 "folders_count": 0  # Gmail doesn't have folders in this context
+            },
+            "metadata": {
+                "emails_processed": len(messages),
+                "oldest_email_date": oldest_email_date if 'oldest_email_date' in locals() else None,
+                "oldest_email_age_days": oldest_email_age_days if 'oldest_email_age_days' in locals() else None,
+                "newest_email_date": newest_email_date if 'newest_email_date' in locals() else None,
+                "newest_email_age_days": newest_email_age_days if 'newest_email_age_days' in locals() else None,
+                "email_range_days": email_range_days if 'email_range_days' in locals() else None
             }
         }
         
