@@ -3,6 +3,7 @@
 	import { WEBUI_NAME, socket, config } from '$lib/stores';
 	import Search from '../icons/Search.svelte';
 	import PulsingDots from '../common/PulsingDots.svelte';
+	import ConfirmDialog from '../common/ConfirmDialog.svelte';
 	import Microsoft from '../icons/Microsoft.svelte';
 	import Slack from '../icons/Slack.svelte';
 	import GoogleDrive from '../icons/GoogleDrive.svelte';
@@ -46,6 +47,10 @@
 	let projectSelectorDataSource: DataSource | null = null;
 	let showSelfHostedAuth = false;
 	let selfHostedAuthDataSource: DataSource | null = null;
+
+	// Delete confirmation dialog state
+	let showDeleteConfirm = false;
+	let selectedDataSource: DataSource | null = null;
 
     // Stable sort: by action, then by layer, then by name/id (no status)
     $: sortedDataSources = [...dataSources].sort((a, b) => {
@@ -636,6 +641,20 @@
 	on:close={handleProjectSelectorClose}
 />
 
+<!-- Delete Confirmation Dialog -->
+<ConfirmDialog
+	bind:show={showDeleteConfirm}
+	title={$i18n.t('Delete data source?')}
+	on:confirm={() => {
+		handleDelete(selectedDataSource);
+		showDeleteConfirm = false;
+	}}
+>
+	<div class="text-sm text-gray-500">
+		{$i18n.t('This will delete the')} <span class="font-semibold">{selectedDataSource?.name}</span> {$i18n.t('files from the AI system. You may resync the data source anytime after the delete process completes.')}
+	</div>
+</ConfirmDialog>
+
 {#if loaded}
 	<div class="flex flex-col gap-1 my-1.5">
 		<div class="flex justify-between items-center">
@@ -715,7 +734,10 @@
 												<button
 													class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error')}
-													on:click={() => handleDelete(dataSource)}
+													on:click={() => {
+														selectedDataSource = dataSource;
+														showDeleteConfirm = true;
+													}}
 												>
 													Delete
 												</button>
@@ -848,7 +870,10 @@
 									<button
 										class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error')}
-										on:click={() => handleDelete(dataSource)}
+										on:click={() => {
+											selectedDataSource = dataSource;
+											showDeleteConfirm = true;
+										}}
 									>
 										Delete
 									</button>
@@ -909,7 +934,10 @@
 							<button
 								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error')}
-								on:click={() => handleDelete(dataSource)}
+								on:click={() => {
+									selectedDataSource = dataSource;
+									showDeleteConfirm = true;
+								}}
 							>
 								{isProcessing(dataSource) ? 'Processing...' : 'Delete'}
 							</button>
