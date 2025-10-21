@@ -1301,11 +1301,13 @@ from open_webui.utils.data.google import set_socketio_instance as set_google_soc
 from open_webui.utils.data.microsoft import set_socketio_instance as set_microsoft_socketio_instance
 from open_webui.utils.data.atlassian import set_socketio_instance as set_atlassian_socketio_instance
 from open_webui.utils.data.slack import set_socketio_instance as set_slack_socketio_instance
+from open_webui.utils.data.mineral import set_socketio_instance as set_mineral_socketio_instance
 from open_webui.socket.main import sio
 set_google_socketio_instance(sio)
 set_microsoft_socketio_instance(sio)
 set_atlassian_socketio_instance(sio)
 set_slack_socketio_instance(sio)
+set_mineral_socketio_instance(sio)
 
 
 app.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
