@@ -606,12 +606,53 @@ async def create_background_delete_task(request: Request, provider: str, user_id
         # Update status to 'deleted' when deletion completes
         if result:
             try:
+                # Get current file summary to confirm 0 files after deletion
+                from open_webui.utils.data.data_ingestion import get_files_summary, generate_pai_service_token
+                user_prefix = f"userResources/{user_id}/{provider.title()}/{layer or ''}/"
+                auth_token = generate_pai_service_token(user_id)
+                summary = get_files_summary(prefix=user_prefix, auth_token=auth_token)
+                
+                # Get the historical file count before deletion to show what was removed
+                # Find the data source to get historical counts
+                user_data_sources = DataSources.get_data_sources_by_user_id(user_id)
+                data_source_found = None
+                for ds in user_data_sources:
+                    if ds.action == provider and ds.layer == layer:
+                        data_source_found = ds
+                        break
+                
+                historical_files = data_source_found.files_total if data_source_found else 0
+                historical_size = data_source_found.mb_total if data_source_found else 0
+                
+                # Create sync_results showing the actual deletion activity
+                sync_results = {
+                    "latest_sync": {
+                        "added": 0,
+                        "updated": 0,
+                        "removed": historical_files,  # Show how many files were deleted
+                        "skipped": 0,
+                        "runtime_ms": 0,
+                        "api_calls": 0,
+                        "skip_reasons": {},
+                        "sync_timestamp": int(time.time())
+                    },
+                    "overall_profile": {
+                        "total_files": summary.get('totalFiles', 0),
+                        "total_size_bytes": summary.get('totalSize', 0),
+                        "last_updated": int(time.time()),
+                        "folders_count": 0
+                    }
+                }
+                
                 DataSources.update_data_source_sync_status_by_name(
                     user_id=user_id,
                     source_name=data_source_name or provider.title(),
                     layer_name=layer or "",
                     sync_status="deleted",
-                    last_sync=int(time.time())
+                    last_sync=int(time.time()),
+                    files_total=summary.get('totalFiles', 0),
+                    mb_total=summary.get('totalSize', 0),
+                    sync_results=sync_results
                 )
                 print(f'----------------------------------------------------------------------')
                 print(f'✅ Delete Phase: Completed - Data source successfully deleted')
@@ -629,7 +670,10 @@ async def create_background_delete_task(request: Request, provider: str, user_id
                             "source": data_source_name or provider.title(),
                             "status": "deleted",
                             "message": "Data source deletion completed",
-                            "timestamp": str(int(time.time()))
+                            "timestamp": str(int(time.time())),
+                            "sync_results": sync_results,
+                            "files_total": 0,
+                            "mb_total": 0
                         }
                     )
                 except Exception as e:
