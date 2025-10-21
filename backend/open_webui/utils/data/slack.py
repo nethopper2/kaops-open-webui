@@ -1005,6 +1005,10 @@ async def sync_slack_to_storage(auth_token, layer=None):
     
     # Initialize progress tracking
     sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
     await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',
@@ -1085,6 +1089,10 @@ async def sync_slack_to_storage(auth_token, layer=None):
             mb_total=mb_total,
             sync_start_time=sync_start_time
         )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing conversations and files and preparing sync plan...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
             'phase': 'discovery',
             'phase_name': 'Phase 2: Discovery',
@@ -1109,6 +1117,10 @@ async def sync_slack_to_storage(auth_token, layer=None):
         
         # Process conversations with incremental updates
         if unique_conversations:
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing conversations and files to storage...")
+            print("----------------------------------------------------------------------")
             print(f"\nProcessing {len(unique_conversations)} conversations...")
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -1260,6 +1272,10 @@ async def sync_slack_to_storage(auth_token, layer=None):
                 print(f"[{datetime.now().isoformat()}] Deleted orphan: {storage_name}")
         
         # Emit summarizing phase before printing summary
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing Slack sync results...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
             'phase': 'summarizing',
             'phase_name': 'Phase 4: Summarizing',
@@ -1326,6 +1342,10 @@ async def sync_slack_to_storage(auth_token, layer=None):
         }
 
         # Final state: Embedding (to match Google)
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
         await update_data_source_sync_status(
             USER_ID, 'slack', layer, 'embedding',
             files_total=sync_results['overall_profile']['total_files'],

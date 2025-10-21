@@ -237,6 +237,10 @@ async def sync_onenote_to_storage(auth_token):
 
     # Initialize progress tracking
     sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
     await emit_sync_progress(USER_ID, 'microsoft', 'onenote', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',
@@ -308,6 +312,10 @@ async def sync_onenote_to_storage(auth_token):
                 mb_total=mb_total,
                 sync_start_time=sync_start_time
             )
+            # Phase 2: Discovery
+            print("----------------------------------------------------------------------")
+            print("🔎 Phase 2: Discovery - analyzing notebooks and preparing pages for sync...")
+            print("----------------------------------------------------------------------")
             await emit_sync_progress(USER_ID, 'microsoft', 'onenote', {
                 'phase': 'discovery',
                 'phase_name': 'Phase 2: Discovery',
@@ -321,6 +329,10 @@ async def sync_onenote_to_storage(auth_token):
             
             files_processed = 0
             mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing pages to storage...")
+            print("----------------------------------------------------------------------")
             for future, page_title in futures:
                 try:
                     result = future.result()
@@ -349,6 +361,10 @@ async def sync_onenote_to_storage(auth_token):
                     log.error(f"Error processing OneNote page {page_title}:", exc_info=True)
                     skipped_files += 1
         
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing OneNote sync results...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'microsoft', 'onenote', {
             'phase': 'summarizing',
             'phase_name': 'Phase 4: Summarizing',
@@ -557,6 +573,10 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
 
     # Initialize progress tracking
     sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
     await emit_sync_progress(USER_ID, 'microsoft', 'outlook', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',
@@ -588,6 +608,10 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
             mb_total=mb_total,
             sync_start_time=sync_start_time
         )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing messages and preparing sync plan...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'microsoft', 'outlook', {
             'phase': 'discovery',
             'phase_name': 'Phase 2: Discovery',
@@ -602,6 +626,10 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = []
             
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing emails to storage...")
+            print("----------------------------------------------------------------------")
             for message in messages:
                 message_id = message.get('id')
                 message_etag = message.get('@odata.etag', '')
@@ -660,6 +688,10 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
                     log.error(f"Error processing Outlook message {message_id}:", exc_info=True)
                     skipped_files += 1
         
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing Outlook sync results...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'microsoft', 'outlook', {
             'phase': 'summarizing',
             'phase_name': 'Phase 4: Summarizing',
@@ -711,6 +743,10 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
             }
         }
 
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
         await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'embedding', sync_results=sync_results)
         
         return {
@@ -875,6 +911,10 @@ async def sync_onedrive_to_storage(auth_token):
 
     # Initialize progress tracking
     sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
     await emit_sync_progress(USER_ID, 'microsoft', 'onedrive', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',
@@ -906,6 +946,10 @@ async def sync_onedrive_to_storage(auth_token):
             mb_total=mb_total,
             sync_start_time=sync_start_time
         )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing existing files and determining sync plan...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'microsoft', 'onedrive', {
             'phase': 'discovery',
             'phase_name': 'Phase 2: Discovery',
@@ -978,6 +1022,10 @@ async def sync_onedrive_to_storage(auth_token):
             
             files_processed = 0
             mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing files to storage...")
+            print("----------------------------------------------------------------------")
             for future, file in futures:
                 try:
                     result = future.result()
@@ -1004,6 +1052,10 @@ async def sync_onedrive_to_storage(auth_token):
                     log.error(f"Error uploading {file['fullPath']}:", exc_info=True)
         
         # Emit summarizing phase before printing summary
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing OneDrive sync results...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'microsoft', 'onedrive', {
             'phase': 'summarizing',
             'phase_name': 'Phase 4: Summarizing',
@@ -1063,6 +1115,10 @@ async def sync_onedrive_to_storage(auth_token):
             }
         }
         
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
         await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'embedding', sync_results=sync_results)
               
         return {
@@ -1281,6 +1337,10 @@ async def sync_sharepoint_to_storage(auth_token):
 
     # Initialize progress tracking
     sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
     await emit_sync_progress(USER_ID, 'microsoft', 'sharepoint', {
         'phase': 'starting',
         'phase_name': 'Phase 1: Starting',
@@ -1342,6 +1402,10 @@ async def sync_sharepoint_to_storage(auth_token):
             mb_total=mb_total,
             sync_start_time=sync_start_time
         )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing existing files and determining sync plan...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'microsoft', 'sharepoint', {
             'phase': 'discovery',
             'phase_name': 'Phase 2: Discovery',
@@ -1414,6 +1478,10 @@ async def sync_sharepoint_to_storage(auth_token):
             
             files_processed = 0
             mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing files to storage...")
+            print("----------------------------------------------------------------------")
             for future, file in futures:
                 try:
                     result = future.result()
@@ -1438,6 +1506,10 @@ async def sync_sharepoint_to_storage(auth_token):
                     print(f"Error uploading {file['fullPath']}: {str(e)}")
                     log.error(f"Error uploading {file['fullPath']}:", exc_info=True)
         
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing SharePoint sync results...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'microsoft', 'sharepoint', {
             'phase': 'summarizing',
             'phase_name': 'Phase 4: Summarizing',
@@ -1497,6 +1569,10 @@ async def sync_sharepoint_to_storage(auth_token):
             }
         }
         
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
         await update_data_source_sync_status(
             USER_ID, 'microsoft', 'sharepoint', 'embedding', 
             files_total=sync_results['overall_profile']['total_files'],
