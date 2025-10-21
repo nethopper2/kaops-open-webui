@@ -502,7 +502,17 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         print(f"🔄 API calls made: {total_api_calls}")
         print(f"⏱️  Total runtime: {int((time.time() - script_start_time) * 1000)}ms")
 
-        await update_data_source_sync_status(user_id, 'google', 'gmail', 'embedding', sync_results=sync_results)
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - Vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
+        
+        await update_data_source_sync_status(
+            user_id, 'google', 'gmail', 'embedding', 
+            files_total=sync_results['overall_profile']['total_files'],
+            mb_total=sync_results['overall_profile']['total_size_bytes'],
+            sync_results=sync_results
+        )
         
         return {
             'uploaded': len(uploaded_files),
@@ -1445,11 +1455,18 @@ async def sync_drive_to_storage(auth_token, user_id):
             }
         }
 
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - Vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
+        
         # Final progress update
         await update_data_source_sync_status(
             user_id, 'google', 'google_drive', 'embedding',
             files_processed=files_processed,
+            files_total=sync_results['overall_profile']['total_files'],
             mb_processed=mb_processed,
+            mb_total=sync_results['overall_profile']['total_size_bytes'],
             sync_results=sync_results
         )
         
