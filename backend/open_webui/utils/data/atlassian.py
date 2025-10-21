@@ -2186,6 +2186,10 @@ async def initiate_atlassian_sync_selected_self_hosted(user_id: str, credentials
             # Process completed uploads
             files_processed = 0
             mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing items to storage...")
+            print("----------------------------------------------------------------------")
             for future, item_for_log in futures:
                 try:
                     result = future.result()

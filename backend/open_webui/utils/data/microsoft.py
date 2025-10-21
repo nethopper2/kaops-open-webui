@@ -1052,6 +1052,10 @@ async def sync_onedrive_to_storage(auth_token):
                     log.error(f"Error uploading {file['fullPath']}:", exc_info=True)
         
         # Emit summarizing phase before printing summary
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing OneDrive sync results...")
+        print("----------------------------------------------------------------------")
         await emit_sync_progress(USER_ID, 'microsoft', 'onedrive', {
             'phase': 'summarizing',
             'phase_name': 'Phase 4: Summarizing',
