@@ -465,7 +465,6 @@ class DataSourcesTable:
                     db.commit()
                     db.refresh(data_source) # Refresh to get latest data from DB
 
-
                     log.info(f"Successfully updated sync status for data source '{source_name}' to '{sync_status}' for user {user_id}.")
                     return DataSourceModel.model_validate(data_source)
                 else:

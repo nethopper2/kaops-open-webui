@@ -801,9 +801,11 @@
 										<DataSyncResultsSummary {dataSource} />
 									{:else if dataSource.sync_status === 'deleting'}
 										<!-- No content during deleting state -->
-											{:else if dataSource.sync_status === 'error'}
-												<DataSyncResultsSummary {dataSource} isError={true} />
-											{/if}
+									{:else if dataSource.sync_status === 'deleted'}
+										<DataSyncResultsSummary {dataSource} />
+									{:else if dataSource.sync_status === 'error'}
+										<DataSyncResultsSummary {dataSource} isError={true} />
+									{/if}
 									</td>
 									<td class="py-3 px-4">
 										<!-- Empty cell - takes remaining space -->
@@ -886,6 +888,8 @@
 							{:else if dataSource.sync_status === 'deleting'}
 								<!-- No content during deleting state -->
 							{:else if dataSource.sync_status === 'synced'}
+								<DataSyncResultsSummary {dataSource} />
+							{:else if dataSource.sync_status === 'deleted'}
 								<DataSyncResultsSummary {dataSource} />
 							{:else if dataSource.sync_status === 'embedding'}
 								<DataSyncEmbeddingStatus {dataSource} />
