@@ -312,11 +312,12 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         })
         
         # Get list of Gmail messages
-        # TEMPORARY: Set max limit to 900 for testing
-        test_limit = 900
-        max_display = max_emails if max_emails else test_limit
+        # Get Gmail email limit from config
+        from open_webui.main import app
+        gmail_limit = app.state.NH_DATA_SOURCE_GMAIL_MAX_EMAIL_SYNC
+        max_display = max_emails if max_emails else gmail_limit
         print(f"Fetching Gmail messages with query: '{query}' (max: {max_display})")
-        messages = list_gmail_messages(auth_token, query, max_emails or test_limit)
+        messages = list_gmail_messages(auth_token, query, max_emails or gmail_limit)
         print(f"Found {len(messages)} Gmail messages")
         total_api_calls += 1
         
