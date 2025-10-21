@@ -23,12 +23,47 @@ from open_webui.utils.data.data_ingestion import (
     configure_storage_backend, get_current_backend
 )
 from open_webui.models.data import DataSources
+from open_webui.models.datatokens import OAuthTokens
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
 # Global socketio instance for progress updates
 sio = None
+
+def get_valid_google_token(user_id: str, auth_token: str) -> str:
+    """
+    Get a valid Google token, refreshing if needed.
+    Uses the existing token refresh infrastructure without modifying it.
+    """
+    try:
+        # Import here to avoid circular imports
+        from open_webui.routers.data import handle_token_refresh
+        
+        # Get the stored token entry from database
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user_id, 
+            provider_name='Google'
+        )
+        
+        if not token_entry:
+            # No stored token, use the provided token as-is
+            log.debug(f"No stored Google token found for user {user_id}, using provided token")
+            return auth_token
+        
+        # Use existing token refresh system
+        refreshed_token, needs_reauth = handle_token_refresh('google', token_entry, user_id)
+        
+        if needs_reauth:
+            log.warning(f"Google token needs reauth for user {user_id}, using provided token")
+            return auth_token
+            
+        log.debug(f"Successfully refreshed Google token for user {user_id}")
+        return refreshed_token
+        
+    except Exception as e:
+        log.warning(f"Token refresh failed for user {user_id}, using original token: {e}")
+        return auth_token
 
 def set_socketio_instance(socketio_instance):
     """Set the socketio instance for progress updates"""
@@ -90,9 +125,15 @@ DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3'
 GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me/messages'
 
 def make_request(url, method='GET', headers=None, params=None, data=None, stream=False, auth_token=None):
-    """Helper function to make API requests with error handling"""
+    """Helper function to make API requests with error handling and token refresh"""
     global total_api_calls
     total_api_calls += 1
+    
+    # Get valid token with automatic refresh if needed
+    if auth_token and USER_ID:
+        auth_token = get_valid_google_token(USER_ID, auth_token)
+        if headers and 'Authorization' in headers:
+            headers['Authorization'] = f"Bearer {auth_token}"
     
     return make_api_request(url, method=method, headers=headers, params=params, data=data, stream=stream, auth_token=auth_token)
 
@@ -285,8 +326,9 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         
         # Get accurate file summary for progress tracking
         print("Getting Gmail file summary from storage...")
-        from .data_ingestion import get_files_summary
-        summary = get_files_summary(prefix=gmail_prefix, auth_token=None)
+        from .data_ingestion import get_files_summary, generate_pai_service_token
+        auth_token = generate_pai_service_token(USER_ID)
+        summary = get_files_summary(prefix=gmail_prefix, auth_token=auth_token)
         total_api_calls += 1
         
         # Use summary data for accurate totals
@@ -893,6 +935,10 @@ def get_my_drive_top_level_folders(auth_token):
 def download_file(file_id, auth_token, mime_type=None):
     """Download file content from Google Drive, handling Google's proprietary formats"""
     
+    # Get valid token with automatic refresh if needed
+    if USER_ID:
+        auth_token = get_valid_google_token(USER_ID, auth_token)
+    
     # If mime_type not provided, fetch metadata
     if mime_type is None:
         metadata_url = f"{DRIVE_API_BASE}/files/{file_id}?fields=mimeType,name"
@@ -1245,8 +1291,9 @@ async def sync_drive_to_storage(auth_token, user_id):
         
         # Get accurate file summary for progress tracking
         print("Getting Google Drive file summary from storage...")
-        from .data_ingestion import get_files_summary
-        summary = get_files_summary(prefix=user_prefix, auth_token=None)
+        from .data_ingestion import get_files_summary, generate_pai_service_token
+        auth_token = generate_pai_service_token(USER_ID)
+        summary = get_files_summary(prefix=user_prefix, auth_token=auth_token)
         
         # Use summary data for accurate totals
         existing_file_count = summary.get('totalFiles', 0)
