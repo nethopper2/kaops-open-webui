@@ -1497,7 +1497,12 @@ async def sync_sharepoint_to_storage(auth_token):
             }
         }
         
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'sharepoint', 'embedding', sync_results=sync_results)
+        await update_data_source_sync_status(
+            USER_ID, 'microsoft', 'sharepoint', 'embedding', 
+            files_total=sync_results['overall_profile']['total_files'],
+            mb_total=sync_results['overall_profile']['total_size_bytes'],
+            sync_results=sync_results
+        )
         
         return {
             'uploaded': len(uploaded_files),

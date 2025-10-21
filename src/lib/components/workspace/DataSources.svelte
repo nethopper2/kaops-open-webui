@@ -28,6 +28,7 @@
 	import JiraSelfHostedAuth from './JiraSelfHostedAuth.svelte';
 	import DataSyncProgressBar from './DataSyncProgressBar.svelte';
 	import DataSyncResultsSummary from './DataSyncResultsSummary.svelte';
+	import DataSyncEmbeddingStatus from './DataSyncEmbeddingStatus.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -338,6 +339,8 @@
 		message: string;
 		timestamp: string;
 		sync_results?: any;
+		files_total?: number;
+		mb_total?: number;
 	}) => {
 		dataSources = dataSources.map((ds) => {
 			if (ds.name === sourceData.source) {
@@ -345,7 +348,9 @@
 					...ds, 
 					sync_status: sourceData.status, 
 					last_sync: sourceData.timestamp,
-					sync_results: sourceData.sync_results || ds.sync_results
+					sync_results: sourceData.sync_results || ds.sync_results,
+					files_total: sourceData.files_total !== undefined ? sourceData.files_total : ds.files_total,
+					mb_total: sourceData.mb_total !== undefined ? sourceData.mb_total : ds.mb_total
 				};
 			}
 			return ds;
@@ -739,7 +744,7 @@
 													{getSyncStatusText(dataSource.sync_status)}
 												{/if}
 											</span>
-											{#if dataSource.sync_status === 'syncing'}
+											{#if dataSource.sync_status === 'syncing' || dataSource.sync_status === 'embedding'}
 												<PulsingDots />
 											{/if}
 										</div>
@@ -756,10 +761,7 @@
 											</div>
 										{:else if dataSource.sync_status === 'embedding'}
 											<div class="text-xs text-gray-500 dark:text-gray-400">
-												currently a manual process
-											</div>
-											<div class="text-xs text-gray-500 dark:text-gray-400">
-												{dataSource.last_sync ? formatDate(dataSource.last_sync.toString()) : 'Unknown'}
+												vectorizing data
 											</div>
 										{/if}
 										
@@ -778,7 +780,7 @@
 											</div>
 										{:else if dataSource.sync_status === 'error'}
 											<div class="text-xs text-red-500 dark:text-red-400">
-												failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
+												{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
 											</div>
 										{:else if dataSource.sync_status === 'unsynced'}
 											<div class="text-xs text-gray-500 dark:text-gray-400">
@@ -787,24 +789,26 @@
 										{/if}
 									</div>
 								</td>
-								<td class="py-3 px-4 col-actions h-20">
-									{#if dataSource.sync_status === 'syncing'}
-										<DataSyncProgressBar {...getProgressData(dataSource)} />
-							{:else if dataSource.sync_status === 'synced'}
-								<DataSyncResultsSummary {dataSource} />
-							{:else if dataSource.sync_status === 'embedding'}
-								<DataSyncResultsSummary {dataSource} />
-							{:else if dataSource.sync_status === 'deleting'}
-								<!-- No content during deleting state -->
-									{:else if dataSource.sync_status === 'error'}
-										<div class="text-xs text-red-500 dark:text-red-400">
-											failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
-										</div>
-									{/if}
-								</td>
-								<td class="py-3 px-4">
-									<!-- Empty cell - takes remaining space -->
-								</td>
+								{#if dataSource.sync_status === 'embedding'}
+									<td class="py-3 px-4 h-20" colspan="2">
+										<DataSyncEmbeddingStatus {dataSource} />
+									</td>
+								{:else}
+									<td class="py-3 px-4 col-actions h-20">
+										{#if dataSource.sync_status === 'syncing'}
+											<DataSyncProgressBar {...getProgressData(dataSource)} />
+									{:else if dataSource.sync_status === 'synced'}
+										<DataSyncResultsSummary {dataSource} />
+									{:else if dataSource.sync_status === 'deleting'}
+										<!-- No content during deleting state -->
+											{:else if dataSource.sync_status === 'error'}
+												<DataSyncResultsSummary {dataSource} isError={true} />
+											{/if}
+									</td>
+									<td class="py-3 px-4">
+										<!-- Empty cell - takes remaining space -->
+									</td>
+								{/if}
 							</tr>
 						{/each}
 					</tbody>
@@ -884,11 +888,9 @@
 							{:else if dataSource.sync_status === 'synced'}
 								<DataSyncResultsSummary {dataSource} />
 							{:else if dataSource.sync_status === 'embedding'}
-								<DataSyncResultsSummary {dataSource} />
+								<DataSyncEmbeddingStatus {dataSource} />
 							{:else if dataSource.sync_status === 'error'}
-								<div class="text-xs text-red-500 dark:text-red-400">
-									failed: {dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
-								</div>
+								<DataSyncResultsSummary {dataSource} isError={true} />
 							{/if}
 						</div>
 

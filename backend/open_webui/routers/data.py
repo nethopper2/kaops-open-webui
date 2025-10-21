@@ -922,6 +922,24 @@ async def update_sync_status(
                 id, form_data
             )
             if updated_data_source:
+                # Emit socket event for real-time UI update
+                try:
+                    from open_webui.socket.main import send_user_notification
+                    await send_user_notification(
+                        user_id=user.id,
+                        event_name="data-source-updated",
+                        data={
+                            "source": updated_data_source.name,
+                            "status": updated_data_source.sync_status,
+                            "message": f"{updated_data_source.name} sync status updated!",
+                            "timestamp": str(int(time.time())),
+                            "sync_results": updated_data_source.sync_results
+                        }
+                    )
+                    log.info(f"Emitted data-source-updated event for user {user.id}")
+                except Exception as e:
+                    log.warning(f"Failed to emit socket event: {e}")
+                
                 return DataSourceResponse(
                     id=updated_data_source.id,
                     user_id=updated_data_source.user_id,
@@ -2237,6 +2255,141 @@ async def disconnect_provider_layer(provider: str, user_id: str, layer: str, tea
 ############################
 # Create All Provider Endpoints
 ############################
+
+@router.get("/embedding/status")
+async def get_embedding_status(user=Depends(get_verified_user)):
+    """Get embedding job status from the 4500 server"""
+    try:
+        from open_webui.utils.data.data_ingestion import generate_pai_service_token
+        import requests
+        from requests.exceptions import ConnectionError, Timeout, HTTPError
+        from open_webui.utils.data.data_ingestion import storage_config
+        
+        # Generate JWT token for 4500 server
+        auth_token = generate_pai_service_token(user.id)
+        
+        # Call 4500 server embedding status endpoint
+        url = f"{storage_config.pai_base_url}/rag/embedding/status"
+        headers = {
+            'Authorization': f'Bearer {auth_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        result = response.json()
+        return result
+        
+    except ConnectionError as e:
+        log.warning(f"Embedding service unavailable (connection error): {e}")
+        # Don't change sync_status - keep it as "embedding" so frontend shows embedding status component
+        # The frontend will handle the error response and show the grey progress bar
+        
+        return {
+            "status": "service_unavailable",
+            "message": "Embedding service is currently unavailable",
+            "error": "connection_error"
+        }
+    except Timeout as e:
+        log.warning(f"Embedding service timeout: {e}")
+        # Update any data sources currently in "embedding" status to "error"
+        try:
+            from open_webui.models.data import DataSources
+            from open_webui.socket.main import send_user_notification
+            user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+            for ds in user_data_sources:
+                if ds.sync_status == "embedding":
+                    DataSources.update_data_source_sync_status_by_name(
+                        user_id=user.id,
+                        source_name=ds.name,
+                        layer_name=ds.layer or "",
+                        sync_status="error",
+                        files_total=ds.files_total,
+                        mb_total=ds.mb_total
+                    )
+                    log.info(f"Updated data source '{ds.name}' from 'embedding' to 'error' due to timeout")
+                    
+                    # Emit socket notification
+                    await send_user_notification(
+                        user_id=user.id,
+                        event_name="data-source-updated",
+                        data={
+                            "source": ds.name,
+                            "status": "error",
+                            "message": f"{ds.name} embedding failed - timeout",
+                            "timestamp": int(time.time()),
+                            "files_total": ds.files_total,
+                            "mb_total": ds.mb_total
+                        }
+                    )
+        except Exception as db_error:
+            log.warning(f"Failed to update embedding data sources to error status: {db_error}")
+        
+        return {
+            "status": "service_timeout", 
+            "message": "Embedding service request timed out",
+            "error": "timeout"
+        }
+    except HTTPError as e:
+        # Check for 502 Bad Gateway first
+        if e.response and e.response.status_code == 502:
+            log.warning(f"Embedding service returned 502 Bad Gateway: {e}")
+            # Don't change sync_status - keep it as "embedding" so frontend shows embedding status component
+            # The frontend will handle the error response and show the grey progress bar
+            
+            return {
+                "status": "service_unavailable",
+                "message": "Embedding service is currently unavailable (502 Bad Gateway)",
+                "error": "bad_gateway"
+            }
+        else:
+            log.warning(f"Embedding service HTTP error: {e}")
+            # Update any data sources currently in "embedding" status to "error"
+            try:
+                from open_webui.models.data import DataSources
+                from open_webui.socket.main import send_user_notification
+                user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+                for ds in user_data_sources:
+                    if ds.sync_status == "embedding":
+                        DataSources.update_data_source_sync_status_by_name(
+                            user_id=user.id,
+                            source_name=ds.name,
+                            layer_name=ds.layer or "",
+                            sync_status="error",
+                            files_total=ds.files_total,
+                            mb_total=ds.mb_total
+                        )
+                        log.info(f"Updated data source '{ds.name}' from 'embedding' to 'error' due to service error")
+                        
+                        # Emit socket notification
+                        await send_user_notification(
+                            user_id=user.id,
+                            event_name="data-source-updated",
+                            data={
+                                "source": ds.name,
+                                "status": "error",
+                                "message": f"{ds.name} embedding failed - service error",
+                                "timestamp": int(time.time()),
+                                "files_total": ds.files_total,
+                                "mb_total": ds.mb_total
+                            }
+                        )
+            except Exception as db_error:
+                log.warning(f"Failed to update embedding data sources to error status: {db_error}")
+            
+            return {
+                "status": "service_error",
+                "message": f"Embedding service returned error: {e.response.status_code if e.response else 'unknown'}",
+                "error": "http_error"
+            }
+    except Exception as e:
+        log.exception(f"Unexpected error getting embedding status: {e}")
+        return {
+            "status": "error",
+            "message": "An unexpected error occurred while checking embedding status",
+            "error": "unexpected_error"
+        }
 
 # Create endpoints for all providers
 for provider in ['google', 'microsoft', 'slack', 'atlassian', 'mineral']:

@@ -2,6 +2,7 @@
 	import type { DataSource } from '$lib/types';
 
 	export let dataSource: DataSource;
+	export let isError: boolean = false;
 
 	function formatBytes(bytes: number): string {
 		if (bytes === 0) return '0 B';
@@ -37,7 +38,9 @@
 					</span>
 				{/if}
 			</div>
-			{#if dataSource.sync_results?.latest_sync}
+			{#if isError}
+				<div class="text-red-500 dark:text-red-400">Errored</div>
+			{:else if dataSource.sync_results?.latest_sync}
 				{@const latest = dataSource.sync_results.latest_sync}
 				<div class="space-y-1">
 					<!-- First line: new and removed files -->
@@ -68,8 +71,15 @@
 						<div>{profile.folders_count} folders</div>
 					{/if}
 				</div>
+			{:else if dataSource.files_total > 0 || dataSource.mb_total > 0}
+				<div class="space-y-1">
+					<div>{dataSource.files_total} files</div>
+					<div>{formatBytes(dataSource.mb_total)}</div>
+				</div>
 			{:else}
-				<div class="text-gray-500 dark:text-gray-400">No profile data</div>
+				<div class="text-gray-500 dark:text-gray-400">
+					No profile data (files_total: {dataSource.files_total}, mb_total: {dataSource.mb_total})
+				</div>
 			{/if}
 		</div>
 	</div>

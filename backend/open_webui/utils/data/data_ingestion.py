@@ -479,14 +479,38 @@ def get_files_summary(prefix: str = None, auth_token: str = None, max_results: i
         
         return response
         
-    except Exception as error:
-        print(f"PAI Data Service summary failed: {str(error)}")
+    except requests.exceptions.ConnectionError as e:
+        log.warning(f"PAI Data Service unavailable for summary: {e}")
         return {
             'prefix': prefix or '',
             'totalFiles': 0,
             'totalSize': 0,
             'asOf': None,
-            'durationMs': 0
+            'durationMs': 0,
+            'error': 'service_unavailable'
+        }
+    except requests.exceptions.HTTPError as e:
+        if e.response and e.response.status_code == 502:
+            log.warning(f"PAI Data Service unavailable (502) for summary: {e}")
+        else:
+            log.warning(f"PAI Data Service HTTP error for summary: {e}")
+        return {
+            'prefix': prefix or '',
+            'totalFiles': 0,
+            'totalSize': 0,
+            'asOf': None,
+            'durationMs': 0,
+            'error': 'service_error'
+        }
+    except Exception as error:
+        log.warning(f"PAI Data Service summary failed: {str(error)}")
+        return {
+            'prefix': prefix or '',
+            'totalFiles': 0,
+            'totalSize': 0,
+            'asOf': None,
+            'durationMs': 0,
+            'error': 'unexpected_error'
         }
 
 def list_pai_files(prefix: str = None, auth_token: str = None, max_results: int = None) -> List[Dict[str, Any]]:
@@ -566,8 +590,20 @@ def upload_to_pai_service(file_content: bytes, destination_path: str,
         
         return True
         
+    except requests.exceptions.ConnectionError as e:
+        log.warning(f"PAI Data Service unavailable for upload {destination_path}: {e}")
+        return False
+    except requests.exceptions.Timeout as e:
+        log.warning(f"PAI Data Service timeout for upload {destination_path}: {e}")
+        return False
+    except requests.exceptions.HTTPError as e:
+        if e.response and e.response.status_code == 502:
+            log.warning(f"PAI Data Service unavailable (502) for upload {destination_path}: {e}")
+        else:
+            log.warning(f"PAI Data Service HTTP error for upload {destination_path}: {e}")
+        return False
     except Exception as error:
-        print(f"PAI Data Service upload failed for {destination_path}: {str(error)}")
+        log.warning(f"PAI Data Service upload failed for {destination_path}: {str(error)}")
         return False
 
 def download_from_pai_service(file_path: str, auth_token: str = None) -> Optional[bytes]:
