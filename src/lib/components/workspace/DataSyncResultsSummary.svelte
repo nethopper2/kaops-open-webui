@@ -71,14 +71,14 @@
 						<div>{profile.folders_count} folders</div>
 					{/if}
 				</div>
-			{:else if dataSource.files_total > 0 || dataSource.mb_total > 0}
+			{:else if dataSource.files_total && dataSource.files_total > 0}
 				<div class="space-y-1">
 					<div>{dataSource.files_total} files</div>
-					<div>{formatBytes(dataSource.mb_total)}</div>
+					<div>{formatBytes(dataSource.mb_total || 0)}</div>
 				</div>
 			{:else}
 				<div class="text-gray-500 dark:text-gray-400">
-					No profile data (files_total: {dataSource.files_total}, mb_total: {dataSource.mb_total})
+					No profile data
 				</div>
 			{/if}
 		</div>

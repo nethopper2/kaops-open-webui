@@ -421,6 +421,7 @@ from open_webui.config import (
     NH_WEBUI_CUSTOM,
     NH_DOCKER_IMAGE,
     NH_DATA_SERVICE_URL,
+    NH_RAG_EMBEDDING_STATUS_POLLING_RATE,
 )
 from open_webui.env import (
     LICENSE_KEY,
@@ -1182,6 +1183,7 @@ app.state.config.AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH = (
 
 app.state.config.NH_ENABLE_UPSTREAM_UI = NH_ENABLE_UPSTREAM_UI
 app.state.config.NH_DATA_SERVICE_URL = NH_DATA_SERVICE_URL
+app.state.NH_RAG_EMBEDDING_STATUS_POLLING_RATE = NH_RAG_EMBEDDING_STATUS_POLLING_RATE
 app.state.NH_WEBUI_CUSTOM = NH_WEBUI_CUSTOM
 app.state.NH_DOCKER_IMAGE = NH_DOCKER_IMAGE
 
@@ -1811,6 +1813,7 @@ async def get_app_config(request: Request):
             "webui_custom": app.state.NH_WEBUI_CUSTOM,
             "docker_image": app.state.NH_DOCKER_IMAGE,
             "nh_data_service_url": app.state.config.NH_DATA_SERVICE_URL,
+            "rag_embedding_status_polling_rate": app.state.NH_RAG_EMBEDDING_STATUS_POLLING_RATE,
         },
         **(
             {

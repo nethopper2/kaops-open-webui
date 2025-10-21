@@ -2,11 +2,12 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { formatBytes } from '$lib/utils/format';
 	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { config } from '$lib/stores';
 
 	export let dataSource: any; // DataSource type
 
-	// Polling configuration
-	const POLLING_INTERVAL_MS = 10000; // 10 seconds
+	// Polling configuration - use config value or default to 60 seconds
+	$: POLLING_INTERVAL_MS = ($config?.private_ai?.rag_embedding_status_polling_rate || 60) * 1000;
 	const MAX_POLLING_ATTEMPTS = 100; // 5 minutes max
 
 	// State

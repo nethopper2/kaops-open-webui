@@ -3573,6 +3573,9 @@ NH_DATA_SERVICE_URL = PersistentConfig(
 # Custom NH settings for the WebUI model directly from environment variable
 NH_DOCKER_IMAGE = os.environ.get("DOCKER_IMAGE", "")
 NH_WEBUI_CUSTOM = os.environ.get("NH_WEBUI_CUSTOM", "{}")
+
+# RAG Embedding Status Polling Rate (in seconds)
+NH_RAG_EMBEDDING_STATUS_POLLING_RATE = int(os.environ.get("NH_RAG_EMBEDDING_STATUS_POLLING_RATE", "60"))
 # Bypass persistentConfig for NH_WEBUI_CUSTOM until we develop a proper UI for it
 # NH_WEBUI_CUSTOM = PersistentConfig(
 #     "NH_WEBUI_CUSTOM",
