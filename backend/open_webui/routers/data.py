@@ -670,7 +670,10 @@ async def create_background_delete_task(request: Request, provider: str, user_id
                             "source": data_source_name or provider.title(),
                             "status": "deleted",
                             "message": "Data source deletion completed",
-                            "timestamp": str(int(time.time()))
+                            "timestamp": str(int(time.time())),
+                            "sync_results": sync_results,
+                            "files_total": 0,
+                            "mb_total": 0
                         }
                     )
                 except Exception as e:
