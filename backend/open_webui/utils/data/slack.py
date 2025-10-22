@@ -1107,6 +1107,7 @@ async def sync_slack_to_storage(auth_token, layer=None):
         
         # Discovery complete - set totals and emit
         files_total = len(unique_conversations) + len(files)
+        # mb_total initially includes only known file sizes; conversation sizes will be accumulated during processing
         mb_total = sum(int(f.get('size') or 0) for f in files)
         await update_data_source_sync_status(
             USER_ID, 'slack', layer, 'syncing',
@@ -1139,6 +1140,8 @@ async def sync_slack_to_storage(auth_token, layer=None):
         # Initialize processing counters
         files_processed = 0
         mb_processed = 0
+        # Track total size of conversations as we process them to provide a non-zero mb_total
+        conv_total_size = 0
         
         # Process conversations with incremental updates
         if unique_conversations:
@@ -1187,9 +1190,16 @@ async def sync_slack_to_storage(auth_token, layer=None):
                                 # Update processing counters and emit progress
                                 files_processed += 1
                                 try:
-                                    mb_processed += int(conv_data.get('size') or 0)
+                                    conv_size = int(conv_data.get('size') or 0)
+                                except Exception:
+                                    conv_size = 0
+                                try:
+                                    mb_processed += conv_size
                                 except Exception:
                                     pass
+                                # Grow total to include conversations processed so far so UI has a meaningful denominator
+                                dynamic_mb_total = (mb_total or 0) + conv_total_size + conv_size
+                                conv_total_size += conv_size
                                 await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
                                     'phase': 'processing',
                                     'phase_name': 'Phase 3: Processing',
@@ -1197,7 +1207,7 @@ async def sync_slack_to_storage(auth_token, layer=None):
                                     'files_processed': files_processed,
                                     'files_total': files_total,
                                     'mb_processed': mb_processed,
-                                    'mb_total': mb_total,
+                                    'mb_total': dynamic_mb_total,
                                     'sync_start_time': sync_start_time
                                 })
                                 
@@ -1252,6 +1262,8 @@ async def sync_slack_to_storage(auth_token, layer=None):
                                         mb_processed += int(file_data.get('size') or 0)
                                     except Exception:
                                         pass
+                                    # Use dynamic total that includes conversations processed so far
+                                    dynamic_mb_total = (mb_total or 0) + conv_total_size
                                     await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
                                         'phase': 'processing',
                                         'phase_name': 'Phase 3: Processing',
@@ -1259,7 +1271,7 @@ async def sync_slack_to_storage(auth_token, layer=None):
                                         'files_processed': files_processed,
                                         'files_total': files_total,
                                         'mb_processed': mb_processed,
-                                        'mb_total': mb_total,
+                                        'mb_total': dynamic_mb_total,
                                         'sync_start_time': sync_start_time
                                     })
                                 
@@ -1301,6 +1313,8 @@ async def sync_slack_to_storage(auth_token, layer=None):
         print("----------------------------------------------------------------------")
         print("📊 Phase 4: Summarizing - finalizing Slack sync results...")
         print("----------------------------------------------------------------------")
+        # Use final dynamic total that includes all processed conversations
+        final_mb_total = (mb_total or 0) + (conv_total_size if 'conv_total_size' in locals() else 0)
         await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
             'phase': 'summarizing',
             'phase_name': 'Phase 4: Summarizing',
@@ -1308,7 +1322,7 @@ async def sync_slack_to_storage(auth_token, layer=None):
             'files_processed': files_processed,
             'files_total': files_total,
             'mb_processed': mb_processed,
-            'mb_total': mb_total,
+            'mb_total': final_mb_total,
             'sync_start_time': sync_start_time
         })
         
@@ -1347,6 +1361,8 @@ async def sync_slack_to_storage(auth_token, layer=None):
         print(f"\nTotal: +{files_added} added, ^{files_updated} updated, -{len(deleted_files)} removed, {skipped_files} skipped")
 
         # Prepare sync results in Google-compatible shape
+        # Compute total size to include both conversations and files
+        total_size_bytes_value = final_mb_total
         sync_results = {
             "latest_sync": {
                 "added": files_added,
@@ -1360,7 +1376,7 @@ async def sync_slack_to_storage(auth_token, layer=None):
             },
             "overall_profile": {
                 "total_files": len(unique_conversations) + len(files),
-                "total_size_bytes": sum(int(f.get('size') or 0) for f in files),
+                "total_size_bytes": total_size_bytes_value,
                 "last_updated": int(time.time()),
                 "folders_count": 0
             }
