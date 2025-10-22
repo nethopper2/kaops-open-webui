@@ -377,7 +377,7 @@ async def sync_onenote_to_storage(auth_token):
                             'files_processed': files_processed,
                             'files_total': files_total,
                             'mb_processed': mb_processed,
-                            'mb_total': mb_total,
+                            'mb_total': (mb_total if mb_total else mb_processed),
                             'sync_start_time': sync_start_time
                         })
                     else:
@@ -398,7 +398,7 @@ async def sync_onenote_to_storage(auth_token):
             'files_processed': files_processed,
             'files_total': files_total,
             'mb_processed': mb_processed,
-            'mb_total': mb_total,
+            'mb_total': (mb_total if mb_total else mb_processed),
             'sync_start_time': sync_start_time
         })
         
@@ -436,7 +436,7 @@ async def sync_onenote_to_storage(auth_token):
             },
             "overall_profile": {
                 "total_files": files_total,
-                "total_size_bytes": 0,
+                "total_size_bytes": max(mb_total or 0, mb_processed or 0),
                 "last_updated": int(time.time()),
                 "folders_count": 0
             }
@@ -704,7 +704,7 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
                             'files_processed': files_processed,
                             'files_total': files_total,
                             'mb_processed': mb_processed,
-                            'mb_total': mb_total,
+                            'mb_total': (mb_total if mb_total else mb_processed),
                             'sync_start_time': sync_start_time
                         })
                     else:
@@ -725,7 +725,7 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
             'files_processed': files_processed,
             'files_total': files_total,
             'mb_processed': mb_processed,
-            'mb_total': mb_total,
+            'mb_total': (mb_total if mb_total else mb_processed),
             'sync_start_time': sync_start_time
         })
         
@@ -763,7 +763,7 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
             },
             "overall_profile": {
                 "total_files": files_total,
-                "total_size_bytes": 0,
+                "total_size_bytes": max(mb_total or 0, mb_processed or 0),
                 "last_updated": int(time.time()),
                 "folders_count": 0
             }

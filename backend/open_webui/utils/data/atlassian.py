@@ -1012,7 +1012,7 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
             },
             "overall_profile": {
                 "total_files": len(all_atlassian_items),
-                "total_size_bytes": sum(int(item.get('size') or 0) for item in all_atlassian_items),
+                "total_size_bytes": max(mb_total or 0, mb_processed or 0),
                 "last_updated": int(time.time()),
                 "folders_count": 0
             }
@@ -2036,7 +2036,7 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
             },
             "overall_profile": {
                 "total_files": len(all_atlassian_items),
-                "total_size_bytes": sum(int(item.get('size') or 0) for item in all_atlassian_items),
+                "total_size_bytes": max(mb_total or 0, mb_processed or 0),
                 "last_updated": int(time.time()),
                 "folders_count": 0
             }
