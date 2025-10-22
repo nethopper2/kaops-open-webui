@@ -455,3 +455,20 @@ export const atlassianSelfHostedAuth = async (pat: string, layer: string = 'jira
 
 	return res;
 };
+
+export const markDataSourceIncomplete = async (token: string, sourceId: string) => {
+	const res = await fetch(`${DATA_API_BASE_URL}/source/${sourceId}/incomplete`, {
+		method: "POST",
+		headers: {
+			"Authorization": `Bearer ${token}`,
+			"Content-Type": "application/json"
+		}
+	});
+
+	if (!res.ok) {
+		const error = await res.json();
+		throw new Error(error.detail || "Failed to mark data source as incomplete");
+	}
+
+	return await res.json();
+};

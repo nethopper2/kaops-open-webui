@@ -19,7 +19,7 @@ export type DataSource = {
 	name: string;
 	context: string;
 	permission?: string;
-	sync_status: 'synced' | 'syncing' | 'error' | 'embedding' | 'embedded' | 'unsynced' | 'deleting' | 'deleted';
+	sync_status: 'synced' | 'syncing' | 'error' | 'embedding' | 'embedded' | 'unsynced' | 'deleting' | 'deleted' | 'incomplete';
 	last_sync: string | null; // ISO date string
 	// Progress tracking fields
 	files_processed?: number;

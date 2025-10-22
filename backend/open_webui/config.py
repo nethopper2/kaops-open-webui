@@ -3575,7 +3575,7 @@ NH_DOCKER_IMAGE = os.environ.get("DOCKER_IMAGE", "")
 NH_WEBUI_CUSTOM = os.environ.get("NH_WEBUI_CUSTOM", "{}")
 
 # RAG Embedding Status Polling Rate (in seconds)
-NH_RAG_EMBEDDING_STATUS_POLLING_RATE = int(os.environ.get("NH_RAG_EMBEDDING_STATUS_POLLING_RATE", "60"))
+NH_RAG_EMBEDDING_STATUS_POLLING_RATE = int(os.environ.get("NH_RAG_EMBEDDING_STATUS_POLLING_RATE", "20"))
 
 # Gmail Data Source Max Email Sync Limit
 NH_DATA_SOURCE_GMAIL_MAX_EMAIL_SYNC = int(os.environ.get("NH_DATA_SOURCE_GMAIL_MAX_EMAIL_SYNC", "5000"))
