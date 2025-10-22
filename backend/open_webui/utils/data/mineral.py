@@ -19,6 +19,7 @@ from open_webui.utils.data.data_ingestion import (
     # Backend configuration
     configure_storage_backend, get_current_backend
 )
+from open_webui.models.datatokens import OAuthTokens
 
 from open_webui.models.data import DataSources
 
@@ -27,6 +28,27 @@ log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
 # Global socketio instance for progress updates
 sio = None
+
+def get_valid_mineral_token(user_id: str, auth_token: str) -> str:
+    """Get a valid Mineral token, refreshing if needed."""
+    try:
+        from open_webui.routers.data import handle_token_refresh
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user_id,
+            provider_name='Mineral'
+        )
+        if not token_entry:
+            log.debug(f"No stored Mineral token found for user {user_id}, using provided token")
+            return auth_token
+        refreshed_token, needs_reauth = handle_token_refresh('mineral', token_entry, user_id)
+        if needs_reauth:
+            log.warning(f"Mineral token needs reauth for user {user_id}, using provided token")
+            return auth_token
+        log.debug(f"Successfully refreshed Mineral token for user {user_id}")
+        return refreshed_token
+    except Exception as e:
+        log.warning(f"Mineral token refresh failed for user {user_id}, using original token: {e}")
+        return auth_token
 
 def set_socketio_instance(socketio_instance):
     """Set the socketio instance for progress updates"""
@@ -127,13 +149,17 @@ def check_rate_limit():
             rate_limit_calls = [call_time for call_time in rate_limit_calls if current_time - call_time < RATE_LIMIT_WINDOW]
 
 def make_mineral_request(url, method='GET', headers=None, params=None, data=None, stream=False, auth_token=None):
-    """Helper function to make Mineral API requests with error handling and rate limiting"""
-    global total_api_calls, rate_limit_calls
+    """Helper function to make Mineral API requests with error handling, rate limiting, and token auto-refresh"""
+    global total_api_calls, rate_limit_calls, USER_ID
     
     check_rate_limit()
     
     total_api_calls += 1
     rate_limit_calls.append(time.time())
+    
+    # Refresh token if possible
+    if auth_token and USER_ID:
+        auth_token = get_valid_mineral_token(USER_ID, auth_token)
     
     return make_api_request(url, method=method, headers=headers, params=params, data=data, stream=stream, auth_token=auth_token)
 
@@ -587,6 +613,9 @@ async def initiate_mineral_sync(
 
     # Initialize globals first
     initialize_globals(user_id)
+
+    # Refresh token once at entry (further requests refresh in make_mineral_request)
+    access_token = get_valid_mineral_token(user_id, access_token)
     
     current_backend = get_current_backend()
     log.info(f"Using storage backend: {current_backend}")

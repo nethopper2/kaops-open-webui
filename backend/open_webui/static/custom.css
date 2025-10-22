@@ -1,0 +1,147 @@
+/* Custom overrides for runtime without rebuilding app-inline.css */
+
+/* Tailwind theme for svelte-select via class attr */
+/* Apply this by passing class="tw-sv-select" to the <Select /> component. */
+.svelte-select.tw-sv-select {
+  @apply w-full rounded-md border border-gray-300 bg-white text-gray-900 shadow-sm;
+  @apply focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-white;
+  @apply hover:border-gray-400;
+  min-height: 40px;
+}
+
+.dark .svelte-select.tw-sv-select {
+  @apply border-gray-700 bg-gray-900 text-gray-100;
+  @apply focus-within:ring-blue-400 focus-within:ring-offset-gray-900;
+  @apply hover:border-gray-600;
+}
+
+/* Input and placeholder */
+.svelte-select.tw-sv-select input {
+  @apply text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Icons (chevron, clear, loading) */
+.svelte-select.tw-sv-select .icon { @apply text-gray-500 dark:text-gray-300; }
+
+/* Disabled state */
+.svelte-select.tw-sv-select.disabled {
+  @apply bg-gray-100 text-gray-400 border-gray-200 dark:bg-gray-800 dark:text-gray-500 dark:border-gray-800;
+}
+
+/* Multi selected item chips */
+.svelte-select.tw-sv-select .multi-item {
+  @apply bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded;
+}
+
+/* Dropdown menu container (best-effort, uses floating-ui portal) */
+/* When the dropdown is attached next to the control it inherits theme via :where(body) .floating-ui container. */
+/* These are generic fallbacks improving contrast even if exact container class changes between versions. */
+.svelte-select.tw-sv-select :where(.list, .dropdown, .items, .menu, [role="listbox"]) {
+  @apply bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg rounded-md;
+}
+.svelte-select.tw-sv-select :where(.item, [role="option"]) {
+  @apply text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer;
+}
+.svelte-select.tw-sv-select :where(.item.selected, [aria-selected="true"]) {
+  @apply bg-blue-50 dark:bg-blue-900/40;
+}
+
+/* Custom overrides for runtime without rebuilding app-inline.css */
+
+/* Tailwind theme for svelte-select via class attr */
+/* Apply this by passing class="tw-sv-select" to the <Select /> component. */
+.svelte-select.tw-sv-select {
+  @apply w-full rounded-md border border-gray-300 bg-white text-gray-900 shadow-sm;
+  @apply focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-white;
+  @apply hover:border-gray-400;
+  min-height: 40px;
+}
+
+.dark .svelte-select.tw-sv-select {
+  @apply border-gray-700 bg-gray-900 text-gray-100;
+  @apply focus-within:ring-blue-400 focus-within:ring-offset-gray-900;
+  @apply hover:border-gray-600;
+}
+
+/* Input and placeholder */
+.svelte-select.tw-sv-select input {
+  @apply text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Icons (chevron, clear, loading) */
+.svelte-select.tw-sv-select .icon { @apply text-gray-500 dark:text-gray-300; }
+
+/* Disabled state */
+.svelte-select.tw-sv-select.disabled {
+  @apply bg-gray-100 text-gray-400 border-gray-200 dark:bg-gray-800 dark:text-gray-500 dark:border-gray-800;
+}
+
+/* Multi selected item chips */
+.svelte-select.tw-sv-select .multi-item {
+  @apply bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded;
+}
+
+/* Dropdown menu container (best-effort, uses floating-ui portal) */
+/* When the dropdown is attached next to the control it inherits theme via :where(body) .floating-ui container. */
+/* These are generic fallbacks improving contrast even if exact container class changes between versions. */
+.svelte-select.tw-sv-select :where(.list, .dropdown, .items, .menu, [role="listbox"]) {
+  @apply bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg rounded-md;
+}
+.svelte-select.tw-sv-select :where(.item, [role="option"]) {
+  @apply text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer;
+}
+.svelte-select.tw-sv-select :where(.item.selected, [aria-selected="true"]) {
+  @apply bg-blue-50 dark:bg-blue-900/40;
+}
+
+/* Global dark-mode fix for svelte-select dropdown rendered in a portal (outside the control) */
+/* Use plain CSS (no Tailwind @apply) to ensure it works without a rebuild. */
+.dark div[role="listbox"] {
+  background-color: #111827 !important; /* gray-900 */
+  color: #f3f4f6 !important;            /* gray-100 */
+  border: 1px solid #374151 !important;  /* gray-700 */
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1) !important;
+  border-radius: 0.375rem !important;    /* rounded-md */
+}
+.dark div[role="option"],
+.dark li[role="option"],
+.dark [data-option] {
+  color: #f3f4f6 !important;
+}
+.dark div[role="option"]:hover,
+.dark li[role="option"]:hover,
+.dark [data-option].hover,
+.dark [data-option]:hover {
+  background-color: #1f2937 !important;  /* gray-800 */
+}
+.dark [aria-selected="true"],
+.dark [data-selected="true"] {
+  background-color: rgba(30, 64, 175, 0.4) !important; /* blue-700/40 */
+}
+
+/* Dark-mode fixes for svelte-select when dropdown uses .svelte-select-list (no ARIA roles) */
+.dark .svelte-select-list {
+  background-color: #111827 !important; /* gray-900 */
+  color: #f3f4f6 !important;            /* gray-100 */
+  border: 1px solid #374151 !important;  /* gray-700 */
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1) !important;
+  border-radius: 0.375rem !important;    /* rounded-md */
+}
+.dark .svelte-select-list .item {
+  color: #f3f4f6 !important;
+}
+.dark .svelte-select-list .item:hover,
+.dark .svelte-select-list .item.hover {
+  background-color: #1f2937 !important;  /* gray-800 */
+}
+.dark .svelte-select-list .item.selected,
+.dark .svelte-select-list [aria-selected="true"],
+.dark .svelte-select-list [data-selected="true"] {
+  background-color: rgba(30, 64, 175, 0.4) !important; /* blue-700/40 */
+}

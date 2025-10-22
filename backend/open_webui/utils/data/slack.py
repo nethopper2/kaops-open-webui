@@ -20,12 +20,34 @@ from open_webui.utils.data.data_ingestion import (
     # Backend configuration
     configure_storage_backend, get_current_backend
 )
+from open_webui.models.datatokens import OAuthTokens
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
 # Global socketio instance for progress updates
 sio = None
+
+def get_valid_slack_token(user_id: str, auth_token: str) -> str:
+    """Get a valid Slack token, refreshing if needed."""
+    try:
+        from open_webui.routers.data import handle_token_refresh
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user_id,
+            provider_name='Slack'
+        )
+        if not token_entry:
+            log.debug(f"No stored Slack token found for user {user_id}, using provided token")
+            return auth_token
+        refreshed_token, needs_reauth = handle_token_refresh('slack', token_entry, user_id)
+        if needs_reauth:
+            log.warning(f"Slack token needs reauth for user {user_id}, using provided token")
+            return auth_token
+        log.debug(f"Successfully refreshed Slack token for user {user_id}")
+        return refreshed_token
+    except Exception as e:
+        log.warning(f"Slack token refresh failed for user {user_id}, using original token: {e}")
+        return auth_token
 
 def set_socketio_instance(socketio_instance):
     """Set the socketio instance for progress updates"""
@@ -293,7 +315,10 @@ def calculate_proactive_delay(remaining_requests, reset_time):
     return time_until_reset
 
 def make_request(url, method='GET', headers=None, params=None, data=None, stream=False, auth_token=None):
-    """Helper function to make API requests with error handling"""
+    """Helper function to make API requests with error handling and token auto-refresh"""
+    global USER_ID
+    if auth_token and USER_ID:
+        auth_token = get_valid_slack_token(USER_ID, auth_token)
     return make_request_with_retry(url, method=method, headers=headers, params=params, data=data, stream=stream, auth_token=auth_token)
 
 def get_slack_user_info(auth_token):
@@ -1386,6 +1411,9 @@ async def initiate_slack_sync(
 
     # Initialize globals first
     initialize_globals(user_id)
+
+    # Refresh token once at entry (further requests refresh in make_request)
+    token = get_valid_slack_token(user_id, token)
     
     current_backend = get_current_backend()
     log.info(f"Using storage backend: {current_backend}")

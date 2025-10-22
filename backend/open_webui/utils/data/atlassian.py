@@ -22,6 +22,7 @@ from open_webui.utils.data.data_ingestion import (
     parse_date,
     update_data_source_sync_status
 )
+from open_webui.models.datatokens import OAuthTokens
 
 # Global variables
 USER_ID = None
@@ -38,6 +39,27 @@ log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
 # Global socketio instance for progress updates
 sio = None
+
+def get_valid_atlassian_token(user_id: str, auth_token: str) -> str:
+    """Get a valid Atlassian token, refreshing if needed (cloud OAuth)."""
+    try:
+        from open_webui.routers.data import handle_token_refresh
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user_id,
+            provider_name='Atlassian'
+        )
+        if not token_entry:
+            log.debug(f"No stored Atlassian token found for user {user_id}, using provided token")
+            return auth_token
+        refreshed_token, needs_reauth = handle_token_refresh('atlassian', token_entry, user_id)
+        if needs_reauth:
+            log.warning(f"Atlassian token needs reauth for user {user_id}, using provided token")
+            return auth_token
+        log.debug(f"Successfully refreshed Atlassian token for user {user_id}")
+        return refreshed_token
+    except Exception as e:
+        log.warning(f"Atlassian token refresh failed for user {user_id}, using original token: {e}")
+        return auth_token
 
 def set_socketio_instance(socketio_instance):
     """Set the socketio instance for progress updates"""
@@ -144,9 +166,9 @@ def make_atlassian_request(url: str, method: str = 'GET', headers: Optional[Dict
                            stream: bool = False, bearer_token: Optional[str] = None, 
                            auth: Optional[HTTPBasicAuth] = None):
     """
-    Unified request handler - supports Bearer token (cloud OAuth or self-hosted PAT)
+    Unified request handler - supports Bearer token (cloud OAuth or self-hosted PAT) with token auto-refresh for cloud.
     """
-    global total_api_calls
+    global total_api_calls, USER_ID
     total_api_calls += 1
 
     if headers is None:
@@ -157,6 +179,9 @@ def make_atlassian_request(url: str, method: str = 'GET', headers: Optional[Dict
     
     # Use Bearer token for both cloud OAuth and self-hosted PAT
     if bearer_token:
+        # Attempt to refresh only for cloud scenarios where token exists in DB
+        if USER_ID:
+            bearer_token = get_valid_atlassian_token(USER_ID, bearer_token)
         headers['Authorization'] = f'Bearer {bearer_token}'
         log.debug(f"Using Bearer token for {url}")
     elif auth:
@@ -1018,6 +1043,9 @@ async def initiate_atlassian_sync_selected(user_id: str, token: str, project_key
     log.info(f'User Open WebUI ID: {user_id}')
     log.info(f'Selected Projects: {project_keys}')
     log.info(f'Layer: {layer}')
+
+    # Refresh token once at entry (cloud OAuth)
+    token = get_valid_atlassian_token(user_id, token)
 
     global USER_ID
     global USER
@@ -2275,6 +2303,9 @@ async def initiate_atlassian_sync(user_id: str, token: str, layer: str = None,
     log.info(f'Initiating Atlassian (Jira & Confluence) sync using unified storage')
     log.info(f'User Open WebUI ID: {user_id}')
     log.info(f'Layer: {layer if layer else "All layers"}')
+
+    # Refresh token once at entry (cloud OAuth)
+    token = get_valid_atlassian_token(user_id, token)
 
     global USER_ID
     global USER
