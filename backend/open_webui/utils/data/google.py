@@ -28,6 +28,12 @@ from open_webui.models.datatokens import OAuthTokens
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
+# Phase constants
+PHASE_1_STARTING = 'Phase 1: Starting'
+PHASE_2_DISCOVERY = 'Phase 2: Discovery'
+PHASE_3_PROCESSING = 'Phase 3: Processing'
+PHASE_4_SUMMARIZING = 'Phase 4: Summarizing'
+
 # Global socketio instance for progress updates
 sio = None
 
@@ -302,7 +308,7 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         
         await emit_sync_progress(USER_ID, 'google', 'gmail', {
             'phase': 'starting',
-            'phase_name': 'Phase 1: Starting',
+            'phase_name': PHASE_1_STARTING,
             'phase_description': 'preparing Gmail sync process',
             'files_processed': 0,
             'files_total': 0,
@@ -385,7 +391,7 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         
         await emit_sync_progress(USER_ID, 'google', 'gmail', {
             'phase': 'discovery',
-            'phase_name': 'Phase 2: Discovery',
+            'phase_name': PHASE_2_DISCOVERY,
             'phase_description': 'analyzing existing emails and determining sync plan',
             'files_processed': 0,
             'files_total': len(messages),
@@ -415,7 +421,7 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         
         await emit_sync_progress(USER_ID, 'google', 'gmail', {
             'phase': 'processing',
-            'phase_name': 'Phase 3: Processing',
+            'phase_name': PHASE_3_PROCESSING,
             'phase_description': 'uploading new emails and processing changes',
             'files_processed': 0,
             'files_total': len(messages),
@@ -501,7 +507,7 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
                         if current_time - last_progress_update >= PROGRESS_UPDATE_INTERVAL:
                             await emit_sync_progress(USER_ID, 'google', 'gmail', {
                                 'phase': 'processing',
-                                'phase_name': 'Phase 3: Processing',
+                                'phase_name': PHASE_3_PROCESSING,
                                 'phase_description': 'uploading new emails and processing changes',
                                 'files_processed': processed_count,
                                 'files_total': len(messages),
@@ -528,7 +534,7 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         # Emit final progress update to show 100% completion
         await emit_sync_progress(USER_ID, 'google', 'gmail', {
             'phase': 'processing',
-            'phase_name': 'Phase 3: Processing',
+            'phase_name': PHASE_3_PROCESSING,
             'phase_description': 'uploading new emails and processing changes',
             'files_processed': processed_count,
             'files_total': len(messages),
@@ -544,7 +550,7 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         
         await emit_sync_progress(USER_ID, 'google', 'gmail', {
             'phase': 'summarizing',
-            'phase_name': 'Phase 4: Summarizing',
+            'phase_name': PHASE_4_SUMMARIZING,
             'phase_description': 'finalizing Gmail sync results',
             'files_processed': len(messages),
             'files_total': len(messages),
@@ -1095,7 +1101,7 @@ async def sync_drive_to_storage(auth_token, user_id):
     # Emit initial phase update with discovery fields
     await emit_sync_progress(USER_ID, 'google', 'google_drive', {
         'phase': 'starting',
-        'phase_name': 'Phase 1: Starting',
+        'phase_name': PHASE_1_STARTING,
         'phase_description': 'preparing sync process',
         'files_processed': 0,
         'files_total': 0,
@@ -1151,7 +1157,7 @@ async def sync_drive_to_storage(auth_token, user_id):
         # Emit initial discovery update
         await emit_sync_progress(USER_ID, 'google', 'google_drive', {
             'phase': 'starting',
-            'phase_name': 'Phase 1: Starting',
+            'phase_name': PHASE_1_STARTING,
             'phase_description': 'discovering folders and files...',
             'files_processed': 0,
             'files_total': 0,
@@ -1226,7 +1232,7 @@ async def sync_drive_to_storage(auth_token, user_id):
         # Emit discovery progress update after initial collection
         await emit_sync_progress(USER_ID, 'google', 'google_drive', {
             'phase': 'starting',
-            'phase_name': 'Phase 1: Starting',
+            'phase_name': PHASE_1_STARTING,
             'phase_description': 'preparing sync process',
             'files_processed': 0,
             'files_total': 0,
@@ -1275,7 +1281,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                     # Emit discovery progress update
                     await emit_sync_progress(USER_ID, 'google', 'google_drive', {
                         'phase': 'starting',
-                        'phase_name': 'Phase 1: Starting',
+                        'phase_name': PHASE_1_STARTING,
                         'phase_description': 'preparing sync process',
                         'files_processed': 0,
                         'files_total': 0,
@@ -1306,6 +1312,9 @@ async def sync_drive_to_storage(auth_token, user_id):
         
         # Emit initial progress
         await emit_sync_progress(USER_ID, 'google', 'google_drive', {
+            'phase': 'starting',
+            'phase_name': PHASE_1_STARTING,
+            'phase_description': 'preparing sync process',
             'files_processed': 0,
             'files_total': files_total,
             'mb_processed': 0,
@@ -1321,7 +1330,7 @@ async def sync_drive_to_storage(auth_token, user_id):
         # Emit phase update
         await emit_sync_progress(USER_ID, 'google', 'google_drive', {
             'phase': 'discovery',
-            'phase_name': 'Phase 2: Discovery',
+            'phase_name': PHASE_2_DISCOVERY,
             'phase_description': 'analyzing existing files and determining sync plan',
             'files_processed': 0,
             'files_total': files_total,
@@ -1387,7 +1396,7 @@ async def sync_drive_to_storage(auth_token, user_id):
         # Emit phase update
         await emit_sync_progress(USER_ID, 'google', 'google_drive', {
             'phase': 'processing',
-            'phase_name': 'Phase 3: Processing',
+            'phase_name': PHASE_3_PROCESSING,
             'phase_description': 'uploading new files and deleting orphans',
             'files_processed': 0,
             'files_total': files_total,
@@ -1464,7 +1473,7 @@ async def sync_drive_to_storage(auth_token, user_id):
                             
                             await emit_sync_progress(USER_ID, 'google', 'google_drive', {
                                 'phase': 'processing',
-                                'phase_name': 'Phase 3: Processing',
+                                'phase_name': PHASE_3_PROCESSING,
                                 'phase_description': 'uploading new files and deleting orphans',
                                 'files_processed': files_processed,
                                 'files_total': files_total,
@@ -1485,7 +1494,7 @@ async def sync_drive_to_storage(auth_token, user_id):
         # Emit phase update
         await emit_sync_progress(USER_ID, 'google', 'google_drive', {
             'phase': 'summarizing',
-            'phase_name': 'Phase 4: Summarizing',
+            'phase_name': PHASE_4_SUMMARIZING,
             'phase_description': 'generating sync report',
             'files_processed': files_processed,
             'files_total': files_total,
@@ -1564,6 +1573,9 @@ async def sync_drive_to_storage(auth_token, user_id):
         
         # Emit final progress
         await emit_sync_progress(user_id, 'google', 'google_drive', {
+            'phase': 'summarizing',
+            'phase_name': PHASE_4_SUMMARIZING,
+            'phase_description': 'generating sync report',
             'files_processed': files_processed,
             'files_total': files_total,
             'mb_processed': mb_processed,
