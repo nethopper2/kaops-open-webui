@@ -1863,20 +1863,30 @@ def create_universal_sync_endpoint(provider: str):
                 else:
                     # Cloud: handle token refresh
                     access_token, needs_reauth = handle_token_refresh('atlassian', token_entry, user.id)
-                    
+
+                    # If reauth is suggested only because refresh isn't available but the token is still valid,
+                    # proceed with the current access token to avoid unnecessary reauthorization.
                     if needs_reauth:
-                        reauth_url = generate_reauth_url('atlassian', user.id, layer)
-                        raise HTTPException(
-                            status_code=401,
-                            detail={
-                                "error": "token_expired",
-                                "reauth_url": reauth_url
-                            }
-                        )
-                    
+                        current_time = int(time.time())
+                        expires_at = token_entry.access_token_expires_at
+                        if expires_at and expires_at > current_time:
+                            log.warning(
+                                f"Atlassian token for user {user.id} is near expiry with no refresh token; proceeding with current token until it expires."
+                            )
+                            needs_reauth = False
+                        else:
+                            reauth_url = generate_reauth_url('atlassian', user.id, layer)
+                            raise HTTPException(
+                                status_code=401,
+                                detail={
+                                    "error": "token_expired",
+                                    "reauth_url": reauth_url
+                                }
+                            )
+
                     # Initiate cloud sync
                     await create_background_sync_task(request, 'atlassian', user.id, access_token, layer)
-                    
+
                     return {"message": "Cloud Atlassian sync initiated", "deployment_type": "cloud"}
             except HTTPException:
                 raise

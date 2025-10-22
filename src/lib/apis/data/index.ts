@@ -303,7 +303,7 @@ export const manualDataSync = async (
 	action: string,
 	layer: string
 ): Promise<{ message?: string; url?: string; detail?: { reauth_url?: string } } | null> => {
-	let error = null;
+	let error: any = null;
 
 	const url = `${DATA_API_BASE_URL}/${action}/sync?layer=${layer}`;
 	
@@ -313,22 +313,32 @@ export const manualDataSync = async (
 	})
 		.then(async (res) => {
 			if (!res.ok) {
-				// Check if response is JSON
+				// Try to parse JSON error payload and pass it through so callers can handle reauth
 				const contentType = res.headers.get('content-type');
 				if (contentType && contentType.includes('application/json')) {
-					throw await res.json();
+					const body = await res.json();
+					return body;
 				} else {
-					// Response is HTML (redirect, error page, etc.)
-					throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+					// Non-JSON response (e.g., HTML); surface a normalized error
+					return { detail: { message: `HTTP ${res.status}: ${res.statusText}` } };
 				}
 			}
 			return res.json();
 		})
 		.catch((err) => {
 			console.log('API Error:', err);
+			// If the error already contains a reauth_url, surface it to the caller instead of throwing
+			if (err?.reauth_url || err?.detail?.reauth_url) {
+				return { detail: { reauth_url: err.reauth_url || err.detail.reauth_url } };
+			}
 			error = err.detail || err.message || 'Unknown error';
 			return null;
 		});
+
+	// If we received a payload with a reauth_url, return it directly
+	if (res && (res.reauth_url || res?.detail?.reauth_url)) {
+		return { detail: { reauth_url: res.reauth_url || res.detail.reauth_url } } as any;
+	}
 
 	if (error) {
 		throw error;

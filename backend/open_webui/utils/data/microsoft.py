@@ -18,12 +18,36 @@ from open_webui.utils.data.data_ingestion import (
 )
 
 from open_webui.models.data import DataSources
+from open_webui.models.datatokens import OAuthTokens
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
 # Global socketio instance for progress updates
 sio = None
+
+def get_valid_microsoft_token(user_id: str, auth_token: str) -> str:
+    """
+    Get a valid Microsoft token, refreshing if needed, mirroring google.py behavior.
+    """
+    try:
+        from open_webui.routers.data import handle_token_refresh
+        token_entry = OAuthTokens.get_token_by_user_provider_details(
+            user_id=user_id,
+            provider_name='Microsoft'
+        )
+        if not token_entry:
+            log.debug(f"No stored Microsoft token found for user {user_id}, using provided token")
+            return auth_token
+        refreshed_token, needs_reauth = handle_token_refresh('microsoft', token_entry, user_id)
+        if needs_reauth:
+            log.warning(f"Microsoft token needs reauth for user {user_id}, using provided token")
+            return auth_token
+        log.debug(f"Successfully refreshed Microsoft token for user {user_id}")
+        return refreshed_token
+    except Exception as e:
+        log.warning(f"Microsoft token refresh failed for user {user_id}, using original token: {e}")
+        return auth_token
 
 async def emit_sync_progress(user_id: str, provider: str, layer: str, progress_data: dict):
     """Emit sync progress update via WebSocket"""
@@ -81,10 +105,12 @@ def initialize_globals(user_id):
     existing_files_cache = set()
 
 def make_request(url, method='GET', headers=None, params=None, data=None, stream=False, auth_token=None):
-    """Helper function to make API requests with error handling"""
-    global total_api_calls
+    """Helper function to make API requests with error handling and token auto-refresh"""
+    global total_api_calls, USER_ID
     total_api_calls += 1
-    
+    # Refresh token if possible
+    if auth_token and USER_ID:
+        auth_token = get_valid_microsoft_token(USER_ID, auth_token)
     return make_api_request(url, method=method, headers=headers, params=params, data=data, stream=stream, auth_token=auth_token)
 
 def load_existing_files(user_id):
@@ -1612,6 +1638,9 @@ async def initiate_microsoft_sync(
     
     # Initialize globals first
     initialize_globals(user_id)
+    
+    # Refresh token once at entry (further requests refresh in make_request)
+    auth_token = get_valid_microsoft_token(user_id, auth_token)
     
     current_backend = get_current_backend()
     log.info(f"Using storage backend: {current_backend}")
