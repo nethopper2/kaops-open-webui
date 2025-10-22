@@ -127,7 +127,7 @@
 
 	// Start timeout checking timer
 	onMount(() => {
-		timeoutCheckInterval = setInterval(checkSocketTimeout, 10000); // Check every 10 seconds
+		timeoutCheckInterval = setInterval(checkSocketTimeout, 2000); // Check every 2 seconds
 	});
 
 	const formatDate = (dateString: string) => {
@@ -633,6 +633,17 @@
 
 	onMount(async () => {
 		dataSources = await getDataSources(localStorage.token);
+		
+		// Log syncing sources on page load/refresh
+		const syncingSources = dataSources.filter(ds => ds.sync_status === 'syncing');
+		console.log(`📊 ${syncingSources.length} sources syncing`);
+		
+		// If there are syncing sources but no socket activity, start monitoring immediately
+		if (syncingSources.length > 0 && lastSocketActivity === 0) {
+			console.log('🚨 Found syncing sources with no socket activity - starting timeout monitoring');
+			lastSocketActivity = Date.now(); // Start the timer
+		}
+		
 		$socket?.on('data-source-updated', async (data) => {
 			updateDataSourceSyncStatus(data);
 		});
