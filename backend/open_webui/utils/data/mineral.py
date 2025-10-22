@@ -25,6 +25,30 @@ from open_webui.models.data import DataSources
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
+# Global socketio instance for progress updates
+sio = None
+
+def set_socketio_instance(socketio_instance):
+    """Set the socketio instance for progress updates"""
+    global sio
+    sio = socketio_instance
+
+async def emit_sync_progress(user_id: str, provider: str, layer: str, progress_data: dict):
+    """Emit sync progress update via WebSocket"""
+    global sio
+    if sio:
+        try:
+            await sio.emit("sync_progress", {
+                "user_id": user_id,
+                "provider": provider,
+                "layer": layer,
+                **progress_data
+            }, to=f"user_{user_id}")
+        except Exception as e:
+            log.error(f"Failed to emit sync progress: {e}")
+    else:
+        log.warning("Socket.IO instance not available for progress updates")
+
 # Global variables
 existing_files_cache = set()
 total_api_calls = 0
@@ -317,6 +341,26 @@ async def sync_mineral_to_storage(auth_token, base_url):
     global USER_ID
     
     print('🔄 Starting Mineral HR sync process...')
+
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
+    await emit_sync_progress(USER_ID, 'mineral', 'handbooks', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
     
     uploaded_files = []
     skipped_files = 0
@@ -326,6 +370,30 @@ async def sync_mineral_to_storage(auth_token, base_url):
         # Get Mineral handbooks
         handbooks = list_mineral_handbooks(auth_token, base_url)
         print(f"Found {len(handbooks)} Mineral handbooks")
+
+        # Discovery complete - set totals
+        files_total = len(handbooks)
+        mb_total = 0
+        await update_data_source_sync_status(
+            USER_ID, 'mineral', 'handbooks', 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing handbooks and preparing sync plan...")
+        print("----------------------------------------------------------------------")
+        await emit_sync_progress(USER_ID, 'mineral', 'handbooks', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing handbooks and preparing sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = []
@@ -364,6 +432,12 @@ async def sync_mineral_to_storage(auth_token, base_url):
                 )
             
             # Process completed uploads
+            files_processed = 0
+            mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing handbooks to storage...")
+            print("----------------------------------------------------------------------")
             for future, title in futures:
                 try:
                     result = future.result()
@@ -371,6 +445,21 @@ async def sync_mineral_to_storage(auth_token, base_url):
                         uploaded_files.append(result)
                         existing_files_cache.add(result['path'])  # Add to cache
                         format_stats[result['format']] += 1
+                        files_processed += 1
+                        try:
+                            mb_processed += int(result.get('size', 0))
+                        except Exception:
+                            pass
+                        await emit_sync_progress(USER_ID, 'mineral', 'handbooks', {
+                            'phase': 'processing',
+                            'phase_name': 'Phase 3: Processing',
+                            'phase_description': 'synchronizing handbooks to storage',
+                            'files_processed': files_processed,
+                            'files_total': files_total,
+                            'mb_processed': mb_processed,
+                            'mb_total': mb_total,
+                            'sync_start_time': sync_start_time
+                        })
                     else:
                         skipped_files += 1
                 except Exception as e:
@@ -378,8 +467,27 @@ async def sync_mineral_to_storage(auth_token, base_url):
                     log.error(f"Error processing handbook {title}:", exc_info=True)
                     skipped_files += 1
         
+        # Emit summarizing phase before printing summary
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing Mineral sync results...")
+        print("----------------------------------------------------------------------")
+        await emit_sync_progress(USER_ID, 'mineral', 'handbooks', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing and updating status',
+            'files_processed': files_processed if files_total else 0,
+            'files_total': files_total,
+            'mb_processed': mb_processed if files_total else 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
         current_backend = get_current_backend()
         print(f"\nMineral HR Sync Summary:")
+        for file in uploaded_files:
+            symbol = '+' if file['type'] == 'new' else '^'
+            print(f" {symbol} {file['path']} | {format_bytes(file['size'])} | {file['durationMs']}ms | {file.get('format')} | {file['backend']}")
         print(f"📚 Handbooks uploaded: {len(uploaded_files)}")
         print(f"⏭️  Handbooks skipped: {skipped_files}")
         print(f"💾 Storage Backend: {current_backend}")
@@ -388,7 +496,52 @@ async def sync_mineral_to_storage(auth_token, base_url):
             if count > 0:
                 print(f"   {format_type}: {count}")
 
-        await update_data_source_sync_status(USER_ID, 'mineral', 'handbooks', 'synced')
+        # Accounting Metrics (Google-style)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        print("\nAccounting Metrics:")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
+        print(f"📊 Billable API Calls: {total_api_calls}")
+        print(f"📦 Handbooks Processed: {files_total}")
+        print(f"➕ Handbooks Added: {len(uploaded_files)}")
+        print(f"🔄 Handbooks Updated: 0")
+        print(f"🗑️  Orphans Removed: 0")
+        print(f"⛔ Skipped: {skipped_files}")
+
+        # Prepare sync results
+        sync_results = {
+            "latest_sync": {
+                "added": len(uploaded_files),
+                "updated": 0,
+                "removed": 0,
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": files_total,
+                "total_size_bytes": 0,
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+
+        # Final state: Embedding (to match Google)
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
+        await update_data_source_sync_status(
+            USER_ID, 'mineral', 'handbooks', 'embedding',
+            files_total=sync_results['overall_profile']['total_files'],
+            mb_total=sync_results['overall_profile']['total_size_bytes'],
+            sync_results=sync_results
+        )
         
         return {
             'uploaded': len(uploaded_files),
@@ -400,6 +553,11 @@ async def sync_mineral_to_storage(auth_token, base_url):
     except Exception as error:
         print(f"Mineral HR sync failed: {str(error)}")
         log.error("Mineral HR sync failed:", exc_info=True)
+        # Update status to error for consistency
+        try:
+            await update_data_source_sync_status(USER_ID, 'mineral', 'handbooks', 'error')
+        except Exception:
+            pass
         raise error
 
 async def initiate_mineral_sync(

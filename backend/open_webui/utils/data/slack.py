@@ -24,6 +24,30 @@ from open_webui.utils.data.data_ingestion import (
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
+# Global socketio instance for progress updates
+sio = None
+
+def set_socketio_instance(socketio_instance):
+    """Set the socketio instance for progress updates"""
+    global sio
+    sio = socketio_instance
+
+async def emit_sync_progress(user_id: str, provider: str, layer: str, progress_data: dict):
+    """Emit sync progress update via WebSocket"""
+    global sio
+    if sio:
+        try:
+            await sio.emit("sync_progress", {
+                "user_id": user_id,
+                "provider": provider,
+                "layer": layer,
+                **progress_data
+            }, to=f"user_{user_id}")
+        except Exception as e:
+            log.error(f"Failed to emit sync progress: {e}")
+    else:
+        log.warning("Socket.IO instance not available for progress updates")
+
 # Metrics tracking
 total_api_calls = 0
 script_start_time = time.time()
@@ -979,6 +1003,26 @@ async def sync_slack_to_storage(auth_token, layer=None):
     layer_display = f" ({layer})" if layer else ""
     print(f'🔄 Starting Slack sync process{layer_display}...')
     
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
+    await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
+    
     uploaded_files = []
     deleted_files = []
     skipped_files = 0
@@ -1036,6 +1080,30 @@ async def sync_slack_to_storage(auth_token, layer=None):
             files = get_user_files(auth_token, slack_user_id)
             print(f"Found {len(files)} files")
         
+        # Discovery complete - set totals and emit
+        files_total = len(unique_conversations) + len(files)
+        mb_total = sum(int(f.get('size') or 0) for f in files)
+        await update_data_source_sync_status(
+            USER_ID, 'slack', layer, 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing conversations and files and preparing sync plan...")
+        print("----------------------------------------------------------------------")
+        await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing conversations and files and preparing sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
         # Get user info for DM naming if we have conversations
         user_info_map = {}
         if unique_conversations:
@@ -1043,8 +1111,16 @@ async def sync_slack_to_storage(auth_token, layer=None):
             dm_user_ids = [conv.get('user') for conv in unique_conversations if conv.get('is_im') and conv.get('user')]
             user_info_map = get_user_info_batch(auth_token, dm_user_ids) if dm_user_ids else {}
         
+        # Initialize processing counters
+        files_processed = 0
+        mb_processed = 0
+        
         # Process conversations with incremental updates
         if unique_conversations:
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing conversations and files to storage...")
+            print("----------------------------------------------------------------------")
             print(f"\nProcessing {len(unique_conversations)} conversations...")
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -1082,6 +1158,23 @@ async def sync_slack_to_storage(auth_token, layer=None):
                                     'backend': get_current_backend()
                                 })
                                 print(f"[{datetime.now().isoformat()}] {'Updated' if conv_data['is_update'] else 'Uploaded'} {conv_data['path']}")
+                                    
+                                # Update processing counters and emit progress
+                                files_processed += 1
+                                try:
+                                    mb_processed += int(conv_data.get('size') or 0)
+                                except Exception:
+                                    pass
+                                await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
+                                    'phase': 'processing',
+                                    'phase_name': 'Phase 3: Processing',
+                                    'phase_description': 'synchronizing conversations and files to storage',
+                                    'files_processed': files_processed,
+                                    'files_total': files_total,
+                                    'mb_processed': mb_processed,
+                                    'mb_total': mb_total,
+                                    'sync_start_time': sync_start_time
+                                })
                                 
                     except Exception as e:
                         conv = conv_futures[future]
@@ -1127,6 +1220,23 @@ async def sync_slack_to_storage(auth_token, layer=None):
                                         'backend': get_current_backend()
                                     })
                                     print(f"[{datetime.now().isoformat()}] Uploaded {file_data['path']}")
+                                    
+                                    # Update processing counters and emit progress
+                                    files_processed += 1
+                                    try:
+                                        mb_processed += int(file_data.get('size') or 0)
+                                    except Exception:
+                                        pass
+                                    await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
+                                        'phase': 'processing',
+                                        'phase_name': 'Phase 3: Processing',
+                                        'phase_description': 'synchronizing conversations and files to storage',
+                                        'files_processed': files_processed,
+                                        'files_total': files_total,
+                                        'mb_processed': mb_processed,
+                                        'mb_total': mb_total,
+                                        'sync_start_time': sync_start_time
+                                    })
                                 
                     except Exception as e:
                         file_info = file_futures[future]
@@ -1161,6 +1271,22 @@ async def sync_slack_to_storage(auth_token, layer=None):
                 })
                 print(f"[{datetime.now().isoformat()}] Deleted orphan: {storage_name}")
         
+        # Emit summarizing phase before printing summary
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing Slack sync results...")
+        print("----------------------------------------------------------------------")
+        await emit_sync_progress(USER_ID, 'slack', layer or 'all', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing and updating status',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+        
         # Enhanced summary
         current_backend = get_current_backend()
         print('\nSync Summary:')
@@ -1173,12 +1299,15 @@ async def sync_slack_to_storage(auth_token, layer=None):
         for file in deleted_files:
             print(f" - {file['name']} | {format_bytes(file['size'])} | Created: {file['timeCreated']}")
         
-        total_runtime = int((time.time() - script_start_time) * 1000)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
 
-        await update_data_source_sync_status(USER_ID, 'slack', layer, 'synced')
-
+        # Accounting Metrics (Google-style)
         print("\nAccounting Metrics:")
-        print(f"⏱️  Total Runtime: {(total_runtime/1000):.2f} seconds")
+        print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
         print(f"📊 Billable API Calls: {total_api_calls}")
         print(f"💬 Conversations Processed: {len(unique_conversations)}")
         print(f"📁 Files Processed: {len(files)}")
@@ -1187,9 +1316,42 @@ async def sync_slack_to_storage(auth_token, layer=None):
         print(f"📂 Layer: {layer if layer else 'All layers'}")
         print(f"💾 Storage Backend: {current_backend}")
         
-        print(f"\nTotal: +{len([f for f in uploaded_files if f['type'] == 'new'])} added, " +
-              f"^{len([f for f in uploaded_files if f['type'] == 'updated'])} updated, " +
-              f"-{len(deleted_files)} removed, {skipped_files} skipped")
+        files_added = len([f for f in uploaded_files if f['type'] == 'new'])
+        files_updated = len([f for f in uploaded_files if f['type'] == 'updated'])
+        
+        print(f"\nTotal: +{files_added} added, ^{files_updated} updated, -{len(deleted_files)} removed, {skipped_files} skipped")
+
+        # Prepare sync results in Google-compatible shape
+        sync_results = {
+            "latest_sync": {
+                "added": files_added,
+                "updated": files_updated,
+                "removed": len(deleted_files),
+                "skipped": skipped_files,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(unique_conversations) + len(files),
+                "total_size_bytes": sum(int(f.get('size') or 0) for f in files),
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+
+        # Final state: Embedding (to match Google)
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
+        await update_data_source_sync_status(
+            USER_ID, 'slack', layer, 'embedding',
+            files_total=sync_results['overall_profile']['total_files'],
+            mb_total=sync_results['overall_profile']['total_size_bytes'],
+            sync_results=sync_results
+        )
     
     except Exception as error:
         await update_data_source_sync_status(USER_ID, 'slack', layer, 'error')

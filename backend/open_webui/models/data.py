@@ -68,8 +68,15 @@ class DataSource(Base):
     name = Column(Text)
     context = Column(Text, nullable=True)
     permission = Column(String, nullable=True)  # Store permissions as a string
-    sync_status = Column(String, default="unsynced")  # synced, syncing, embedded, unsynced
+    sync_status = Column(String, default="unsynced")  # synced, syncing, embedding, embedded, unsynced, deleting, deleted
     last_sync = Column(BigInteger, nullable=True)
+    # Progress tracking fields
+    files_processed = Column(BigInteger, default=0)
+    files_total = Column(BigInteger, default=0)
+    mb_processed = Column(BigInteger, default=0)  # bytes
+    mb_total = Column(BigInteger, default=0)      # bytes
+    sync_start_time = Column(BigInteger, nullable=True)  # timestamp when sync started
+    sync_results = Column(JSON, nullable=True, default={})  # JSON field for sync summary and overall profile
     icon = Column(String)
     action = Column(String, nullable=True)
     layer = Column(String, nullable=True)
@@ -88,6 +95,13 @@ class DataSourceModel(BaseModel):
     permission: Optional[str] = None
     sync_status: str = "unsynced"
     last_sync: Optional[int] = None  # timestamp in epoch
+    # Progress tracking fields
+    files_processed: Optional[int] = 0
+    files_total: Optional[int] = 0
+    mb_processed: Optional[int] = 0  # bytes
+    mb_total: Optional[int] = 0      # bytes
+    sync_start_time: Optional[int] = None  # timestamp when sync started
+    sync_results: Optional[dict] = {}  # JSON field for sync summary and overall profile
     icon: str
     action: Optional[str] = None
     layer: Optional[str] = None
@@ -108,6 +122,13 @@ class DataSourceForm(BaseModel):
     permission: Optional[str] = None
     sync_status: str = "unsynced"
     last_sync: Optional[int] = None
+    # Progress tracking fields
+    files_processed: Optional[int] = 0
+    files_total: Optional[int] = 0
+    mb_processed: Optional[int] = 0  # bytes
+    mb_total: Optional[int] = 0      # bytes
+    sync_start_time: Optional[int] = None  # timestamp when sync started
+    sync_results: Optional[dict] = {}  # JSON field for sync summary and overall profile
     icon: str
     action: Optional[str] = None
     layer: Optional[str] = None
@@ -121,6 +142,13 @@ class DataSourceResponse(BaseModel):
     permission: Optional[str] = None
     sync_status: str
     last_sync: Optional[int] = None
+    # Progress tracking fields
+    files_processed: Optional[int] = None
+    files_total: Optional[int] = None
+    mb_processed: Optional[int] = None
+    mb_total: Optional[int] = None
+    sync_start_time: Optional[int] = None
+    sync_results: Optional[dict] = None  # JSON field for sync summary and overall profile
     icon: str
     action: Optional[str] = None
     layer: Optional[str] = None
@@ -135,7 +163,7 @@ class DataSourcesTable:
     DEFAULT_DATA_SOURCES = [
         {
             "name": "Google Drive",
-            "context": "Sync Google Docs, Sheets, Slides, Forms & Drive Files",
+            "context": "Docs, sheets, slides",
             "permission": "https://www.googleapis.com/auth/drive.readonly",
             "sync_status": "unsynced",
             "icon": "GoogleDrive",
@@ -145,7 +173,7 @@ class DataSourcesTable:
         },
         {
             "name": "Gmail",
-            "context": "Sync Gmail emails & attachements",
+            "context": "Emails & attachements",
             "permission": "https://www.googleapis.com/auth/gmail.readonly",
             "sync_status": "unsynced",
             "icon": "Gmail",
@@ -155,7 +183,7 @@ class DataSourcesTable:
         },
         { 
             "name": "Outlook",
-            "context": "Sync Microsoft Outlook emails & attachments",
+            "context": "Emails & attachments",
             "permission": "Mail.Read",
             "sync_status": "unsynced",
             "icon": "Outlook",
@@ -165,7 +193,7 @@ class DataSourcesTable:
         },
         { 
             "name": "OneDrive",
-            "context": "Sync Microsoft OneDrive files and folders",
+            "context": "Files and folders",
             "permission": "Files.Read.All",
             "sync_status": "unsynced",
             "icon": "OneDrive",
@@ -175,7 +203,7 @@ class DataSourcesTable:
         },
         { 
             "name": "Sharepoint",
-            "context": "Sync Microsoft Sharepoint sites and files",
+            "context": "Sites and files",
             "permission": "Sites.Read.All, Files.Read.All",
             "sync_status": "unsynced",
             "icon": "Sharepoint",
@@ -185,7 +213,7 @@ class DataSourcesTable:
         },
         { 
             "name": "OneNote",
-            "context": "Sync Microsoft OneNote notes",
+            "context": "Notes",
             "permission": "Notes.Read",
             "sync_status": "unsynced",
             "icon": "OneNote",
@@ -195,7 +223,7 @@ class DataSourcesTable:
         },
         {
             "name": "Slack Direct Messages",
-            "context": "Sync Slack Direct Messages",
+            "context": "Direct messages",
             "permission": "im:history, im:read",
             "sync_status": "unsynced",
             "icon": "Slack",
@@ -205,7 +233,7 @@ class DataSourcesTable:
         },
         {
             "name": "Slack Channels",
-            "context": "Sync Slack Channels Conversations",
+            "context": "Channels conversations",
             "permission": "channels:history, channels:read",
             "sync_status": "unsynced",
             "icon": "Slack",
@@ -215,7 +243,7 @@ class DataSourcesTable:
         },
         {
             "name": "Slack Group Chats",
-            "context": "Sync Slack Group Chats",
+            "context": "Group chats",
             "permission": "groups:history, groups:read, mpim:history, mpim:read",
             "sync_status": "unsynced",
             "icon": "Slack",
@@ -225,7 +253,7 @@ class DataSourcesTable:
         },
         {
             "name": "Slack Files & Canvases",
-            "context": "Sync Files & Canvases",
+            "context": "Files & canvases",
             "permission": "files:read",
             "sync_status": "unsynced",
             "icon": "Slack",
@@ -235,7 +263,7 @@ class DataSourcesTable:
         },
         {
             "name": "Jira",
-            "context": "Sync Atlassian Jira projects & issues",
+            "context": "Projects & issues",
             "permission": "read:user:jira,read:issue:jira,read:comment:jira,read:attachment:jira,read:project:jira,read:issue-meta:jira,read:field:jira,read:filter:jira,read:jira-work,read:jira-user,read:me,read:account,report:personal-data",
             "sync_status": "unsynced",
             "icon": "JIRA",
@@ -245,7 +273,7 @@ class DataSourcesTable:
         },
         {
             "name": "Confluence",
-            "context": "Sync Atlassian Confluence Pages",
+            "context": "Pages & spaces",
             "permission": "read:content:confluence,read:space:confluence,read:page:confluence,read:blogpost:confluence,read:attachment:confluence,read:comment:confluence,read:user:confluence,read:group:confluence,read:configuration:confluence,search:confluence,read:audit-log:confluence",
             "sync_status": "unsynced",
             "icon": "Confluence",
@@ -255,7 +283,7 @@ class DataSourcesTable:
         },
         {
             "name": "Mineral Handbooks",
-            "context": "Sync Mineral Handbooks Pages",
+            "context": "Handbook",
             "permission": "read:handbooks, read:profile",
             "sync_status": "unsynced",
             "icon": "Mineral",
@@ -376,7 +404,13 @@ class DataSourcesTable:
         source_name: str, 
         layer_name: str,
         sync_status: str, 
-        last_sync: Optional[int] = None
+        last_sync: Optional[int] = None,
+        files_processed: Optional[int] = None,
+        files_total: Optional[int] = None,
+        mb_processed: Optional[int] = None,
+        mb_total: Optional[int] = None,
+        sync_start_time: Optional[int] = None,
+        sync_results: Optional[dict] = None
     ) -> Optional[DataSourceModel]:
         """
         Updates the sync status and last sync time for a data source,
@@ -385,8 +419,14 @@ class DataSourcesTable:
         Args:
             user_id (str): The ID of the user whose data source is to be updated.
             source_name (str): The name of the data source to update (e.g., "Slack").
-            sync_status (str): The new synchronization status (e.g., "synced", "syncing", "error").
+            sync_status (str): The new synchronization status (e.g., "synced", "syncing", "error", "deleting", "deleted").
             last_sync (Optional[int]): The new last sync timestamp in epoch. Defaults to current time if None.
+            files_processed (Optional[int]): Number of files processed so far.
+            files_total (Optional[int]): Total number of files to process.
+            mb_processed (Optional[int]): Number of bytes processed so far.
+            mb_total (Optional[int]): Total number of bytes to process.
+            sync_start_time (Optional[int]): Timestamp when sync started.
+            sync_results (Optional[dict]): JSON object containing sync summary and overall profile.
 
         Returns:
             Optional[DataSourceModel]: The updated DataSourceModel if found and updated, None otherwise.
@@ -405,6 +445,18 @@ class DataSourcesTable:
                     data_source.sync_status = sync_status
                     if last_sync is not None: # Check explicitly for None, not just truthiness
                         data_source.last_sync = last_sync
+                    if files_processed is not None:
+                        data_source.files_processed = files_processed
+                    if files_total is not None:
+                        data_source.files_total = files_total
+                    if mb_processed is not None:
+                        data_source.mb_processed = mb_processed
+                    if mb_total is not None:
+                        data_source.mb_total = mb_total
+                    if sync_start_time is not None:
+                        data_source.sync_start_time = sync_start_time
+                    if sync_results is not None:
+                        data_source.sync_results = sync_results
                     else:
                         data_source.last_sync = int(time.time()) # Set to current time if not provided
 
@@ -412,7 +464,6 @@ class DataSourcesTable:
                     data_source.updated_at = int(time.time())
                     db.commit()
                     db.refresh(data_source) # Refresh to get latest data from DB
-
 
                     log.info(f"Successfully updated sync status for data source '{source_name}' to '{sync_status}' for user {user_id}.")
                     return DataSourceModel.model_validate(data_source)

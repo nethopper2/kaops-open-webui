@@ -47,10 +47,18 @@ function applyValuesText() {
 		const rep = replacementsById.get(id);
 		const draft = (rep?.draft ?? '').trim();
 		const saved = (rep?.saved ?? '').trim();
+		const state = (el.dataset?.tokenState as TokenState | undefined) ?? 'none';
 		let text = '';
-		if (draft) text = draft;
-		else if (saved) text = saved;
-		else text = el.dataset.originalText ?? '';
+		if (state === 'draft') {
+			// In draft state, an explicit empty draft means show the original token text
+			text = draft ? draft : (el.dataset.originalText ?? '');
+		} else if (state === 'saved') {
+			// If saved value is empty or missing, fall back to original token text
+			text = saved ? saved : (el.dataset.originalText ?? '');
+		} else {
+			// none/unknown state uses original token text
+			text = el.dataset.originalText ?? '';
+		}
 		// Only update when different to avoid cursor jumps
 		if ((el.textContent ?? '') !== text) {
 			el.textContent = text;
@@ -78,7 +86,7 @@ function applyDraftMarkers() {
 			const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
 			const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
 			if (el) {
-				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 					clearStateTint(el);
 					el.classList.add('token-draft');
 				}
@@ -102,7 +110,7 @@ function applySavedMarkers() {
 			const safeId = (window as any).CSS?.escape ? (window as any).CSS.escape(id) : id.replace(/[^\w-]/g, '_');
 			const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
 			if (el) {
-				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 					clearStateTint(el);
 					el.classList.add('token-saved');
 				}
@@ -126,7 +134,7 @@ function applyNoneMarkers() {
 			const el = previewContainer!.querySelector(`#${safeId}`) as HTMLElement | null;
 			if (el) {
 				// For none state, ensure any previous draft/saved tints are removed when unselected.
-				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+				if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 					clearStateTint(el);
 				}
 				// Persist state regardless of selection so unselecting restores correctly
@@ -192,10 +200,10 @@ function applyModeStyles() {
 			clearStateTint(el);
 			const wasSavedSel = el.classList.contains('token-selected-saved');
 			const wasDraftSel = el.classList.contains('token-selected-draft');
-			const wasIncompleteSel = el.classList.contains('token-selected');
+			const wasIncompleteSel = el.classList.contains('token-selected-original');
 			el.classList.remove('token-selected-saved');
 			el.classList.remove('token-selected-draft');
-			el.classList.remove('token-selected');
+			el.classList.remove('token-selected-original');
 			if (wasSavedSel || wasDraftSel || wasIncompleteSel) {
 				el.classList.add('token-selected-original');
 			} else {
@@ -210,10 +218,10 @@ function applyModeStyles() {
 				el.classList.remove('token-selected-original');
 				const st = (el.dataset?.tokenState as TokenState | undefined) ?? 'saved';
 				if (st === 'draft') el.classList.add('token-selected-draft');
-				else if (st === 'none') el.classList.add('token-selected');
+				else if (st === 'none') el.classList.add('token-selected-original');
 				else el.classList.add('token-selected-saved');
 			}
-			if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected')) {
+			if (!el.classList.contains('token-selected-draft') && !el.classList.contains('token-selected-saved') && !el.classList.contains('token-selected-original')) {
 				clearStateTint(el);
 				const st = (el.dataset?.tokenState as TokenState | undefined);
 				if (st === 'draft') el.classList.add('token-draft');
@@ -246,6 +254,12 @@ $: if (previewHtml) {
 // When mode changes, re-apply styles on next tick
 // Include previewMode in the dependency so toggling modes re-applies text/value swaps and styles
 $: if (previewContainer && previewMode) {
+	try {
+		if (previewMode === 'values') {
+			// Request the editor view to send current statuses and values so we can tint tokens immediately
+			appHooks.callHook('private-ai.token-replacer.preview.request-sync');
+		}
+	} catch {}
 	setTimeout(() => applyModeStyles(), 0);
 }
 
@@ -259,7 +273,7 @@ let removeHook: (() => void) | null = null;
 
 function clearSelection() {
 	if (!previewContainer) return;
-	const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved, .token.token-selected, .token.token-selected-original') as HTMLElement | null;
+	const prevSel = previewContainer.querySelector('.token.token-selected-draft, .token.token-selected-saved, .token.token-selected-original') as HTMLElement | null;
 	if (prevSel) {
 		// Determine the token's persisted state if available
 		const savedState: TokenState = (prevSel.dataset?.tokenState as TokenState | undefined)
@@ -267,7 +281,6 @@ function clearSelection() {
 		// Remove selected state classes
 		prevSel.classList.remove('token-selected-draft');
 		prevSel.classList.remove('token-selected-saved');
-		prevSel.classList.remove('token-selected');
 		prevSel.classList.remove('token-selected-original');
 		// Restore unselected state based on mode and tokenState
 		clearStateTint(prevSel);
@@ -299,7 +312,7 @@ function selectAndScroll(id: string, state: 'draft' | 'saved') {
 			if (previewMode === 'original') {
 				el.classList.add('token-selected-original');
 			} else {
-				if (isNone) el.classList.add('token-selected');
+				if (isNone) el.classList.add('token-selected-original');
 				else el.classList.add(state === 'draft' ? 'token-selected-draft' : 'token-selected-saved');
 			}
 			// Scroll into view centered within the scrollable container
@@ -358,7 +371,12 @@ onMount(() => {
 	const setValues = (params: { byId: Record<string, { draft?: string; saved?: string }> }) => {
 		try {
 			replacementsById = new Map(Object.entries(params.byId || {}));
-			if (previewMode === 'values') applyValuesText();
+			if (previewMode === 'values') {
+				// Apply status first so tokenState is accurate for text resolution
+				applyStatusMarkers();
+				applyValuesText();
+				applyModeStyles();
+			}
 		} catch {
 		}
 	};
@@ -491,7 +509,7 @@ onDestroy(() => {
   /* Original mode base look: Unselected uses Incomplete styling (same as token-none) */
   :global(.preview-html.mode-original .token) {
     background: rgba(234, 179, 8, 0.20); /* yellow-500/20 */
-    color: #111827 !important; /* gray-900 for readability */
+    color: #fde68a !important; /* gray-900 for readability */
     border-color: rgba(234, 179, 8, 0.35);
   }
 
@@ -506,7 +524,7 @@ onDestroy(() => {
   /* +Values mode base and unselected state tints */
   :global(.preview-html.mode-values .token) {
     background: rgba(234, 179, 8, 0.20); /* warning: yellow-500/20 */
-    color: #111827 !important; /* gray-900 for readability */
+    color: #fde68a !important; /* gray-900 for readability */
     border-color: rgba(234, 179, 8, 0.35);
   }
 
@@ -558,13 +576,6 @@ onDestroy(() => {
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35) !important;
   }
 
-  :global(.preview-html .token.token-selected) {
-    background: #fef9c3 !important; /* yellow-100 */
-    color: #111827 !important; /* gray-900 for readability */
-    border: 2px solid rgba(250, 204, 21, 0.9) !important; /* yellow-400 */
-    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.35) !important; /* subtle halo */
-    font-weight: 700 !important;
-  }
 
   :global(.preview-html .token.token-selected-original) {
     background: #fef9c3 !important; /* align with lighter warning */
@@ -590,12 +601,6 @@ onDestroy(() => {
       box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.4) !important;
     }
 
-    :global(.preview-html .token.token-selected) {
-      background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */
-      color: #fde68a !important; /* yellow-200 */
-      border: 2px solid rgba(245, 158, 11, 0.85) !important; /* amber-500-600 */
-      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4) !important;
-    }
 
     :global(.preview-html .token.token-selected-original) {
       background: rgba(202, 138, 4, 0.45) !important; /* amber-600/45 */

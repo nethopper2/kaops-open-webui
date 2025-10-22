@@ -431,4 +431,9 @@ onBeforeMount(() => {
 	font-weight: 400;
 	font-style: normal;
 }
+
+/* attempt to prevent the hidden popup from taking up space.  */
+.dx-state-invisible {
+	display: none !important;
+}
 </style>

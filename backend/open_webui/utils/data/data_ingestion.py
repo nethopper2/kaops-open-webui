@@ -457,24 +457,116 @@ def delete_gcs_file(file_name, service_account_base64, GCS_BUCKET_NAME):
 # NH DATA SERVICE BACKEND FUNCTIONS (Phase 4)
 # ============================================================================
 
-def list_pai_files(prefix: str = None, auth_token: str = None, max_results: int = 1000) -> List[Dict[str, Any]]:
-    """List files using pai-data-service API"""
+def get_files_summary(prefix: str = None, auth_token: str = None, max_results: int = 1000) -> Dict[str, Any]:
+    """Get file summary statistics using pai-data-service API"""
     try:
-        url = f"{storage_config.pai_base_url}/files"
-        params = {}
+        url = f"{storage_config.pai_base_url}/files/summary"
+        params = {
+            'maxResults': max_results
+        }
+        
         if prefix:
             params['prefix'] = prefix
-        if max_results:
-            params['maxResults'] = max_results
+        
+        headers = get_api_headers(auth_token)
             
         response = make_api_request(
             url, 
             method='GET', 
-            headers=get_api_headers(auth_token),
+            headers=headers,
             params=params
         )
         
-        return response.get('files', [])
+        return response
+        
+    except requests.exceptions.ConnectionError as e:
+        log.warning(f"PAI Data Service unavailable for summary: {e}")
+        return {
+            'prefix': prefix or '',
+            'totalFiles': 0,
+            'totalSize': 0,
+            'asOf': None,
+            'durationMs': 0,
+            'error': 'service_unavailable'
+        }
+    except requests.exceptions.HTTPError as e:
+        if e.response and e.response.status_code == 502:
+            log.warning(f"PAI Data Service unavailable (502) for summary: {e}")
+        else:
+            log.warning(f"PAI Data Service HTTP error for summary: {e}")
+        return {
+            'prefix': prefix or '',
+            'totalFiles': 0,
+            'totalSize': 0,
+            'asOf': None,
+            'durationMs': 0,
+            'error': 'service_error'
+        }
+    except Exception as error:
+        log.warning(f"PAI Data Service summary failed: {str(error)}")
+        return {
+            'prefix': prefix or '',
+            'totalFiles': 0,
+            'totalSize': 0,
+            'asOf': None,
+            'durationMs': 0,
+            'error': 'unexpected_error'
+        }
+
+def list_pai_files(prefix: str = None, auth_token: str = None, max_results: int = None) -> List[Dict[str, Any]]:
+    """List files using pai-data-service API with pagination support"""
+    try:
+        all_files = []
+        next_page_token = None
+        
+        while True:
+            url = f"{storage_config.pai_base_url}/files"
+            params = {
+                'recursive': 'true'  # Get all files in subdirectories
+            }
+            
+            if prefix:
+                params['prefix'] = prefix
+            
+            # Use maxResults=1000 for optimal page size (API limit)
+            params['maxResults'] = 1000
+            
+            if next_page_token:
+                params['pageToken'] = next_page_token
+            
+            headers = get_api_headers(auth_token)
+                
+            response = make_api_request(
+                url, 
+                method='GET', 
+                headers=headers,
+                params=params
+            )
+            
+            files = response.get('files', [])
+            
+            # Filter out directories to get only actual files
+            file_files = [f for f in files if not f.get('isDirectory', False)]
+            all_files.extend(file_files)
+            
+            # Check pagination
+            pagination = response.get('pagination', {})
+            next_page_token = pagination.get('nextPageToken')
+            has_more = pagination.get('hasMore', False)
+            
+            # Stop if no more pages or we've reached the requested limit
+            if not next_page_token or not has_more:
+                break
+            
+            # Stop if we've reached the requested max_results limit
+            if max_results and len(all_files) >= max_results:
+                break
+        
+        # Trim to max_results if specified
+        if max_results and len(all_files) > max_results:
+            all_files = all_files[:max_results]
+        
+        return all_files
         
     except Exception as error:
         print(f"PAI Data Service listing failed: {str(error)}")
@@ -498,8 +590,20 @@ def upload_to_pai_service(file_content: bytes, destination_path: str,
         
         return True
         
+    except requests.exceptions.ConnectionError as e:
+        log.warning(f"PAI Data Service unavailable for upload {destination_path}: {e}")
+        return False
+    except requests.exceptions.Timeout as e:
+        log.warning(f"PAI Data Service timeout for upload {destination_path}: {e}")
+        return False
+    except requests.exceptions.HTTPError as e:
+        if e.response and e.response.status_code == 502:
+            log.warning(f"PAI Data Service unavailable (502) for upload {destination_path}: {e}")
+        else:
+            log.warning(f"PAI Data Service HTTP error for upload {destination_path}: {e}")
+        return False
     except Exception as error:
-        print(f"PAI Data Service upload failed for {destination_path}: {str(error)}")
+        log.warning(f"PAI Data Service upload failed for {destination_path}: {str(error)}")
         return False
 
 def download_from_pai_service(file_path: str, auth_token: str = None) -> Optional[bytes]:
@@ -567,7 +671,7 @@ async def delete_pai_folder(folder_path: str, auth_token: str = None) -> bool:
 # UNIFIED STORAGE INTERFACE
 # ============================================================================
 
-def list_files_unified(prefix: str = None, max_results: int = 1000, user_id: str = None) -> List[Dict[str, Any]]:
+def list_files_unified(prefix: str = None, max_results: int = None, user_id: str = None) -> List[Dict[str, Any]]:
     """List files using configured storage backend"""
     if storage_config.backend == StorageBackend.GCS:
         return list_gcs_files(
@@ -664,7 +768,13 @@ async def update_data_source_sync_status(
     user_id: str,
     source_action: str,
     layer: str,
-    status: str
+    status: str,
+    files_processed: Optional[int] = None,
+    files_total: Optional[int] = None,
+    mb_processed: Optional[int] = None,
+    mb_total: Optional[int] = None,
+    sync_start_time: Optional[int] = None,
+    sync_results: Optional[dict] = None
 ) -> Optional[DataSourceModel]:
     """Updates the sync status and last sync timestamp for a data source"""
     log.info(f"Attempting to update sync status for user {user_id}, source action '{source_action}' to '{status}'")
@@ -687,7 +797,13 @@ async def update_data_source_sync_status(
             source_name=target_data_source_name,
             layer_name=layer,
             sync_status=status,
-            last_sync=int(time.time())
+            last_sync=int(time.time()),
+            files_processed=files_processed,
+            files_total=files_total,
+            mb_processed=mb_processed,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time,
+            sync_results=sync_results
         )
         
         if updated_source:
@@ -698,7 +814,8 @@ async def update_data_source_sync_status(
                     "source": updated_source.name,
                     "status": updated_source.sync_status,
                     "message": f"{updated_source.name} sync status updated!",
-                    "timestamp": int(time.time())
+                    "timestamp": int(time.time()),
+                    "sync_results": updated_source.sync_results
                 }
             )
 

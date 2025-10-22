@@ -1,7 +1,6 @@
 <script lang="ts">
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'svelte-sonner';
-import mermaid from 'mermaid';
 import { PaneGroup, Pane, PaneResizer } from 'paneforge';
 
 import { getContext, onDestroy, onMount, tick } from 'svelte';
@@ -31,6 +30,7 @@ import {
 	showControls,
 	showCallOverlay,
 	showPrivateAiSidekick,
+	canShowPrivateAiSidekick,
 	currentChatPage,
 	temporaryChatEnabled,
 	mobile,
@@ -39,10 +39,11 @@ import {
 	showArtifacts,
 	tools,
 	toolServers,
+	functions,
 	selectedFolder,
 	pinnedChats,
 	currentSelectedModelId,
-	canShowPrivateAiSidekick
+	showEmbeds
 } from '$lib/stores';
 import {
 	convertMessagesToHistory,
@@ -54,7 +55,6 @@ import {
 	removeAllDetails
 } from '$lib/utils';
 
-import { generateChatCompletion } from '$lib/apis/ollama';
 import {
 	createNewChat,
 	getAllTags,
@@ -67,8 +67,6 @@ import {
 } from '$lib/apis/chats';
 import { generateOpenAIChatCompletion } from '$lib/apis/openai';
 import { processWeb, processWebSearch, processYoutubeVideo } from '$lib/apis/retrieval';
-import { createOpenAITextStream } from '$lib/apis/streaming';
-import { queryMemory } from '$lib/apis/memories';
 import { getAndUpdateUserLocation, getUserSettings } from '$lib/apis/users';
 import {
 	chatCompleted,
@@ -76,9 +74,14 @@ import {
 	chatAction,
 	generateMoACompletion,
 	stopTask,
-	getTaskIdsByChatId, getBackendConfig
+	getTaskIdsByChatId,
+	getBackendConfig
 } from '$lib/apis';
 import { getTools } from '$lib/apis/tools';
+import { uploadFile } from '$lib/apis/files';
+import { createOpenAITextStream } from '$lib/apis/streaming';
+
+import { fade } from 'svelte/transition';
 
 import Banner from '../common/Banner.svelte';
 import MessageInput from '$lib/components/chat/MessageInput.svelte';
@@ -91,11 +94,12 @@ import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 import Placeholder from './Placeholder.svelte';
 import NotificationToast from '../NotificationToast.svelte';
 import Spinner from '../common/Spinner.svelte';
-import { fade } from 'svelte/transition';
 import Tooltip from '../common/Tooltip.svelte';
 import Sidebar from '../icons/Sidebar.svelte';
-import { uploadFile } from '$lib/apis/files';
-import { PRIVATE_AI_MODEL_PREFIX } from '$lib/shared/private_ai';
+import { getFunctions } from '$lib/apis/functions';
+import Image from '../common/Image.svelte';
+import { updateFolderById } from '$lib/apis/folders';
+import { PRIVATE_AI_MODEL_PREFIX } from '$lib/shared/privateAi';
 
 export let chatIdProp = '';
 
@@ -416,7 +420,12 @@ const onSelect = async (e) => {
 
 	if (type === 'prompt') {
 		// Handle prompt selection
-		messageInput?.setText(data);
+		messageInput?.setText(data, async () => {
+			if (!($settings?.insertSuggestionPrompt ?? false)) {
+				await tick();
+				submitPrompt(prompt);
+			}
+		});
 	}
 };
 
@@ -425,10 +434,16 @@ $: if (selectedModels && chatIdProp !== '') {
 }
 
 const saveSessionSelectedModels = () => {
-	if (selectedModels.length === 0 || (selectedModels.length === 1 && selectedModels[0] === '')) {
+	const selectedModelsString = JSON.stringify(selectedModels);
+	if (
+		selectedModels.length === 0 ||
+		(selectedModels.length === 1 && selectedModels[0] === '') ||
+		sessionStorage.selectedModels === selectedModelsString
+	) {
 		return;
 	}
-	sessionStorage.selectedModels = JSON.stringify(selectedModels);
+	sessionStorage.selectedModels = selectedModelsString;
+	console.log('saveSessionSelectedModels', selectedModels, sessionStorage.selectedModels);
 };
 
 let oldSelectedModelIds = [''];
@@ -444,37 +459,62 @@ const onSelectedModelIdsChange = () => {
 };
 
 const resetInput = () => {
-	console.debug('resetInput');
-	setToolIds();
-
+	selectedToolIds = [];
 	selectedFilterIds = [];
 	webSearchEnabled = false;
 	imageGenerationEnabled = false;
 	codeInterpreterEnabled = false;
+
+	setDefaults();
 };
 
-const setToolIds = async () => {
+const setDefaults = async () => {
 	if (!$tools) {
 		tools.set(await getTools(localStorage.token));
 	}
-
+	if (!$functions) {
+		functions.set(await getFunctions(localStorage.token));
+	}
 	if (selectedModels.length !== 1 && !atSelectedModel) {
 		return;
 	}
 
 	const model = atSelectedModel ?? $models.find((m) => m.id === selectedModels[0]);
-	if (model && model?.info?.meta?.toolIds) {
-		selectedToolIds = [
-			...new Set(
-				[...(model?.info?.meta?.toolIds ?? [])].filter((id) => $tools.find((t) => t.id === id))
-			)
-		];
-	} else {
-		selectedToolIds = [];
+	if (model) {
+		// Set Default Tools
+		if (model?.info?.meta?.toolIds) {
+			selectedToolIds = [
+				...new Set(
+					[...(model?.info?.meta?.toolIds ?? [])].filter((id) => $tools.find((t) => t.id === id))
+				)
+			];
+		}
+
+		// Set Default Filters (Toggleable only)
+		if (model?.info?.meta?.defaultFilterIds) {
+			selectedFilterIds = model.info.meta.defaultFilterIds.filter((id) =>
+				model?.filters?.find((f) => f.id === id)
+			);
+		}
+
+		// Set Default Features
+		if (model?.info?.meta?.defaultFeatureIds) {
+			if (model.info?.meta?.capabilities?.['image_generation']) {
+				imageGenerationEnabled = model.info.meta.defaultFeatureIds.includes('image_generation');
+			}
+
+			if (model.info?.meta?.capabilities?.['web_search']) {
+				webSearchEnabled = model.info.meta.defaultFeatureIds.includes('web_search');
+			}
+
+			if (model.info?.meta?.capabilities?.['code_interpreter']) {
+				codeInterpreterEnabled = model.info.meta.defaultFeatureIds.includes('code_interpreter');
+			}
+		}
 	}
 };
 
-const showMessage = async (message) => {
+const showMessage = async (message, ignoreSettings = false) => {
 	await tick();
 
 	const _chatId = JSON.parse(JSON.stringify($chatId));
@@ -500,7 +540,7 @@ const showMessage = async (message) => {
 	await tick();
 	await tick();
 
-	if ($settings?.scrollOnBranchChange ?? true) {
+	if (($settings?.scrollOnBranchChange ?? true) || ignoreSettings) {
 		const messageElement = document.getElementById(`message-${message.id}`);
 		if (messageElement) {
 			messageElement.scrollIntoView({ behavior: 'smooth' });
@@ -570,12 +610,23 @@ const chatEventHandler = async (event, cb) => {
 				}
 			} else if (type === 'chat:completion') {
 				chatCompletionEventHandler(data, message, event.chat_id);
+			} else if (type === 'chat:tasks:cancel') {
+				taskIds = null;
+				const responseMessage = history.messages[history.currentId];
+				// Set all response messages to done
+				for (const messageId of history.messages[responseMessage.parentId].childrenIds) {
+					history.messages[messageId].done = true;
+				}
 			} else if (type === 'chat:message:delta' || type === 'message') {
 				message.content += data.content;
 			} else if (type === 'chat:message' || type === 'replace') {
 				message.content = data.content;
 			} else if (type === 'chat:message:files' || type === 'files') {
 				message.files = data.files;
+			} else if (type === 'chat:message:embeds' || type === 'embeds') {
+				message.embeds = data.embeds;
+			} else if (type === 'chat:message:error') {
+				message.error = data.error;
 			} else if (type === 'chat:message:follow_ups') {
 				message.followUps = data.follow_ups;
 
@@ -710,6 +761,15 @@ const onMessageHandler = async (event: {
 		return;
 	}
 
+	if (event.data.type === 'action:submit') {
+		console.debug(event.data.text);
+
+		if (prompt !== '') {
+			await tick();
+			submitPrompt(prompt);
+		}
+	}
+
 	// Replace with your iframe's origin
 	if (event.data.type === 'input:prompt') {
 		console.debug(event.data.text);
@@ -719,15 +779,6 @@ const onMessageHandler = async (event: {
 		if (inputElement) {
 			messageInput?.setText(event.data.text);
 			inputElement.focus();
-		}
-	}
-
-	if (event.data.type === 'action:submit') {
-		console.debug(event.data.text);
-
-		if (prompt !== '') {
-			await tick();
-			submitPrompt(prompt);
 		}
 	}
 
@@ -741,12 +792,33 @@ const onMessageHandler = async (event: {
 	}
 };
 
+const savedModelIds = async () => {
+	if (
+		$selectedFolder &&
+		selectedModels.filter((modelId) => modelId !== '').length > 0 &&
+		JSON.stringify($selectedFolder?.data?.model_ids) !== JSON.stringify(selectedModels)
+	) {
+		const res = await updateFolderById(localStorage.token, $selectedFolder.id, {
+			data: {
+				model_ids: selectedModels
+			}
+		});
+	}
+};
+
+$: if (selectedModels !== null) {
+	savedModelIds();
+}
+
 let pageSubscribe = null;
+let showControlsSubscribe = null;
+let selectedFolderSubscribe = null;
+
 onMount(async () => {
 	loading = true;
 	console.log('mounted');
 	window.addEventListener('message', onMessageHandler);
-	$socket?.on('chat-events', chatEventHandler);
+	$socket?.on('events', chatEventHandler);
 
 	pageSubscribe = page.subscribe(async (p) => {
 		if (p.url.pathname === '/') {
@@ -791,10 +863,12 @@ onMount(async () => {
 		}
 	}
 
-	showControls.subscribe(async (value) => {
+	showControlsSubscribe = showControls.subscribe(async (value) => {
 		if (controlPane && !$mobile) {
 			try {
-				if (!value) {
+				if (value) {
+					controlPaneComponent.openPane();
+				} else {
 					controlPane.collapse();
 				}
 			} catch (e) {
@@ -806,21 +880,36 @@ onMount(async () => {
 			showCallOverlay.set(false);
 			showOverview.set(false);
 			showArtifacts.set(false);
+			showEmbeds.set(false);
+		}
+	});
+
+	selectedFolderSubscribe = selectedFolder.subscribe(async (folder) => {
+		if (
+			folder?.data?.model_ids &&
+			JSON.stringify(selectedModels) !== JSON.stringify(folder.data.model_ids)
+		) {
+			selectedModels = folder.data.model_ids;
+
+			console.log('Set selectedModels from folder data:', selectedModels);
 		}
 	});
 
 	const chatInput = document.getElementById('chat-input');
 	chatInput?.focus();
-
-	chats.subscribe(() => {
-	});
 });
 
 onDestroy(() => {
-	pageSubscribe();
-	chatIdUnsubscriber?.();
-	window.removeEventListener('message', onMessageHandler);
-	$socket?.off('chat-events', chatEventHandler);
+	try {
+		pageSubscribe();
+		showControlsSubscribe();
+		selectedFolderSubscribe();
+		chatIdUnsubscriber?.();
+		window.removeEventListener('message', onMessageHandler);
+		$socket?.off('events', chatEventHandler);
+	} catch (e) {
+		console.error(e);
+	}
 });
 
 // File upload functions
@@ -954,7 +1043,7 @@ const uploadWeb = async (url) => {
 	console.log(url);
 
 	const fileItem = {
-		type: 'doc',
+		type: 'text',
 		name: url,
 		collection_name: '',
 		status: 'uploading',
@@ -987,7 +1076,7 @@ const uploadYoutubeTranscription = async (url) => {
 	console.log(url);
 
 	const fileItem = {
-		type: 'doc',
+		type: 'text',
 		name: url,
 		collection_name: '',
 		status: 'uploading',
@@ -1021,6 +1110,7 @@ const uploadYoutubeTranscription = async (url) => {
 //////////////////////////
 
 const initNewChat = async () => {
+	console.log('initNewChat');
 	if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
 		await temporaryChatEnabled.set(true);
 	}
@@ -1071,17 +1161,22 @@ const initNewChat = async () => {
 			$models.map((m) => m.id).includes(modelId)
 		);
 	} else {
-		if (sessionStorage.selectedModels) {
-			selectedModels = JSON.parse(sessionStorage.selectedModels);
-			sessionStorage.removeItem('selectedModels');
+		if ($selectedFolder?.data?.model_ids) {
+			selectedModels = $selectedFolder?.data?.model_ids;
 		} else {
-			if ($settings?.models) {
-				selectedModels = $settings?.models;
-			} else if ($config?.default_models) {
-				console.log($config?.default_models.split(',') ?? '');
-				selectedModels = $config?.default_models.split(',');
+			if (sessionStorage.selectedModels) {
+				selectedModels = JSON.parse(sessionStorage.selectedModels);
+				sessionStorage.removeItem('selectedModels');
+			} else {
+				if ($settings?.models) {
+					selectedModels = $settings?.models;
+				} else if ($config?.default_models) {
+					console.log($config?.default_models.split(',') ?? '');
+					selectedModels = $config?.default_models.split(',');
+				}
 			}
 		}
+
 		selectedModels = selectedModels.filter((modelId) => availableModels.includes(modelId));
 	}
 
@@ -1682,10 +1777,10 @@ const submitPrompt = async (
 ) => {
 	console.log('submitPrompt', userPrompt, $chatId);
 
-	const messages = createMessagesList(history, history.currentId);
 	const _selectedModels = selectedModels.map((modelId) =>
 		$models.map((m) => m.id).includes(modelId) ? modelId : ''
 	);
+
 	if (JSON.stringify(selectedModels) !== JSON.stringify(_selectedModels)) {
 		selectedModels = _selectedModels;
 	}
@@ -1699,15 +1794,6 @@ const submitPrompt = async (
 		return;
 	}
 
-	if (messages.length != 0 && messages.at(-1).done != true) {
-		// Response not done
-		return;
-	}
-	if (messages.length != 0 && messages.at(-1).error && !messages.at(-1).content) {
-		// Error in response
-		toast.error($i18n.t(`Oops! There was an error in the previous response.`));
-		return;
-	}
 	if (
 		files.length > 0 &&
 		files.filter((file) => file.type !== 'image' && file.status === 'uploading').length > 0
@@ -1717,6 +1803,7 @@ const submitPrompt = async (
 		);
 		return;
 	}
+
 	if (
 		($config?.file?.max_count ?? null) !== null &&
 		files.length + chatFiles.length > $config?.file?.max_count
@@ -1729,21 +1816,31 @@ const submitPrompt = async (
 		return;
 	}
 
-	messageInput?.setText('');
-	prompt = '';
+	if (history?.currentId) {
+		const lastMessage = history.messages[history.currentId];
+		if (lastMessage.done != true) {
+			// Response not done
+			return;
+		}
 
-	// Reset chat input textarea
-	if (!($settings?.richTextInput ?? true)) {
-		const chatInputElement = document.getElementById('chat-input');
-
-		if (chatInputElement) {
-			await tick();
-			chatInputElement.style.height = '';
+		if (lastMessage.error && !lastMessage.content) {
+			// Error in response
+			toast.error($i18n.t(`Oops! There was an error in the previous response.`));
+			return;
 		}
 	}
 
+	messageInput?.setText('');
+	prompt = '';
+
+	const messages = createMessagesList(history, history.currentId);
 	const _files = JSON.parse(JSON.stringify(files));
-	chatFiles.push(..._files.filter((item) => ['doc', 'file', 'collection'].includes(item.type)));
+
+	chatFiles.push(
+		..._files.filter((item) =>
+			['doc', 'text', 'file', 'note', 'chat', 'folder', 'collection'].includes(item.type)
+		)
+	);
 	chatFiles = chatFiles.filter(
 		// Remove duplicates
 		(item, index, array) =>
@@ -1763,7 +1860,7 @@ const submitPrompt = async (
 		content: userPrompt,
 		files: _files.length > 0 ? _files : undefined,
 		timestamp: Math.floor(Date.now() / 1000), // Unix epoch
-		models: selectedModels,
+		models: selectedModels
 	};
 
 	// Add message to history and Set currentId to messageId
@@ -1811,12 +1908,20 @@ const sendMessage = async (
 	_history = JSON.parse(JSON.stringify(_history));
 
 	const responseMessageIds: Record<PropertyKey, string> = {};
-	// If modelId is provided, use it, else use selected model
+	// If modelId is provided, use it.
+	// If modelId is provided, use it, else use selected model (original code)
+	// let selectedModelIds = modelId
+	// 	? [modelId]
+	// 	: atSelectedModel !== undefined
+	// 		? [atSelectedModel.id]
+	// 		: selectedModels;
+	// Prefer a single selectedModels entry (explicit selection) over atSelectedModel,
+	// otherwise fall back to atSelectedModel or the full selectedModels array.
 	let selectedModelIds = modelId
 		? [modelId]
-		: atSelectedModel !== undefined
-			? [atSelectedModel.id]
-			: selectedModels;
+		: (Array.isArray(selectedModels) && selectedModels.length === 1 && selectedModels[0] !== '')
+			? selectedModels
+			: (atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels);
 
 	// Create response messages for each selected model
 	for (const [_modelIdx, modelId] of selectedModelIds.entries()) {
@@ -1911,7 +2016,50 @@ const sendMessage = async (
 	chats.set(await getChatList(localStorage.token, $currentChatPage));
 };
 
-const sendMessageSocket = async (model, _messages, _history, responseMessageId, _chatId, privateAi?: { directive?: Record<string, unknown>; metadata?: Record<string, unknown> }) => {
+const getFeatures = () => {
+	let features = {};
+
+	if ($config?.features)
+		features = {
+			image_generation:
+				$config?.features?.enable_image_generation &&
+				($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
+					? imageGenerationEnabled
+					: false,
+			code_interpreter:
+				$config?.features?.enable_code_interpreter &&
+				($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
+					? codeInterpreterEnabled
+					: false,
+			web_search:
+				$config?.features?.enable_web_search &&
+				($user?.role === 'admin' || $user?.permissions?.features?.web_search)
+					? webSearchEnabled
+					: false
+		};
+
+	const currentModels = atSelectedModel?.id ? [atSelectedModel.id] : selectedModels;
+	if (
+		currentModels.filter(
+			(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.web_search ?? true
+		).length === currentModels.length
+	) {
+		if ($config?.features?.enable_web_search && ($settings?.webSearch ?? false) === 'always') {
+			features = { ...features, web_search: true };
+		}
+	}
+
+	if ($settings?.memory ?? false) {
+		features = { ...features, memory: true };
+	}
+
+	return features;
+};
+
+const sendMessageSocket = async (model, _messages, _history, responseMessageId, _chatId, privateAi?: {
+	directive?: Record<string, unknown>;
+	metadata?: Record<string, unknown>
+}) => {
 	const responseMessage = _history.messages[responseMessageId];
 	const userMessage = _history.messages[responseMessage.parentId];
 
@@ -1928,7 +2076,7 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 	let files = JSON.parse(JSON.stringify(chatFiles));
 	files.push(
 		...(userMessage?.files ?? []).filter((item) =>
-			['doc', 'text', 'file', 'note', 'collection'].includes(item.type)
+			['doc', 'text', 'file', 'note', 'chat', 'collection'].includes(item.type)
 		)
 	);
 	// Remove duplicates
@@ -2001,7 +2149,7 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 		}))
 		.filter((message) => message?.role === 'user' || message?.content?.trim());
 
- // Build privateAi payload for pipelines (optional)
+	// Build privateAi payload for pipelines (optional)
 	const modelIsPrivate = typeof model?.id === 'string' && model.id.startsWith(PRIVATE_AI_MODEL_PREFIX);
 	let privateAiPayload: PrivateAiExtras | undefined = privateAi ? { ...privateAi } as PrivateAiExtras : undefined;
 	if (modelIsPrivate) {
@@ -2019,7 +2167,24 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 		console.log(privateAiPayload)
 	}
 
- const bodyObj: any = {
+	const toolIds = [];
+	const toolServerIds = [];
+
+	for (const toolId of selectedToolIds) {
+		if (toolId.startsWith('direct_server:')) {
+			let serverId = toolId.replace('direct_server:', '');
+			// Check if serverId is a number
+			if (!isNaN(parseInt(serverId))) {
+				toolServerIds.push(parseInt(serverId));
+			} else {
+				toolServerIds.push(serverId);
+			}
+		} else {
+			toolIds.push(toolId);
+		}
+	}
+
+	const bodyObj: any = {
 		stream: stream,
 		model: model.id,
 		messages: messages,
@@ -2037,27 +2202,12 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 		files: (files?.length ?? 0) > 0 ? files : undefined,
 
 		filter_ids: selectedFilterIds.length > 0 ? selectedFilterIds : undefined,
-		tool_ids: selectedToolIds.length > 0 ? selectedToolIds : undefined,
-		tool_servers: $toolServers,
+		tool_ids: toolIds.length > 0 ? toolIds : undefined,
+		tool_servers: ($toolServers ?? []).filter(
+			(server, idx) => toolServerIds.includes(idx) || toolServerIds.includes(server?.id)
+		),
 
-		features: {
-			image_generation:
-				$config?.features?.enable_image_generation &&
-				($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
-					? imageGenerationEnabled
-					: false,
-			code_interpreter:
-				$config?.features?.enable_code_interpreter &&
-				($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
-					? codeInterpreterEnabled
-					: false,
-			web_search:
-				$config?.features?.enable_web_search &&
-				($user?.role === 'admin' || $user?.permissions?.features?.web_search)
-					? webSearchEnabled || ($settings?.webSearch ?? false) === 'always'
-					: false,
-			memory: $settings?.memory ?? false
-		},
+		features: getFeatures(),
 		variables: {
 			...getPromptVariables($user?.name, $settings?.userLocation ? userLocation : undefined)
 		},
@@ -2389,8 +2539,8 @@ const initChatHandler = async (history, opts: { title?: string } = {}) => {
 
 		selectedFolder.set(null);
 	} else {
-		_chatId = 'local';
-		await chatId.set('local');
+		_chatId = `local:${$socket?.id}`; // Use socket id for temporary chat
+		await chatId.set(_chatId);
 	}
 	await tick();
 
@@ -2464,7 +2614,7 @@ const moveChatHandler = async (chatId, folderId) => {
 
 <svelte:head>
 	<title>
-		{$chatTitle
+		{$settings.showChatTitleInTab !== false && $chatTitle
 			? `${$chatTitle.length > 30 ? `${$chatTitle.slice(0, 30)}...` : $chatTitle} • ${$WEBUI_NAME}`
 			: `${$WEBUI_NAME}`}
 	</title>
@@ -2499,7 +2649,18 @@ const moveChatHandler = async (chatId, folderId) => {
 >
 	{#if !loading}
 		<div in:fade={{ duration: 50 }} class="w-full h-full flex flex-col">
-			{#if $settings?.backgroundImageUrl ?? $config?.license_metadata?.background_image_url ?? null}
+			{#if $selectedFolder && $selectedFolder?.meta?.background_image_url}
+				<div
+					class="absolute {$showSidebar
+						? 'md:max-w-[calc(100%-260px)] md:translate-x-[260px]'
+						: ''} top-0 left-0 w-full h-full bg-cover bg-center bg-no-repeat"
+					style="background-image: url({$selectedFolder?.meta?.background_image_url})  "
+				/>
+
+				<div
+					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-900 dark:to-gray-900/90 z-0"
+				/>
+			{:else if $settings?.backgroundImageUrl ?? $config?.license_metadata?.background_image_url ?? null}
 				<div
 					class="absolute {$showSidebar
 						? 'md:max-w-[calc(100%-260px)] md:translate-x-[260px]'
@@ -2514,7 +2675,7 @@ const moveChatHandler = async (chatId, folderId) => {
 			{/if}
 
 			<PaneGroup direction="horizontal" class="w-full h-full">
-				<Pane defaultSize={50} class="h-full flex relative max-w-full flex-col">
+				<Pane defaultSize={50} minSize={30} class="h-full flex relative max-w-full flex-col">
 					<ChatOverlay
 						show={overlayShow}
 						title={overlayTitle}
@@ -2543,7 +2704,6 @@ const moveChatHandler = async (chatId, folderId) => {
 						bind:selectedModels
 						shareEnabled={!!history.currentId}
 						{initNewChat}
-						showBanners={!showCommands}
 						archiveChatHandler={() => {}}
 						{moveChatHandler}
 						onSaveTempChat={async () => {
@@ -2663,11 +2823,7 @@ const moveChatHandler = async (chatId, folderId) => {
 										if (e.detail || files.length > 0) {
 											await tick();
 
-											submitPrompt(
-												($settings?.richTextInput ?? true)
-													? e.detail.replaceAll('\n\n', '\n')
-													: e.detail
-											);
+											submitPrompt(e.detail.replaceAll('\n\n', '\n'));
 										}
 									}}
 								/>
@@ -2716,11 +2872,7 @@ const moveChatHandler = async (chatId, folderId) => {
 										clearDraft();
 										if (e.detail || files.length > 0) {
 											await tick();
-											submitPrompt(
-												($settings?.richTextInput ?? true)
-													? e.detail.replaceAll('\n\n', '\n')
-													: e.detail
-											);
+											submitPrompt(e.detail.replaceAll('\n\n', '\n'));
 										}
 									}}
 								/>

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { getContext, onDestroy, onMount, tick } from 'svelte';
 import { toast } from 'svelte-sonner';
-import { ensureFilesFetched, selectedTokenizedDoc, selectedTokenizedDocPath } from '../stores';
+import { ensureFilesFetched, tokenizedFiles, selectedTokenizedDocPath } from '../stores';
 import TokenizedDocPreview from '../components/TokenizedDocPreview.svelte';
 import { appHooks } from '$lib/utils/hooks';
 import SelectedDocumentSummary from '../components/SelectedDocumentSummary.svelte';
@@ -25,11 +25,47 @@ import ListBullet from '$lib/components/icons/ListBullet.svelte';
 import Minus from '$lib/components/icons/Minus.svelte';
 import ClearableInput from '$lib/components/common/ClearableInput.svelte';
 import ExpandableTextarea from '$lib/components/common/ExpandableTextarea.svelte';
+import { loadPrivateAiSidekickState } from '$lib/private-ai/state';
 
 const i18n = getContext('i18n');
 
+// Persisted document path for this chat+model (Edit view relies solely on persisted state)
+let persistedDocPath: string = '';
+let isHydratingDoc: boolean = true;
+let selectedDoc: any = null;
+
+// Keep tokenized files list available for lookup
+onMount(() => {
+	ensureFilesFetched();
+});
+
+// TODO: this extra call for loadPrivateAiSidekickState was added during a bug fix and then caching was used to prevent excess api calls. Is this necessary. Be sure not to reintroduce bugs pai-407.
+// Load persisted sidekick state whenever chat/model changes
+$: (async () => {
+	const cId = $chatId as string | null;
+	const mId = $currentSelectedModelId as string | null;
+	isHydratingDoc = true;
+	try {
+		if (cId && mId) {
+			const state = await loadPrivateAiSidekickState(cId, mId);
+			persistedDocPath = String(state?.tokenizedDocPath ?? '');
+			// Sync the global selection store so dependent UI reflects the persisted document
+			if (persistedDocPath) {
+				selectedTokenizedDocPath.set(persistedDocPath);
+			}
+		} else {
+			persistedDocPath = '';
+		}
+	} finally {
+		isHydratingDoc = false;
+	}
+})();
+
+// Derive the selected document from persistedDocPath and the available files
+$: selectedDoc = ($tokenizedFiles ?? []).find((f) => String(f.fullPath) === String(persistedDocPath)) ?? null;
+
 function openPreviewPanel() {
-	const file = $selectedTokenizedDoc;
+	const file = selectedDoc;
 	if (file) {
 		appHooks.callHook('chat.overlay', {
 			action: 'open',
@@ -65,7 +101,7 @@ function emitStatusIds() {
 				noneIds.push(...ids);
 			} else if (v === s && s) {
 				savedIds.push(...ids);
-			} else if (v && v !== s) {
+			} else {
 				draftIds.push(...ids);
 			}
 		}
@@ -144,6 +180,7 @@ let removeOverlayHook: (() => void) | null = null;
 let removePreviewClosedHook: (() => void) | null = null;
 let removePreviewReloadedHook: (() => void) | null = null;
 let removePreviewTokenClickedHook: (() => void) | null = null;
+let removePreviewRequestSyncHook: (() => void) | null = null;
 // Track the last previewed token selection to update highlight state on edits
 let lastPreviewSelection: { id: string; state: 'draft' | 'saved' } | null = null;
 let lastPreviewToken: string | null = null;
@@ -234,13 +271,23 @@ function onOverlayInput(e: Event | CustomEvent<{ value: string }>) {
 	updateValue(overlayToken, v);
 	if (isPreviewOpen) {
 		const id = overlayOccurrences[overlayCurrentIdx];
+		const s = (savedValues[overlayToken] ?? '').trim();
+		const vTrim = (v ?? '').trim();
+		const isNone = !vTrim && !s;
 		const newState = computeTokenState(overlayToken, v);
+		// For NONE case, emit statuses/values first so preview persists 'none' before selection
+		if (isNone) {
+			emitStatusIds();
+			emitValuesById();
+		}
 		appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 		lastPreviewSelection = { id, state: newState };
 		lastPreviewToken = overlayToken;
-		// Update unselected state coloring and replacement text
-		emitStatusIds();
-		emitValuesById();
+		// For non-NONE or as a follow-up, update unselected state coloring and replacement text
+		if (!isNone) {
+			emitStatusIds();
+			emitValuesById();
+		}
 	}
 }
 
@@ -484,11 +531,32 @@ async function loadTokensAndValuesWithRetry() {
 	}
 }
 
+// Coalesce concurrent/rapid token-value loads per chat+model
+const tokensInFlight = new Map<string, Promise<{ tokens: Token[]; values: ReplacementValues; occurrences: Record<string, string[]> }>>();
+function makeKey(chat?: string | null, model?: string | null) { return `${chat || ''}|${model || ''}`; }
+async function getTokensAndValuesOnce() {
+	const cId = $chatId as string | null;
+	const mId = $currentSelectedModelId as string | null;
+	const key = makeKey(cId, mId);
+	const existing = tokensInFlight.get(key);
+	if (existing) return existing;
+	const p = (async () => {
+		try {
+			return await loadTokensAndValuesWithRetry();
+		} finally {
+			// allow subsequent loads (e.g., on chat switch) to refetch
+			tokensInFlight.delete(key);
+		}
+	})();
+	tokensInFlight.set(key, p);
+	return p;
+}
+
 // Submit replacement values to API
 async function submitReplacementValues(payload: { token: string; value: string }[]): Promise<void> {
 	const cId = $chatId as string | null;
 	const mId = $currentSelectedModelId as string | null;
-	const dPath = $selectedTokenizedDocPath as string | null;
+	const dPath = persistedDocPath as string | null;
 	if (!cId || !mId || !dPath) {
 		throw new Error('Missing context: chat, model, or document path');
 	}
@@ -504,7 +572,7 @@ async function submitReplacementValues(payload: { token: string; value: string }
 async function handleGenerate() {
 	const cId = $chatId as string | null;
 	const mId = $currentSelectedModelId as string | null;
-	const dPath = $selectedTokenizedDocPath as string | null;
+	const dPath = persistedDocPath as string | null;
 	if (!cId || !mId || !dPath) {
 		toast.error($i18n.t('Missing context: chat, model, or document path'));
 		return;
@@ -580,18 +648,33 @@ function handleInput(token: string, id?: string) {
 			value: string
 		}>).detail?.value ?? (e.target as HTMLTextAreaElement | null)?.value ?? '';
 		updateValue(token, vRaw);
-		// If this token is currently selected in preview, update highlight state when it flips.
-		if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
-			const v = (vRaw ?? '').trim();
-			const s = (savedValues[token] ?? '').trim();
-			const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+		const v = (vRaw ?? '').trim();
+		const s = (savedValues[token] ?? '').trim();
+		const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
+		const isNone = !v && !s;
+		// Always sync values and statuses to the preview when open so +Values text updates live.
+		// For the special NONE case (v and s are both empty), emit statuses first so the preview
+		// persists dataset.tokenState = 'none' before we (re)select. This avoids a brief 'saved' tint.
+		if (isPreviewOpen && isNone) {
+			emitStatusIds();
+			emitValuesById();
+		}
+		// If preview is open but this token isn't currently selected (focus event might not have fired), select it now.
+		if (isPreviewOpen && (!lastPreviewSelection || lastPreviewToken !== token)) {
+			const selId = id ?? getFirstOccurrenceId(token, tokens.indexOf(token));
+			appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: selId, state: newState });
+			lastPreviewSelection = { id: selId, state: newState };
+			lastPreviewToken = token;
+		} else if (isPreviewOpen && lastPreviewSelection && lastPreviewToken === token) {
+			// If this token is currently selected in preview (any occurrence), update highlight state when it flips.
 			if (lastPreviewSelection.state !== newState) {
-				appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
+				const selId = lastPreviewSelection.id;
+				appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: selId, state: newState });
 				lastPreviewSelection.state = newState;
 			}
 		}
-		// Always sync values and statuses to the preview when open so +Values text updates live
-		if (isPreviewOpen) {
+		// For non-NONE cases (or as a follow-up), ensure preview receives live values/statuses
+		if (isPreviewOpen && !isNone) {
 			emitStatusIds();
 			emitValuesById();
 		}
@@ -606,17 +689,23 @@ const iconBtnActive = 'border-amber-300 bg-amber-100 text-amber-700 dark:border-
 function handleRemoveTokenClick(token: string, id?: string) {
 	// Clicking the remove button clears the value (marks as removed)
 	updateValue(token, '');
+	const v = ''.trim();
+	const s = (savedValues[token] ?? '').trim();
+	const isNone = !v && !s;
+	// For NONE case, emit statuses/values first so preview persists 'none' before selection update
+	if (isPreviewOpen && isNone) {
+		emitStatusIds();
+		emitValuesById();
+	}
 	if (isPreviewOpen && id && lastPreviewSelection?.id === id) {
-		const v = ''.trim();
-		const s = (savedValues[token] ?? '').trim();
 		const newState: 'draft' | 'saved' = v === s ? 'saved' : 'draft';
 		if (lastPreviewSelection.state !== newState) {
 			appHooks.callHook('private-ai.token-replacer.preview.select-token', { id, state: newState });
 			lastPreviewSelection.state = newState;
 		}
 	}
-	// Also reflect cleared value in the preview's +Values mode immediately
-	if (isPreviewOpen) {
+	// For non-NONE or as a follow-up, reflect cleared value in the preview's +Values mode immediately
+	if (isPreviewOpen && !isNone) {
 		emitStatusIds();
 		emitValuesById();
 	}
@@ -629,7 +718,7 @@ function getInputId(token: string): string {
 function getContextIds() {
 	const cId = $chatId as string | null;
 	const mId = $currentSelectedModelId as string | null;
-	const tId = $selectedTokenizedDocPath as string | null;
+	const tId = persistedDocPath as string | null;
 	return { cId, mId, tId };
 }
 
@@ -684,9 +773,15 @@ async function handleSubmit() {
 		savedValues = { ...values };
 		submitSuccess = true;
 		suppressDraftPersistence = true; // prevent re-saving this session unless user edits again
-		// If a token is currently selected in preview, reload the preview and reselect/scroll to it when loaded
-		if (isPreviewOpen && lastPreviewSelection) {
-			lastPreviewSelection.state = 'saved';
+		// If preview is open, first emit statuses/values so the preview updates tokenState (including none for empty saved)
+		// then re-select the current token so the correct selected class is applied immediately.
+		if (isPreviewOpen) {
+			try { emitStatusIds(); } catch {}
+			try { emitValuesById(); } catch {}
+			if (lastPreviewSelection) {
+				try { appHooks.callHook('private-ai.token-replacer.preview.select-token', { id: lastPreviewSelection.id, state: 'saved' }); } catch {}
+				lastPreviewSelection.state = 'saved';
+			}
 		}
 		// Clear the saved draft on successful submit so future sessions start fresh
 		const { cId, mId, tId } = getContextIds();
@@ -755,6 +850,21 @@ onMount(async () => {
 		};
 	} catch {
 	}
+	// Respond to a request from the preview to sync statuses/values (e.g., when +Values is toggled on)
+	try {
+		const previewRequestSyncHandler = () => {
+			if (isPreviewOpen) {
+				try { emitStatusIds(); } catch {}
+				try { emitValuesById(); } catch {}
+			}
+		};
+		appHooks.hook('private-ai.token-replacer.preview.request-sync', previewRequestSyncHandler);
+		removePreviewRequestSyncHook = () => {
+			try {
+				appHooks.removeHook('private-ai.token-replacer.preview.request-sync', previewRequestSyncHandler);
+			} catch {}
+		};
+	} catch { }
 
 	// Listen for clicks in the preview to focus corresponding input and handle occurrences overlay
 	try {
@@ -868,7 +978,7 @@ onMount(async () => {
 	isLoading = true;
 	loadError = null;
 	try {
-		const { tokens: tk, values: vals, occurrences: occ } = await loadTokensAndValuesWithRetry();
+		const { tokens: tk, values: vals, occurrences: occ } = await getTokensAndValuesOnce();
 		tokens = tk;
 		// Track server-saved values separately from editable values
 		savedValues = vals;
@@ -1010,10 +1120,17 @@ onDestroy(() => {
 	<!-- Content area container (page scroll) -->
 	<div class="relative">
 		<!-- Selected document summary (non-sticky) -->
-		<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
+		{#if isHydratingDoc && $selectedTokenizedDocPath === ""}
+			<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
 				 bind:this={summaryEl}>
-			<SelectedDocumentSummary on:preview={openPreviewPanel} disabled={isPreviewOpen} />
-		</div>
+				<div class="text-xs text-gray-500 dark:text-gray-400">{$i18n.t('Loading...')}</div>
+			</div>
+		{:else}
+			<div class="px-2 py-1 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
+				 bind:this={summaryEl}>
+				<SelectedDocumentSummary on:preview={openPreviewPanel} disabled={isPreviewOpen} />
+			</div>
+		{/if}
 
 		<!-- Overlay scope wrapper: covers from below SelectedDocumentSummary -->
 		<div class="relative">
@@ -1166,7 +1283,7 @@ onDestroy(() => {
 															fullscreenStrategy="container"
 															id={getInputId(token)}
 															placeholder={$i18n.t('token will be removed from document')}
-															ariaLabel={$i18n.t('Replacement value')}
+															ariaLabel={$i18n.t('Value')}
 															ariaDescribedby={((values[token] ?? '').trim() !== (savedValues[token] ?? '').trim()) ? `${getInputId(token)}-draft` : undefined}
 															describedByText={$i18n.t('Value differs from the last saved value and is not yet saved.')}
 															value={values[token] ?? ''}

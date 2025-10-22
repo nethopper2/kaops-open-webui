@@ -124,20 +124,20 @@ PROVIDER_CONFIGS = {
         'redirect_uri': MICROSOFT_REDIRECT_URI,
         'authorize_url': MICROSOFT_AUTHORIZE_URL,
         'token_url': MICROSOFT_TOKEN_URL,
-        'revoke_url': None,  # Microsoft doesn't have a direct revoke endpoint
+        'revoke_url': None,
         'scope_separator': ' ',
         'default_scopes': [
             "User.Read",
-            "Files.Read",
-            "Sites.Read",
+            "Files.Read.All",      
+            "Sites.Read.All",      
             "Notes.Read",
             "Mail.Read",
             "MailboxSettings.Read",
             "offline_access"
         ],
         'layer_scopes': {
-            'onedrive': 'Files.Read',
-            'sharepoint': 'Sites.Read',
+            'onedrive': 'Files.Read.All',    
+            'sharepoint': 'Sites.Read.All',   
             'onenote': 'Notes.Read',
             'outlook': 'Mail.Read'
         },
@@ -283,7 +283,7 @@ PROVIDER_CONFIGS = {
         'layer_folders': {
             'handbooks': 'Handbooks'
         }
-    }
+    },
 }
 
 ############################
@@ -577,7 +577,7 @@ async def create_background_sync_task(request: Request, provider: str, user_id: 
         
         await create_task(redis_connection, run_mineral_sync(), id=f"mineral_sync_{user_id}")
 
-async def create_background_delete_task(request: Request, provider: str, user_id: str, layer: str = None):
+async def create_background_delete_task(request: Request, provider: str, user_id: str, layer: str = None, data_source_name: str = None):
     """Create background storage cleanup task using unified delete function."""
     redis_connection = getattr(request.app.state, 'redis', None) if hasattr(request.app.state, 'redis') else None
     
@@ -598,10 +598,105 @@ async def create_background_delete_task(request: Request, provider: str, user_id
     
     async def delete_sync():
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
+        result = await loop.run_in_executor(
             None,
             lambda: asyncio.run(delete_folder_unified(folder_path, user_id))  # Using unified delete
         )
+        
+        # Update status to 'deleted' when deletion completes
+        if result:
+            try:
+                # Get current file summary to confirm 0 files after deletion
+                from open_webui.utils.data.data_ingestion import get_files_summary, generate_pai_service_token
+                user_prefix = f"userResources/{user_id}/{provider.title()}/{layer or ''}/"
+                auth_token = generate_pai_service_token(user_id)
+                summary = get_files_summary(prefix=user_prefix, auth_token=auth_token)
+                
+                # Get the historical file count before deletion to show what was removed
+                # Find the data source to get historical counts
+                user_data_sources = DataSources.get_data_sources_by_user_id(user_id)
+                data_source_found = None
+                for ds in user_data_sources:
+                    if ds.action == provider and ds.layer == layer:
+                        data_source_found = ds
+                        break
+                
+                historical_files = data_source_found.files_total if data_source_found else 0
+                historical_size = data_source_found.mb_total if data_source_found else 0
+                
+                # Create sync_results showing the actual deletion activity
+                sync_results = {
+                    "latest_sync": {
+                        "added": 0,
+                        "updated": 0,
+                        "removed": historical_files,  # Show how many files were deleted
+                        "skipped": 0,
+                        "runtime_ms": 0,
+                        "api_calls": 0,
+                        "skip_reasons": {},
+                        "sync_timestamp": int(time.time())
+                    },
+                    "overall_profile": {
+                        "total_files": summary.get('totalFiles', 0),
+                        "total_size_bytes": summary.get('totalSize', 0),
+                        "last_updated": int(time.time()),
+                        "folders_count": 0
+                    }
+                }
+                
+                DataSources.update_data_source_sync_status_by_name(
+                    user_id=user_id,
+                    source_name=data_source_name or provider.title(),
+                    layer_name=layer or "",
+                    sync_status="deleted",
+                    last_sync=int(time.time()),
+                    files_total=summary.get('totalFiles', 0),
+                    mb_total=summary.get('totalSize', 0),
+                    sync_results=sync_results
+                )
+                print(f'----------------------------------------------------------------------')
+                print(f'✅ Delete Phase: Completed - Data source successfully deleted')
+                print(f'----------------------------------------------------------------------')
+                msg = f"Successfully updated {provider.title()} data source status to 'deleted'"
+                log.info(msg)
+                
+                # Emit WebSocket update for delete completion
+                try:
+                    from open_webui.utils.data.data_ingestion import send_user_notification
+                    await send_user_notification(
+                        user_id=user_id,
+                        event_name="data-source-updated",
+                        data={
+                            "source": data_source_name or provider.title(),
+                            "status": "deleted",
+                            "message": "Data source deletion completed",
+                            "timestamp": str(int(time.time())),
+                            "sync_results": sync_results,
+                            "files_total": 0,
+                            "mb_total": 0
+                        }
+                    )
+                except Exception as e:
+                    log.warning(f"Failed to emit delete completion update: {e}")
+            except Exception as e:
+                msg = f"Failed to update {provider.title()} data source status to 'deleted': {e}"
+                log.error(msg)
+        else:
+            try:
+                DataSources.update_data_source_sync_status_by_name(
+                    user_id=user_id,
+                    source_name=data_source_name or provider.title(),
+                    layer_name=layer or "",
+                    sync_status="error",
+                    last_sync=int(time.time())
+                )
+                msg = f"Deletion failed, updated {provider.title()} data source status to 'error'"
+                log.error(msg)
+            except Exception as e:
+                msg = f"Failed to update {provider.title()} data source status to 'error': {e}"
+                log.error(msg)
+        
+        return result
     
     await create_task(redis_connection, delete_sync(), id=f"delete_{provider}_sync_{user_id}")
 
@@ -688,6 +783,12 @@ async def get_data_sources(user=Depends(get_verified_user)):
                 permission=ds.permission,
                 sync_status=ds.sync_status,
                 last_sync=ds.last_sync,
+                files_processed=ds.files_processed,
+                files_total=ds.files_total,
+                mb_processed=ds.mb_processed,
+                mb_total=ds.mb_total,
+                sync_start_time=ds.sync_start_time,
+                sync_results=ds.sync_results,
                 icon=ds.icon,
                 action=ds.action,
                 layer=ds.layer,
@@ -717,6 +818,11 @@ def create_data_source(form_data: DataSourceForm, user=Depends(get_verified_user
                 context=data_source.context,
                 sync_status=data_source.sync_status,
                 last_sync=data_source.last_sync,
+                files_processed=data_source.files_processed,
+                files_total=data_source.files_total,
+                mb_processed=data_source.mb_processed,
+                mb_total=data_source.mb_total,
+                sync_start_time=data_source.sync_start_time,
                 icon=data_source.icon,
                 action=data_source.action,
                 created_at=data_source.created_at,
@@ -752,6 +858,11 @@ def initialize_default_data_sources(user=Depends(get_verified_user)):
                 context=ds.context,
                 sync_status=ds.sync_status,
                 last_sync=ds.last_sync,
+                files_processed=ds.files_processed,
+                files_total=ds.files_total,
+                mb_processed=ds.mb_processed,
+                mb_total=ds.mb_total,
+                sync_start_time=ds.sync_start_time,
                 icon=ds.icon,
                 action=ds.action,
                 created_at=ds.created_at,
@@ -781,6 +892,11 @@ async def get_data_source_by_id(id: str, user=Depends(get_verified_user)):
             context=data_source.context,
             sync_status=data_source.sync_status,
             last_sync=data_source.last_sync,
+            files_processed=data_source.files_processed,
+            files_total=data_source.files_total,
+            mb_processed=data_source.mb_processed,
+            mb_total=data_source.mb_total,
+            sync_start_time=data_source.sync_start_time,
             icon=data_source.icon,
             action=data_source.action,
             created_at=data_source.created_at,
@@ -809,6 +925,11 @@ async def update_data_source_by_id(
                     context=updated_data_source.context,
                     sync_status=updated_data_source.sync_status,
                     last_sync=updated_data_source.last_sync,
+                    files_processed=updated_data_source.files_processed,
+                    files_total=updated_data_source.files_total,
+                    mb_processed=updated_data_source.mb_processed,
+                    mb_total=updated_data_source.mb_total,
+                    sync_start_time=updated_data_source.sync_start_time,
                     icon=updated_data_source.icon,
                     action=updated_data_source.action,
                     created_at=updated_data_source.created_at,
@@ -845,6 +966,24 @@ async def update_sync_status(
                 id, form_data
             )
             if updated_data_source:
+                # Emit socket event for real-time UI update
+                try:
+                    from open_webui.socket.main import send_user_notification
+                    await send_user_notification(
+                        user_id=user.id,
+                        event_name="data-source-updated",
+                        data={
+                            "source": updated_data_source.name,
+                            "status": updated_data_source.sync_status,
+                            "message": f"{updated_data_source.name} sync status updated!",
+                            "timestamp": str(int(time.time())),
+                            "sync_results": updated_data_source.sync_results
+                        }
+                    )
+                    log.info(f"Emitted data-source-updated event for user {user.id}")
+                except Exception as e:
+                    log.warning(f"Failed to emit socket event: {e}")
+                
                 return DataSourceResponse(
                     id=updated_data_source.id,
                     user_id=updated_data_source.user_id,
@@ -852,6 +991,11 @@ async def update_sync_status(
                     context=updated_data_source.context,
                     sync_status=updated_data_source.sync_status,
                     last_sync=updated_data_source.last_sync,
+                    files_processed=updated_data_source.files_processed,
+                    files_total=updated_data_source.files_total,
+                    mb_processed=updated_data_source.mb_processed,
+                    mb_total=updated_data_source.mb_total,
+                    sync_start_time=updated_data_source.sync_start_time,
                     icon=updated_data_source.icon,
                     action=updated_data_source.action,
                     created_at=updated_data_source.created_at,
@@ -1769,7 +1913,7 @@ def create_universal_sync_endpoint(provider: str):
             try:
                 log.info(f"Starting manual {provider.title()} sync for user {user.id}")
                 await create_background_sync_task(request, provider, user.id, access_token, layer)
-                return RedirectResponse(url=DATASOURCES_URL, status_code=302)
+                return {"message": f"{provider.title()} sync initiated successfully"}
 
             except Exception as sync_error:
                 log.error(f"{provider.title()} sync failed for user {user.id}: {str(sync_error)}")
@@ -1897,13 +2041,35 @@ def create_universal_disconnect_endpoint(provider: str):
                 updated_ds = DataSources.update_data_source_sync_status_by_name(
                     user_id=user_id,
                     source_name=data_source_found.name,
-                    sync_status="unsynced",
-                    last_sync=int(time.time())
+                    layer_name=layer or "",
+                    sync_status="deleting",
+                    last_sync=int(time.time()),
+                    sync_start_time=int(time.time())
                 )
                 if updated_ds:
-                    msg = f"Successfully updated {provider.title()} data source status to 'unsynced'"
+                    print(f'----------------------------------------------------------------------')
+                    print(f'🗑️  Delete Phase: Deleting - Removing data source and files...')
+                    print(f'----------------------------------------------------------------------')
+                    msg = f"Successfully updated {provider.title()} data source status to 'deleting'"
                     log.info(msg)
                     messages.append(msg)
+                    
+                    # Emit WebSocket update for delete start
+                    try:
+                        from open_webui.utils.data.data_ingestion import send_user_notification
+                        await send_user_notification(
+                            user_id=user_id,
+                            event_name="data-source-updated",
+                            data={
+                                "source": data_source_found.name,
+                                "status": "deleting",
+                                "message": "Data source deletion started",
+                                "timestamp": str(int(time.time()))
+                            }
+                        )
+                    except Exception as e:
+                        log.warning(f"Failed to emit delete start update: {e}")
+                    
                 else:
                     msg = f"Failed to update {provider.title()} data source status"
                     log.error(msg)
@@ -1919,23 +2085,16 @@ def create_universal_disconnect_endpoint(provider: str):
             log.warning(msg)
             messages.append(msg)
 
-        # Delete user data from GCS Bucket
-        if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-            msg = "GCS configuration missing. Cannot perform GCS data cleanup."
-            log.error(msg)
+        try:
+            await create_background_delete_task(request, provider, user_id, layer, data_source_found.name if data_source_found else None)
+            msg = f"Successfully initiated data cleanup for user {user_id}'s {provider.title()} folder"
+            log.info(msg)
+            messages.append(msg)
+        except Exception as e:
+            msg = f"Error during data cleanup: {e}"
+            log.exception(msg)
             messages.append(msg)
             overall_success = False
-        else:
-            try:
-                await create_background_delete_task(request, provider, user_id, layer)
-                msg = f"Successfully initiated GCS data cleanup for user {user_id}'s {provider.title()} folder"
-                log.info(msg)
-                messages.append(msg)
-            except Exception as e:
-                msg = f"Error during GCS data cleanup: {e}"
-                log.exception(msg)
-                messages.append(msg)
-                overall_success = False
 
         if overall_success:
             log.info(f"{provider.title()} integration disconnection completed successfully for user: {user_id}")
@@ -2067,13 +2226,32 @@ async def disconnect_provider_layer(provider: str, user_id: str, layer: str, tea
                 user_id=user_id,
                 source_name=data_source_found.name,
                 layer_name=layer,
-                sync_status="unsynced",
+                sync_status="deleting",
                 last_sync=int(time.time())
             )
             if updated_ds:
-                msg = f"Successfully updated {provider.title()} data source status to 'unsynced' for layer {layer}"
+                print(f'----------------------------------------------------------------------')
+                print(f'🗑️  Delete Phase: Deleting - Removing data source and files...')
+                print(f'----------------------------------------------------------------------')
+                msg = f"Successfully updated {provider.title()} data source status to 'deleting' for layer {layer}"
                 log.info(msg)
                 messages.append(msg)
+                
+                # Emit WebSocket update for delete start
+                try:
+                    from open_webui.utils.data.data_ingestion import send_user_notification
+                    await send_user_notification(
+                        user_id=user_id,
+                        event_name="data-source-updated",
+                        data={
+                            "source": data_source_found.name,
+                            "status": "deleting",
+                            "message": "Data source deletion started",
+                            "timestamp": str(int(time.time()))
+                        }
+                    )
+                except Exception as e:
+                    log.warning(f"Failed to emit delete start update: {e}")
             else:
                 msg = f"Failed to update {provider.title()} data source status for layer {layer}"
                 log.error(msg)
@@ -2089,23 +2267,24 @@ async def disconnect_provider_layer(provider: str, user_id: str, layer: str, tea
         log.warning(msg)
         messages.append(msg)
 
-    # Delete layer-specific data from GCS
-    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
-        msg = "GCS configuration missing. Cannot perform GCS data cleanup."
-        log.error(msg)
+    # Delete layer-specific data from storage (works for both GCS and local storage)
+    try:
+        await create_background_delete_task(request, provider, user_id, layer, data_source_found.name if data_source_found else None)
+        msg = f"Successfully initiated data cleanup for {provider.title()} layer '{layer}'"
+        log.info(msg)
+        messages.append(msg)
+    except Exception as e:
+        msg = f"Error during data cleanup for layer '{layer}': {e}"
+        log.exception(msg)
         messages.append(msg)
         overall_success = False
-    else:
-        try:
-            await create_background_delete_task(request, provider, user_id, layer)
-            msg = f"Successfully initiated GCS data cleanup for {provider.title()} layer '{layer}'"
-            log.info(msg)
-            messages.append(msg)
-        except Exception as e:
-            msg = f"Error during GCS data cleanup for layer '{layer}': {e}"
-            log.exception(msg)
-            messages.append(msg)
-            overall_success = False
+
+    # GCS-specific cleanup (optional for local development)
+    if not GCS_BUCKET_NAME or not GCS_SERVICE_ACCOUNT_BASE64:
+        msg = "GCS configuration missing. Skipping additional GCS cleanup (local development mode)."
+        log.warning(msg)
+        messages.append(msg)
+        # Don't set overall_success = False for missing GCS config in local dev
 
     if overall_success:
         log.info(f"{provider.title()} layer disconnection completed successfully for user: {user_id}, layer: {layer}")
@@ -2120,6 +2299,141 @@ async def disconnect_provider_layer(provider: str, user_id: str, layer: str, tea
 ############################
 # Create All Provider Endpoints
 ############################
+
+@router.get("/embedding/status")
+async def get_embedding_status(user=Depends(get_verified_user)):
+    """Get embedding job status from the 4500 server"""
+    try:
+        from open_webui.utils.data.data_ingestion import generate_pai_service_token
+        import requests
+        from requests.exceptions import ConnectionError, Timeout, HTTPError
+        from open_webui.utils.data.data_ingestion import storage_config
+        
+        # Generate JWT token for 4500 server
+        auth_token = generate_pai_service_token(user.id)
+        
+        # Call 4500 server embedding status endpoint
+        url = f"{storage_config.pai_base_url}/rag/embedding/status"
+        headers = {
+            'Authorization': f'Bearer {auth_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        result = response.json()
+        return result
+        
+    except ConnectionError as e:
+        log.warning(f"Embedding service unavailable (connection error): {e}")
+        # Don't change sync_status - keep it as "embedding" so frontend shows embedding status component
+        # The frontend will handle the error response and show the grey progress bar
+        
+        return {
+            "status": "service_unavailable",
+            "message": "Embedding service is currently unavailable",
+            "error": "connection_error"
+        }
+    except Timeout as e:
+        log.warning(f"Embedding service timeout: {e}")
+        # Update any data sources currently in "embedding" status to "error"
+        try:
+            from open_webui.models.data import DataSources
+            from open_webui.socket.main import send_user_notification
+            user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+            for ds in user_data_sources:
+                if ds.sync_status == "embedding":
+                    DataSources.update_data_source_sync_status_by_name(
+                        user_id=user.id,
+                        source_name=ds.name,
+                        layer_name=ds.layer or "",
+                        sync_status="error",
+                        files_total=ds.files_total,
+                        mb_total=ds.mb_total
+                    )
+                    log.info(f"Updated data source '{ds.name}' from 'embedding' to 'error' due to timeout")
+                    
+                    # Emit socket notification
+                    await send_user_notification(
+                        user_id=user.id,
+                        event_name="data-source-updated",
+                        data={
+                            "source": ds.name,
+                            "status": "error",
+                            "message": f"{ds.name} embedding failed - timeout",
+                            "timestamp": int(time.time()),
+                            "files_total": ds.files_total,
+                            "mb_total": ds.mb_total
+                        }
+                    )
+        except Exception as db_error:
+            log.warning(f"Failed to update embedding data sources to error status: {db_error}")
+        
+        return {
+            "status": "service_timeout", 
+            "message": "Embedding service request timed out",
+            "error": "timeout"
+        }
+    except HTTPError as e:
+        # Check for 502 Bad Gateway first
+        if e.response and e.response.status_code == 502:
+            log.warning(f"Embedding service returned 502 Bad Gateway: {e}")
+            # Don't change sync_status - keep it as "embedding" so frontend shows embedding status component
+            # The frontend will handle the error response and show the grey progress bar
+            
+            return {
+                "status": "service_unavailable",
+                "message": "Embedding service is currently unavailable (502 Bad Gateway)",
+                "error": "bad_gateway"
+            }
+        else:
+            log.warning(f"Embedding service HTTP error: {e}")
+            # Update any data sources currently in "embedding" status to "error"
+            try:
+                from open_webui.models.data import DataSources
+                from open_webui.socket.main import send_user_notification
+                user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+                for ds in user_data_sources:
+                    if ds.sync_status == "embedding":
+                        DataSources.update_data_source_sync_status_by_name(
+                            user_id=user.id,
+                            source_name=ds.name,
+                            layer_name=ds.layer or "",
+                            sync_status="error",
+                            files_total=ds.files_total,
+                            mb_total=ds.mb_total
+                        )
+                        log.info(f"Updated data source '{ds.name}' from 'embedding' to 'error' due to service error")
+                        
+                        # Emit socket notification
+                        await send_user_notification(
+                            user_id=user.id,
+                            event_name="data-source-updated",
+                            data={
+                                "source": ds.name,
+                                "status": "error",
+                                "message": f"{ds.name} embedding failed - service error",
+                                "timestamp": int(time.time()),
+                                "files_total": ds.files_total,
+                                "mb_total": ds.mb_total
+                            }
+                        )
+            except Exception as db_error:
+                log.warning(f"Failed to update embedding data sources to error status: {db_error}")
+            
+            return {
+                "status": "service_error",
+                "message": f"Embedding service returned error: {e.response.status_code if e.response else 'unknown'}",
+                "error": "http_error"
+            }
+    except Exception as e:
+        log.exception(f"Unexpected error getting embedding status: {e}")
+        return {
+            "status": "error",
+            "message": "An unexpected error occurred while checking embedding status",
+            "error": "unexpected_error"
+        }
 
 # Create endpoints for all providers
 for provider in ['google', 'microsoft', 'slack', 'atlassian', 'mineral']:

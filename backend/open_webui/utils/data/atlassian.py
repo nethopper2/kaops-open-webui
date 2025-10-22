@@ -33,6 +33,32 @@ script_start_time = None
 total_api_calls = 0
 
 log = logging.getLogger(__name__)
+from open_webui.env import SRC_LOG_LEVELS
+log.setLevel(SRC_LOG_LEVELS["MAIN"])
+
+# Global socketio instance for progress updates
+sio = None
+
+def set_socketio_instance(socketio_instance):
+    """Set the socketio instance for progress updates"""
+    global sio
+    sio = socketio_instance
+
+async def emit_sync_progress(user_id: str, provider: str, layer: str, progress_data: dict):
+    """Emit sync progress update via WebSocket"""
+    global sio
+    if sio:
+        try:
+            await sio.emit("sync_progress", {
+                "user_id": user_id,
+                "provider": provider,
+                "layer": layer,
+                **progress_data
+            }, to=f"user_{user_id}")
+        except Exception as e:
+            log.error(f"Failed to emit sync progress: {e}")
+    else:
+        log.warning("Socket.IO instance not available for progress updates")
 
 # Atlassian Configuration
 from open_webui.env import (
@@ -191,7 +217,7 @@ def list_jira_projects_and_issues(site_url, cloud_id, bearer_token: str, all_ite
 
     try:
         start_at = 0
-        max_results = 50 # Make me configurable later
+        max_results = 1000 # Increased from 50 for better pagination support
         projects = []
         while True:
             params = {
@@ -225,7 +251,7 @@ def list_jira_projects_and_issues(site_url, cloud_id, bearer_token: str, all_ite
 
             log.info(f"Listing issues for Jira project: {project_name} ({project_key})")
             start_at_issue = 0
-            max_results_issue = 100
+            max_results_issue = 1000
             
             while True:
                 jql_query = f"project = \"{project_key}\""
@@ -306,7 +332,7 @@ def list_jira_projects_self_hosted(base_url: str, bearer_token: str = None,
         # Try modern endpoint first (Jira 8.0+)
         try:
             start_at = 0
-            max_results = 50
+            max_results = 1000
             
             while True:
                 params = {
@@ -383,7 +409,7 @@ def list_jira_projects_and_issues_self_hosted(base_url: str, bearer_token: str =
 
     try:
         start_at = 0
-        max_results = 50
+        max_results = 1000
         projects = []
         
         auth_type = 'pat' if bearer_token else 'basic'
@@ -420,7 +446,7 @@ def list_jira_projects_and_issues_self_hosted(base_url: str, bearer_token: str =
 
             log.info(f"Listing issues for project: {project_name} ({project_key})")
             start_at_issue = 0
-            max_results_issue = 100
+            max_results_issue = 1000
             
             while True:
                 jql_query = f'project = "{project_key}"'
@@ -517,7 +543,7 @@ def list_jira_selected_projects_and_issues_self_hosted(base_url: str, bearer_tok
         for project_key in project_keys:
             log.info(f"Listing issues for selected project: {project_key}")
             start_at_issue = 0
-            max_results_issue = 100
+            max_results_issue = 1000
             
             while True:
                 jql_query = f'project = "{project_key}"'
@@ -619,7 +645,7 @@ def list_jira_selected_projects_and_issues(site_url, cloud_id, bearer_token: str
         for project_key in project_keys:
             log.info(f"Listing issues for selected Jira project: {project_key}")
             start_at_issue = 0
-            max_results_issue = 100
+            max_results_issue = 1000
             
             jql_query = f"project = \"{project_key}\""
             params = {
@@ -707,6 +733,26 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
     deleted_items = []
     skipped_items = 0
     
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
+    await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
+    
     try:
         bearer_token = token
         
@@ -756,6 +802,30 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
                     log.error(f"Error listing selected projects for site {site_info['site_url']}: {str(e)}", exc_info=True)
         
         log.info(f"Found {len(all_atlassian_items)} items from selected projects.")
+
+        # Discovery complete - set totals
+        files_total = len(all_atlassian_items)
+        mb_total = sum(int(item.get('size') or 0) for item in all_atlassian_items)
+        await update_data_source_sync_status(
+            USER_ID, 'atlassian', layer or 'jira', 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing existing items and determining sync plan...")
+        print("----------------------------------------------------------------------")
+        await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing existing items and determining sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
 
         # Delete orphaned files for selected projects only
         if layer and layer in LAYER_CONFIG:
@@ -837,13 +907,45 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
                     skipped_items += 1
             
             # Process completed uploads
+            files_processed = 0
+            mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing items to storage...")
+            print("----------------------------------------------------------------------")
             for future, item_for_log in futures:
                 try:
                     result = future.result()
                     if result:
                         uploaded_items.append(result)
+                        files_processed += 1
+                        try:
+                            mb_processed += int(result.get('size', 0))
+                        except Exception:
+                            pass
+                        await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+                            'phase': 'processing',
+                            'phase_name': 'Phase 3: Processing',
+                            'phase_description': 'synchronizing items to storage',
+                            'files_processed': files_processed,
+                            'files_total': files_total,
+                            'mb_processed': mb_processed,
+                            'mb_total': mb_total,
+                            'sync_start_time': sync_start_time
+                        })
                 except Exception as e:
                     log.error(f"Error processing future for {item_for_log.get('fullPath')}: {str(e)}", exc_info=True)
+        
+        await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing and updating status',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         # Enhanced summary
         log.info('\nSync Summary for Selected Projects:')
@@ -856,9 +958,13 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
         for item in deleted_items:
             log.info(f" - {item['name']} | {format_bytes(item['size'])} | Created: {item['timeCreated']}")
         
-        total_runtime = int((time.time() - script_start_time) * 1000)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
         log.info("\nAccounting Metrics:")
-        log.info(f"⏱️  Total Runtime: {(total_runtime/1000):.2f} seconds")
+        log.info(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
         log.info(f"📊 Billable API Calls: {total_api_calls}")
         log.info(f"📦 Items Processed: {len(all_atlassian_items)}")
         log.info(f"🗑️  Orphans Removed: {len(deleted_items)}")
@@ -868,7 +974,30 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
               f"^{len([f for f in uploaded_items if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_items)} removed, {skipped_items} skipped")
         
-        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'synced')
+        sync_results = {
+            "latest_sync": {
+                "added": len([f for f in uploaded_items if f['type'] == 'new']),
+                "updated": len([f for f in uploaded_items if f['type'] == 'updated']),
+                "removed": len(deleted_items),
+                "skipped": skipped_items,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(all_atlassian_items),
+                "total_size_bytes": sum(int(item.get('size') or 0) for item in all_atlassian_items),
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+        
+        # Phase 5: Embedding
+        print("----------------------------------------------------------------------")
+        print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
+        print("----------------------------------------------------------------------")
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'embedding', sync_results=sync_results)
     
     except Exception as error:
         await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
@@ -938,7 +1067,7 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, bearer_token: str, all_
         # Step 1: List all accessible spaces
         log.info(f"Listing Confluence spaces for site: {site_url}")
         start_at = 0
-        max_results = 50
+        max_results = 1000
         spaces = []
         while True:
             params = {
@@ -968,7 +1097,7 @@ def list_confluence_spaces_and_pages(site_url, cloud_id, bearer_token: str, all_
 
             log.info(f"Listing pages for Confluence space: {space_name} ({space_key})")
             start_at_page = 0
-            max_results_page = 100
+            max_results_page = 1000
             
             while True:
                 params = {
@@ -1051,7 +1180,7 @@ def list_confluence_spaces_and_pages_self_hosted(base_url: str, bearer_token: st
     try:
         # Step 1: List all accessible spaces
         start_at = 0
-        max_results = 50
+        max_results = 1000
         spaces = []
         
         while True:
@@ -1086,7 +1215,7 @@ def list_confluence_spaces_and_pages_self_hosted(base_url: str, bearer_token: st
 
             log.info(f"Listing pages for Confluence space: {space_name} ({space_key})")
             start_at_page = 0
-            max_results_page = 100
+            max_results_page = 1000
             
             while True:
                 params = {
@@ -1532,6 +1661,26 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
     deleted_items = []
     skipped_items = 0
     
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
+    await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
+    
     try:
         all_atlassian_items = []
         
@@ -1665,6 +1814,30 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
         
         log.info(f"Found {len(all_atlassian_items)} items across all accessible Atlassian resources.")
 
+        # Discovery complete - set totals
+        files_total = len(all_atlassian_items)
+        mb_total = sum(int(item.get('size') or 0) for item in all_atlassian_items)
+        await update_data_source_sync_status(
+            USER_ID, 'atlassian', layer or 'jira', 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        # Phase 2: Discovery
+        print("----------------------------------------------------------------------")
+        print("🔎 Phase 2: Discovery - analyzing existing items and determining sync plan...")
+        print("----------------------------------------------------------------------")
+        await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing existing items and determining sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+
         # ============ DELETE ORPHANED FILES - LAYER-SPECIFIC CLEANUP ============
         if layer and layer in LAYER_CONFIG:
             layer_folder = LAYER_CONFIG[layer]['folder']
@@ -1748,14 +1921,51 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
                     skipped_items += 1
             
             # Process completed uploads
+            files_processed = 0
+            mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing items to storage...")
+            print("----------------------------------------------------------------------")
             for future, item_for_log in futures:
                 try:
                     result = future.result()
                     if result:
                         uploaded_items.append(result)
+                        files_processed += 1
+                        try:
+                            mb_processed += int(result.get('size', 0))
+                        except Exception:
+                            pass
+                        await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+                            'phase': 'processing',
+                            'phase_name': 'Phase 3: Processing',
+                            'phase_description': 'synchronizing items to storage',
+                            'files_processed': files_processed,
+                            'files_total': files_total,
+                            'mb_processed': mb_processed,
+                            'mb_total': mb_total,
+                            'sync_start_time': sync_start_time
+                        })
                 except Exception as e:
                     log.error(f"Error processing future for {item_for_log.get('fullPath')}: {str(e)}", exc_info=True)
         
+        # Emit summarizing phase before printing summary
+        # Phase 4: Summarizing
+        print("----------------------------------------------------------------------")
+        print("📊 Phase 4: Summarizing - finalizing Atlassian sync results...")
+        print("----------------------------------------------------------------------")
+        await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing and updating status',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
+
         # ============ ENHANCED SUMMARY ============
         log.info('\nSync Summary:')
         for item in uploaded_items:
@@ -1767,9 +1977,13 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
         for item in deleted_items:
             log.info(f" - {item['name']} | {format_bytes(item['size'])} | Created: {item['timeCreated']}")
         
-        total_runtime = int((time.time() - script_start_time) * 1000)
+        total_runtime_ms = int((time.time() - script_start_time) * 1000)
+        total_seconds = total_runtime_ms // 1000
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
         log.info("\nAccounting Metrics:")
-        log.info(f"⏱️  Total Runtime: {(total_runtime/1000):.2f} seconds")
+        log.info(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
         log.info(f"📊 Billable API Calls: {total_api_calls}")
         log.info(f"📦 Items Processed: {len(all_atlassian_items)}")
         log.info(f"🗑️  Orphans Removed: {len(deleted_items)}")
@@ -1780,7 +1994,28 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
               f"^{len([f for f in uploaded_items if f['type'] == 'updated'])} updated, " +
               f"-{len(deleted_items)} removed, {skipped_items} skipped")
         
-        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'synced')
+        # Prepare sync results to mirror Google structure
+        sync_results = {
+            "latest_sync": {
+                "added": len([f for f in uploaded_items if f['type'] == 'new']),
+                "updated": len([f for f in uploaded_items if f['type'] == 'updated']),
+                "removed": len(deleted_items),
+                "skipped": skipped_items,
+                "runtime_ms": total_runtime_ms,
+                "api_calls": total_api_calls,
+                "skip_reasons": {},
+                "sync_timestamp": int(time.time())
+            },
+            "overall_profile": {
+                "total_files": len(all_atlassian_items),
+                "total_size_bytes": sum(int(item.get('size') or 0) for item in all_atlassian_items),
+                "last_updated": int(time.time()),
+                "folders_count": 0
+            }
+        }
+        
+        # Final state: Embedding (to match Google)
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'embedding', sync_results=sync_results)
     
     except Exception as error:
         await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
@@ -1807,6 +2042,26 @@ async def initiate_atlassian_sync_selected_self_hosted(user_id: str, credentials
     total_api_calls = 0
     script_start_time = time.time()
 
+    # Initialize progress tracking
+    sync_start_time = int(time.time())
+    # Phase 1: Starting
+    print("----------------------------------------------------------------------")
+    print("🚀 Phase 1: Starting - preparing sync process...")
+    print("----------------------------------------------------------------------")
+    await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+        'phase': 'starting',
+        'phase_name': 'Phase 1: Starting',
+        'phase_description': 'preparing sync process',
+        'files_processed': 0,
+        'files_total': 0,
+        'mb_processed': 0,
+        'mb_total': 0,
+        'sync_start_time': sync_start_time,
+        'folders_found': 0,
+        'files_found': 0,
+        'total_size': 0
+    })
+
     await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'syncing')
 
     try:
@@ -1825,6 +2080,26 @@ async def initiate_atlassian_sync_selected_self_hosted(user_id: str, credentials
         )
         
         log.info(f"Found {len(all_items)} items from selected projects")
+        
+        # Discovery complete - set totals
+        files_total = len(all_items)
+        mb_total = sum(int(item.get('size') or 0) for item in all_items)
+        await update_data_source_sync_status(
+            USER_ID, 'atlassian', layer or 'jira', 'syncing',
+            files_total=files_total,
+            mb_total=mb_total,
+            sync_start_time=sync_start_time
+        )
+        await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+            'phase': 'discovery',
+            'phase_name': 'Phase 2: Discovery',
+            'phase_description': 'analyzing existing items and determining sync plan',
+            'files_processed': 0,
+            'files_total': files_total,
+            'mb_processed': 0,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         uploaded_items = []
         deleted_items = []
@@ -1909,13 +2184,45 @@ async def initiate_atlassian_sync_selected_self_hosted(user_id: str, credentials
                     skipped_items += 1
             
             # Process completed uploads
+            files_processed = 0
+            mb_processed = 0
+            # Phase 3: Processing
+            print("----------------------------------------------------------------------")
+            print("⚙️  Phase 3: Processing - synchronizing items to storage...")
+            print("----------------------------------------------------------------------")
             for future, item_for_log in futures:
                 try:
                     result = future.result()
                     if result:
                         uploaded_items.append(result)
+                        files_processed += 1
+                        try:
+                            mb_processed += int(result.get('size', 0))
+                        except Exception:
+                            pass
+                        await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+                            'phase': 'processing',
+                            'phase_name': 'Phase 3: Processing',
+                            'phase_description': 'synchronizing items to storage',
+                            'files_processed': files_processed,
+                            'files_total': files_total,
+                            'mb_processed': mb_processed,
+                            'mb_total': mb_total,
+                            'sync_start_time': sync_start_time
+                        })
                 except Exception as e:
                     log.error(f"Error processing future for {item_for_log.get('fullPath')}: {str(e)}", exc_info=True)
+        
+        await emit_sync_progress(USER_ID, 'atlassian', layer or 'jira', {
+            'phase': 'summarizing',
+            'phase_name': 'Phase 4: Summarizing',
+            'phase_description': 'finalizing and updating status',
+            'files_processed': files_processed,
+            'files_total': files_total,
+            'mb_processed': mb_processed,
+            'mb_total': mb_total,
+            'sync_start_time': sync_start_time
+        })
         
         # Enhanced summary
         log.info('\nSync Summary for Selected Projects:')
