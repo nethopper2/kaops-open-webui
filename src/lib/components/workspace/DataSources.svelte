@@ -14,7 +14,7 @@
 		getDataSources,
 		initializeDataSync,
 		manualDataSync,
-		updateSyncStatus,
+		markDataSourceIncomplete,
 		disconnectDataSync
 	} from '$lib/apis/data';
 	import Atlassian from '../icons/Atlassian.svelte';
@@ -41,6 +41,12 @@
 	
 	// Progress tracking
 	let syncProgress: Record<string, any> = {};
+	
+	// Socket inactivity tracking for INCOMPLETE state
+	let lastSocketActivity: number = 0; // Single timestamp for all sources
+	let incompleteMarked: Set<string> = new Set(); // Track which sources we've already marked as incomplete
+	const SOCKET_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes for production
+	let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Project selector state
 	let showProjectSelector = false;
@@ -67,6 +73,62 @@
 			ds.context.toLowerCase().includes(query.toLowerCase()) ||
 			ds.id.toLowerCase().includes(query.toLowerCase())
 	);
+
+	// Check for socket inactivity and mark as INCOMPLETE
+	const checkSocketTimeout = async () => {
+		const now = Date.now();
+		const syncingSources = dataSources.filter(ds => ds.sync_status === 'syncing');
+		
+		if (syncingSources.length === 0) {
+			return; // No sources syncing
+		}
+		
+		// Only check timeout if we have actual socket activity
+		if (lastSocketActivity === 0) {
+			return; // No socket activity yet, don't check timeout
+		}
+		
+		const timeSinceActivity = now - lastSocketActivity;
+		console.log(`🕐 socket: ${Math.round(timeSinceActivity/1000)}s old, ${syncingSources.length} sources syncing`);
+		
+		if (timeSinceActivity > SOCKET_TIMEOUT_MS) {
+			console.log(`🚨 TIMEOUT! Marking ${syncingSources.length} sources as INCOMPLETE`);
+			
+			// Mark ALL syncing sources as incomplete
+			for (const dataSource of syncingSources) {
+				const sourceId = dataSource.id;
+				
+				// Skip if we've already marked this source as incomplete
+				if (incompleteMarked.has(sourceId)) {
+					continue;
+				}
+				
+				// Mark as incomplete in UI immediately
+				dataSource.sync_status = 'incomplete';
+				incompleteMarked.add(sourceId);
+				
+				// Persist to backend
+				try {
+					await markDataSourceIncomplete(localStorage.token, dataSource.id);
+					console.log(`📡 ${dataSource.name} incomplete. Data socket down.`);
+				} catch (error) {
+					console.error(`Failed to persist incomplete status for ${dataSource.name}:`, error);
+				}
+			}
+		}
+		
+		// Clean up tracking for non-syncing sources
+		dataSources.forEach(dataSource => {
+			if (dataSource.sync_status !== 'syncing') {
+				incompleteMarked.delete(dataSource.id);
+			}
+		});
+	};
+
+	// Start timeout checking timer
+	onMount(() => {
+		timeoutCheckInterval = setInterval(checkSocketTimeout, 10000); // Check every 10 seconds
+	});
 
 	const formatDate = (dateString: string) => {
 		const dateInMilliseconds = parseInt(dateString) * 1000;
@@ -111,6 +173,8 @@
 				return 'text-red-700 dark:text-red-300';
 			case 'error':
 				return 'text-red-700 dark:text-red-200';
+			case 'incomplete':
+				return 'text-orange-600 dark:text-orange-400';
 			case 'unsynced':
 				return 'text-yellow-700 dark:text-yellow-200';
 			default:
@@ -173,6 +237,9 @@
 					await updateSync(dataSource.action as string, dataSource.layer as string);
 					break;
 				case 'error':
+					await updateSync(dataSource.action as string, dataSource.layer as string);
+					break;
+				case 'incomplete':
 					await updateSync(dataSource.action as string, dataSource.layer as string);
 					break;
 				case 'unsynced':
@@ -470,6 +537,8 @@
 				return 'Error';
 			case 'unsynced':
 				return 'Unsynced';
+			case 'incomplete':
+				return 'Incomplete';
 			default:
 				return 'Unknown';
 		}
@@ -570,6 +639,7 @@
 		$socket?.on('sync_progress', (data) => {
 			const key = `${data.provider}-${data.layer}`;
 			syncProgress[key] = data;
+			lastSocketActivity = Date.now(); // Record socket activity
 			syncProgress = syncProgress; // Trigger reactivity
 		});
 		loaded = true;
@@ -579,6 +649,9 @@
 		if ($socket) {
 			$socket.off('data-source-updated');
 			$socket.off('sync_progress');
+		}
+		if (timeoutCheckInterval) {
+			clearInterval(timeoutCheckInterval);
 		}
 	});
 </script>
@@ -733,7 +806,7 @@
 												</button>
 												<button
 													class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error')}
+													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
 													on:click={() => {
 														selectedDataSource = dataSource;
 														showDeleteConfirm = true;
@@ -785,6 +858,10 @@
 											<div class="text-xs text-gray-500 dark:text-gray-400">
 												vectorizing data
 											</div>
+										{:else if dataSource.sync_status === 'incomplete'}
+											<div class="text-xs text-gray-500 dark:text-gray-400">
+												Process interrupted. Please try again to sync data.
+											</div>
 										{/if}
 										
 										<!-- State-specific information -->
@@ -824,6 +901,8 @@
 									{:else if dataSource.sync_status === 'deleting'}
 										<!-- No content during deleting state -->
 									{:else if dataSource.sync_status === 'deleted'}
+										<DataSyncResultsSummary {dataSource} />
+									{:else if dataSource.sync_status === 'incomplete'}
 										<DataSyncResultsSummary {dataSource} />
 									{:else if dataSource.sync_status === 'error'}
 										<DataSyncResultsSummary {dataSource} isError={true} />
@@ -869,7 +948,7 @@
 									</button>
 									<button
 										class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error')}
+										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
 										on:click={() => {
 											selectedDataSource = dataSource;
 											showDeleteConfirm = true;
@@ -916,6 +995,8 @@
 								<DataSyncResultsSummary {dataSource} />
 							{:else if dataSource.sync_status === 'deleted'}
 								<DataSyncResultsSummary {dataSource} />
+							{:else if dataSource.sync_status === 'incomplete'}
+								<DataSyncResultsSummary {dataSource} />
 							{:else if dataSource.sync_status === 'embedding'}
 								<DataSyncEmbeddingStatus {dataSource} />
 							{:else if dataSource.sync_status === 'error'}
@@ -933,7 +1014,7 @@
 							</button>
 							<button
 								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error')}
+								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
 								on:click={() => {
 									selectedDataSource = dataSource;
 									showDeleteConfirm = true;

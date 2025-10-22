@@ -2435,6 +2435,56 @@ async def get_embedding_status(user=Depends(get_verified_user)):
             "error": "unexpected_error"
         }
 
+@router.post("/source/{source_id}/incomplete")
+async def mark_data_source_incomplete(source_id: str, user=Depends(get_verified_user)):
+    """Mark a data source as incomplete due to socket timeout"""
+    try:
+        # Get the data source
+        user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+        data_source = next((ds for ds in user_data_sources if ds.id == source_id), None)
+        
+        if not data_source:
+            raise HTTPException(status_code=404, detail="Data source not found")
+        
+        # Only allow transition from 'syncing' to 'incomplete'
+        if data_source.sync_status != 'syncing':
+            log.warning(f"Attempted to mark {data_source.sync_status} data source as incomplete - ignoring")
+            return {"success": False, "message": f"Data source is {data_source.sync_status}, not syncing"}
+        
+        # Update the status
+        updated_ds = DataSources.update_data_source_sync_status_by_name(
+            user_id=user.id,
+            source_name=data_source.name,
+            layer_name=data_source.layer or "",
+            sync_status="incomplete",
+            last_sync=int(time.time())
+        )
+        
+        if updated_ds:
+            # Emit socket notification
+            from open_webui.utils.data.data_ingestion import send_user_notification
+            await send_user_notification(
+                user_id=user.id,
+                event_name="data-source-updated",
+                data={
+                    "source": data_source.name,
+                    "status": "incomplete",
+                    "message": f"{data_source.name} sync marked as incomplete due to timeout",
+                    "timestamp": int(time.time())
+                }
+            )
+            
+            log.info(f"Marked data source '{data_source.name}' as incomplete due to socket timeout")
+            return {"success": True, "message": "Data source marked as incomplete"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update data source status")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Error marking data source as incomplete: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 # Create endpoints for all providers
 for provider in ['google', 'microsoft', 'slack', 'atlassian', 'mineral']:
     create_universal_initialize_endpoint(provider)
