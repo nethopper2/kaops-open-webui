@@ -970,6 +970,13 @@
 											</div>
 										{:else if dataSource.sync_status === 'error'}
 											<div class="text-xs text-red-500 dark:text-red-400">
+												{#if dataSource.sync_results?.latest_sync}
+													embedding phase
+												{:else}
+													sync phase
+												{/if}
+											</div>
+											<div class="text-xs text-red-500 dark:text-red-400">
 												{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
 											</div>
 										{:else if dataSource.sync_status === 'unsynced'}
