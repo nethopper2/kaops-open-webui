@@ -1,7 +1,7 @@
 <script lang="ts">
 import { computePosition, offset, flip, shift, autoPlacement } from '@floating-ui/dom';
-import Tooltip from '../common/Tooltip.svelte';
-import FaceIcon from '../icons/FaceSmile.svelte'
+import Tooltip from '$lib/components/common/Tooltip.svelte';
+import FaceIcon from '$lib/components/icons/FaceSmile.svelte'
 import { createEventDispatcher, getContext } from 'svelte';
 import { settings } from '$lib/stores';
 import { Button } from 'bits-ui';
@@ -49,7 +49,7 @@ function handleResponseType(option) {
         <button
             bind:this={ResponseButtonRef}
             class="px-2 py-1 flex gap-1.5 text-sm transition-colors duration-300 max-w-full hover:bg-gray-50 dark:hover:bg-gray-800
-                {ResponseTypeSelectorEnabled
+                {(ResponseTypeSelectorEnabled || ResponseType !== 'Default')
                     ? ' text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
                     : 'bg-transparent text-gray-600 dark:text-gray-300 '} {($settings?.highContrastMode ??
                     false)

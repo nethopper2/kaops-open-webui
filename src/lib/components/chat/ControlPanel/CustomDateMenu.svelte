@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import CalendarIcon from '../icons/CalendarSolid.svelte';
+  import CalendarIcon from '$lib/components/icons/CalendarSolid.svelte';
 
   let customFrom = '';
   let customTo = '';

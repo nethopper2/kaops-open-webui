@@ -1,10 +1,10 @@
 <script lang="ts">
 import { computePosition, offset, flip, shift, autoPlacement } from '@floating-ui/dom';
-import Tooltip from '../common/Tooltip.svelte';
-import CalendarIcon from '../icons/CalendarSolid.svelte';
+import Tooltip from '$lib/components/common/Tooltip.svelte';
+import CalendarIcon from '$lib/components/icons/CalendarSolid.svelte';
 import { createEventDispatcher, getContext } from 'svelte';
 import { settings } from '$lib/stores';
-import CustomDateMenu from '../chat/CustomDateMenu.svelte';
+import CustomDateMenu from '$lib/components/chat/ControlPanel/CustomDateMenu.svelte';
 
 const i18n = getContext('i18n');
 
@@ -76,7 +76,7 @@ function handleCustomcancel(e) {
         <button
             bind:this={DateButtonRef}
             class="px-2 py-1 flex gap-1.5 text-sm transition-colors duration-300 max-w-full hover:bg-gray-50 dark:hover:bg-gray-800
-                {DateSelectorEnabled
+                {(DateSelectorEnabled || SelectedDate !== 'All')
                     ? ' text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
                     : 'bg-transparent text-gray-600 dark:text-gray-300 '} {($settings?.highContrastMode ??
                     false)
