@@ -482,3 +482,24 @@ export const markDataSourceIncomplete = async (token: string, sourceId: string) 
 
 	return await res.json();
 };
+
+export const resetEmbedding = async (token: string, userId: string, dataSource: string) => {
+	const res = await fetch(`${DATA_API_BASE_URL}/embedding/reset`, {
+		method: "POST",
+		headers: {
+			"Authorization": `Bearer ${token}`,
+			"Content-Type": "application/json"
+		},
+		body: JSON.stringify({
+			userId,
+			dataSource
+		})
+	});
+
+	if (!res.ok) {
+		const error = await res.json();
+		throw new Error(error.detail || "Failed to reset embedding");
+	}
+
+	return await res.json();
+};

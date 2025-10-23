@@ -2446,6 +2446,73 @@ async def get_embedding_status(user=Depends(get_verified_user)):
             "error": "unexpected_error"
         }
 
+@router.post("/embedding/reset")
+async def reset_embedding(user=Depends(get_verified_user), request: Request = None):
+    """Reset embedding for a data source by calling the 4500 server"""
+    try:
+        from open_webui.utils.data.data_ingestion import generate_pai_service_token
+        import requests
+        from requests.exceptions import ConnectionError, Timeout, HTTPError
+        from open_webui.utils.data.data_ingestion import storage_config
+        
+        # Parse request body
+        if request:
+            body = await request.json()
+            data_source = body.get('dataSource')
+        else:
+            raise HTTPException(status_code=400, detail="Missing dataSource in request body")
+        
+        # Generate JWT token for 4500 server
+        auth_token = generate_pai_service_token(user.id)
+        
+        # Call 4500 server embedding reset endpoint
+        url = f"{storage_config.pai_base_url}/rag/embedding/reset"
+        headers = {
+            'Authorization': f'Bearer {auth_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        payload = {
+            'userId': user.id,
+            'dataSource': data_source
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        
+        result = response.json()
+        log.info(f"🧠 Backend embedding reset response: {result}")
+        return result
+        
+    except ConnectionError as e:
+        log.warning(f"Embedding service unavailable (connection error): {e}")
+        return {
+            "status": "service_unavailable",
+            "message": "Embedding service is currently unavailable",
+            "error": "connection_error"
+        }
+    except Timeout as e:
+        log.warning(f"Embedding service timeout: {e}")
+        return {
+            "status": "timeout",
+            "message": "Embedding service request timed out",
+            "error": "timeout"
+        }
+    except HTTPError as e:
+        log.warning(f"Embedding service HTTP error: {e}")
+        return {
+            "status": "error",
+            "message": f"Embedding service returned error: {e}",
+            "error": "http_error"
+        }
+    except Exception as e:
+        log.exception(f"Unexpected error resetting embedding: {e}")
+        return {
+            "status": "error",
+            "message": "An unexpected error occurred while resetting embedding",
+            "error": "unexpected_error"
+        }
+
 @router.post("/source/{source_id}/incomplete")
 async def mark_data_source_incomplete(source_id: str, user=Depends(get_verified_user)):
     """Mark a data source as incomplete due to socket timeout"""

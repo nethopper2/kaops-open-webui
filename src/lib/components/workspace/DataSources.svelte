@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, getContext, onDestroy } from 'svelte';
-	import { WEBUI_NAME, socket, config } from '$lib/stores';
+	import { WEBUI_NAME, socket, config, user } from '$lib/stores';
 	import Search from '../icons/Search.svelte';
 	import PulsingDots from '../common/PulsingDots.svelte';
 	import ConfirmDialog from '../common/ConfirmDialog.svelte';
@@ -15,7 +15,8 @@
 		initializeDataSync,
 		manualDataSync,
 		markDataSourceIncomplete,
-		disconnectDataSync
+		disconnectDataSync,
+		resetEmbedding
 	} from '$lib/apis/data';
 	import Atlassian from '../icons/Atlassian.svelte';
 	import Outlook from '../icons/Outlook.svelte';
@@ -294,6 +295,16 @@
 		processingActions = processingActions;
 
 		try {
+			// Call embedding reset endpoint before starting sync
+			if ($user?.id) {
+				const dataSourceName = `${(dataSource.action ?? '').charAt(0).toUpperCase() + (dataSource.action ?? '').slice(1)}/${(dataSource.layer ?? '').charAt(0).toUpperCase() + (dataSource.layer ?? '').slice(1)}`;
+				try {
+					await resetEmbedding(localStorage.token, $user.id, dataSourceName);
+				} catch (error) {
+					console.warn('Failed to reset embedding:', error);
+					// Continue with sync even if embedding reset fails
+				}
+			}
 
 			// Special handling for Mineral
 			if (dataSource.action === 'mineral') {
