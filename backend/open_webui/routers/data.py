@@ -2333,6 +2333,7 @@ async def get_embedding_status(user=Depends(get_verified_user)):
         response.raise_for_status()
         
         result = response.json()
+        log.info(f"🧠 Backend embedding status response: {result}")
         return result
         
     except ConnectionError as e:
