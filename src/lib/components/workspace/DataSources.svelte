@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, getContext, onDestroy } from 'svelte';
-	import { WEBUI_NAME, socket, config } from '$lib/stores';
+	import { WEBUI_NAME, socket, config, user } from '$lib/stores';
 	import Search from '../icons/Search.svelte';
 	import PulsingDots from '../common/PulsingDots.svelte';
 	import ConfirmDialog from '../common/ConfirmDialog.svelte';
@@ -15,7 +15,8 @@
 		initializeDataSync,
 		manualDataSync,
 		markDataSourceIncomplete,
-		disconnectDataSync
+		disconnectDataSync,
+		resetEmbedding
 	} from '$lib/apis/data';
 	import Atlassian from '../icons/Atlassian.svelte';
 	import Outlook from '../icons/Outlook.svelte';
@@ -47,6 +48,11 @@
 	let incompleteMarked: Set<string> = new Set(); // Track which sources we've already marked as incomplete
 	const SOCKET_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes for production
 	let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+	// Shared embedding status polling
+	let embeddingStatus: any = null;
+	let embeddingPollingTimer: ReturnType<typeof setInterval> | null = null;
+	let embeddingPollingAttempts = 0;
 
 	// Project selector state
 	let showProjectSelector = false;
@@ -125,9 +131,83 @@
 		});
 	};
 
+	// Shared embedding status polling functions
+	async function fetchEmbeddingStatus() {
+		try {
+			const response = await fetch(`${WEBUI_BASE_URL}/api/v1/data/embedding/status`, {
+				method: 'GET',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				credentials: 'include'
+			});
+
+			if (!response.ok) {
+				console.error('Error fetching embedding status:', response.status);
+				return;
+			}
+
+			embeddingStatus = await response.json();
+			
+			// Log embedding status update
+			console.log('🧠 received data');
+			embeddingStatus = embeddingStatus; // Trigger reactivity
+		} catch (error) {
+			console.error('Error fetching embedding status:', error);
+		}
+	}
+
+	function startEmbeddingStatusPolling() {
+		// Check if there are any embedding sources
+		const embeddingSources = dataSources.filter(ds => ds.sync_status === 'embedding');
+		if (embeddingSources.length === 0) {
+			return; // No embedding sources, don't start polling
+		}
+
+		// Use config value or default to 60 seconds
+		const pollingRate = $config?.private_ai?.rag_embedding_status_polling_rate || 60;
+		const POLLING_INTERVAL_MS = pollingRate * 1000;
+
+		embeddingPollingTimer = setInterval(async () => {
+			embeddingPollingAttempts++;
+			
+			// Check if we should stop polling
+			const currentEmbeddingSources = dataSources.filter(ds => ds.sync_status === 'embedding');
+			if (currentEmbeddingSources.length === 0) {
+				stopEmbeddingStatusPolling();
+				return;
+			}
+
+			await fetchEmbeddingStatus();
+		}, POLLING_INTERVAL_MS);
+
+		// Fetch immediately
+		fetchEmbeddingStatus();
+	}
+
+	// Reactive statement to start/stop polling based on embedding sources
+	$: embeddingSources = dataSources.filter(ds => ds.sync_status === 'embedding');
+	$: {
+		if (embeddingSources.length > 0 && !embeddingPollingTimer) {
+			console.log(`🧠 ${embeddingSources.length} sources embedding`);
+			startEmbeddingStatusPolling();
+		} else if (embeddingSources.length === 0 && embeddingPollingTimer) {
+			console.log('🧠 polling stopped');
+			stopEmbeddingStatusPolling();
+		}
+	}
+
+	function stopEmbeddingStatusPolling() {
+		if (embeddingPollingTimer) {
+			clearInterval(embeddingPollingTimer);
+			embeddingPollingTimer = null;
+		}
+		embeddingPollingAttempts = 0;
+	}
+
 	// Start timeout checking timer
 	onMount(() => {
-		timeoutCheckInterval = setInterval(checkSocketTimeout, 2000); // Check every 2 seconds
+		timeoutCheckInterval = setInterval(checkSocketTimeout, 10000); // Check every 10 seconds
 	});
 
 	const formatDate = (dateString: string) => {
@@ -215,6 +295,16 @@
 		processingActions = processingActions;
 
 		try {
+			// Call embedding reset endpoint before starting sync
+			if ($user?.id) {
+				const dataSourceName = `${(dataSource.action ?? '').charAt(0).toUpperCase() + (dataSource.action ?? '').slice(1)}/${(dataSource.layer ?? '').charAt(0).toUpperCase() + (dataSource.layer ?? '').slice(1)}`;
+				try {
+					await resetEmbedding(localStorage.token, $user.id, dataSourceName);
+				} catch (error) {
+					console.warn('Failed to reset embedding:', error);
+					// Continue with sync even if embedding reset fails
+				}
+			}
 
 			// Special handling for Mineral
 			if (dataSource.action === 'mineral') {
@@ -636,7 +726,7 @@
 		
 		// Log syncing sources on page load/refresh
 		const syncingSources = dataSources.filter(ds => ds.sync_status === 'syncing');
-		console.log(`📊 ${syncingSources.length} sources syncing`);
+		console.log(`💾 ${syncingSources.length} sources syncing`);
 		
 		// If there are syncing sources but no socket activity, start monitoring immediately
 		if (syncingSources.length > 0 && lastSocketActivity === 0) {
@@ -664,6 +754,7 @@
 		if (timeoutCheckInterval) {
 			clearInterval(timeoutCheckInterval);
 		}
+		stopEmbeddingStatusPolling();
 	});
 </script>
 
@@ -890,6 +981,13 @@
 											</div>
 										{:else if dataSource.sync_status === 'error'}
 											<div class="text-xs text-red-500 dark:text-red-400">
+												{#if dataSource.sync_results?.latest_sync}
+													embedding phase
+												{:else}
+													sync phase
+												{/if}
+											</div>
+											<div class="text-xs text-red-500 dark:text-red-400">
 												{dataSource.last_sync ? formatDate(dataSource.last_sync) : 'Unknown'}
 											</div>
 										{:else if dataSource.sync_status === 'unsynced'}
@@ -901,7 +999,7 @@
 								</td>
 								{#if dataSource.sync_status === 'embedding'}
 									<td class="py-3 px-4 h-20" colspan="2">
-										<DataSyncEmbeddingStatus {dataSource} />
+										<DataSyncEmbeddingStatus {dataSource} {embeddingStatus} />
 									</td>
 								{:else}
 									<td class="py-3 px-4 col-actions h-20">
@@ -1009,7 +1107,7 @@
 							{:else if dataSource.sync_status === 'incomplete'}
 								<DataSyncResultsSummary {dataSource} />
 							{:else if dataSource.sync_status === 'embedding'}
-								<DataSyncEmbeddingStatus {dataSource} />
+								<DataSyncEmbeddingStatus {dataSource} {embeddingStatus} />
 							{:else if dataSource.sync_status === 'error'}
 								<DataSyncResultsSummary {dataSource} isError={true} />
 							{/if}

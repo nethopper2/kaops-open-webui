@@ -1158,7 +1158,7 @@ async def sync_drive_to_storage(auth_token, user_id):
         await emit_sync_progress(USER_ID, 'google', 'google_drive', {
             'phase': 'starting',
             'phase_name': PHASE_1_STARTING,
-            'phase_description': 'discovering foldersm, files that need to be synced',
+            'phase_description': 'discovering folders, files that need to be synced',
             'files_processed': 0,
             'files_total': 0,
             'mb_processed': 0,
