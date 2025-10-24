@@ -441,6 +441,15 @@ class DataSourcesTable:
                 ).first()
 
                 if data_source:
+                    # Clear error fields when transitioning to 'syncing' state
+                    if sync_status == 'syncing' and data_source.sync_status != 'syncing':
+                        current_sync_results = data_source.sync_results or {}
+                        data_source.sync_results = {
+                            **current_sync_results,
+                            "error_ingesting": None,
+                            "error_embedding": None
+                        }
+                    
                     # Update only the specified fields
                     data_source.sync_status = sync_status
                     if last_sync is not None: # Check explicitly for None, not just truthiness

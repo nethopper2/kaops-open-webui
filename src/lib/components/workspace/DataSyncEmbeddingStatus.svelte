@@ -145,6 +145,7 @@
 					sync_start_time={realTimeSyncStartTime} 
 					files_processed={sourceStatus.counts.completed || 0} 
 					files_total={totalJobs}
+					show_eta={false}
 				/>
 			</div>
 
