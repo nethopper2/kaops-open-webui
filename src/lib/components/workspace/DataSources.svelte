@@ -1214,25 +1214,25 @@
 									<td class="py-3 px-4 h-20" colspan="2">
 										<div class="flex items-center gap-3">
 											<!-- Content based on active view -->
-											<div class="flex-1">
+											<div class="flex items-center gap-8">
 												{#if getActiveView(dataSource) === 'sync'}
 													<DataSyncProgressBar {...getProgressData(dataSource)} />
 												{:else}
 													<DataSyncEmbeddingStatus {dataSource} {embeddingStatus} {syncProgress} />
 												{/if}
+												
+												<!-- Single toggle button right next to content -->
+												<button
+													class="px-3 py-1 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+													on:click={() => {
+														const currentView = getActiveView(dataSource);
+														const newView = currentView === 'sync' ? 'embedding' : 'sync';
+														setActiveView(dataSource, newView);
+													}}
+												>
+													{getActiveView(dataSource) === 'sync' ? 'Show Embedding' : 'Show Sync'}
+												</button>
 											</div>
-											
-											<!-- Single toggle button on the right -->
-											<button
-												class="px-3 py-1 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
-												on:click={() => {
-													const currentView = getActiveView(dataSource);
-													const newView = currentView === 'sync' ? 'embedding' : 'sync';
-													setActiveView(dataSource, newView);
-												}}
-											>
-												{getActiveView(dataSource) === 'sync' ? 'Show Embedding' : 'Show Sync'}
-											</button>
 										</div>
 									</td>
 								{:else}
