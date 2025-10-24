@@ -83,7 +83,7 @@ function handleResponseType(option) {
     <div
         bind:this={ResponseDropdownRef}
         style={ResponseDropdownStyle}
-        class="absolute rounded-md shadow-lg max-w-full bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50"
+        class="absolute rounded-md shadow-lg max-w-full bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50 min-w-max"
     >
         {#each ResponseOptions as option}
             <button

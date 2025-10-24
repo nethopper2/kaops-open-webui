@@ -110,7 +110,7 @@ function handleCustomcancel(e) {
     <div
         bind:this={DateDropdownRef}
         style={DateDropdownStyle}
-        class="absolute rounded-md shadow-lg max-w-full bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50"
+        class="absolute rounded-md shadow-lg max-w-full bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50 min-w-max"
     >
         {#each DateOptions as option}
             <button
@@ -129,7 +129,7 @@ function handleCustomcancel(e) {
                 <div class="fixed inset-0 z-[999] flex items-start justify-center bg-black/30"
                     on:click={handleCustomcancel}
                 >
-                    <div class='mt-9 rounded-md shadow-lg w-80 bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50'>
+                    <div class='mt-10 ml-40 rounded-md shadow-lg w-80 bg-white dark:bg-gray-800 ring-1 ring-black/5 z-50'>
                         <CustomDateMenu
                             on:apply={handleCustomapply}
                             on:cancel={handleCustomcancel}

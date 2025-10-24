@@ -67,25 +67,26 @@
   }
 </script>
 
-<div class="max-w-full shadow-lg border rounded border-gray-50 dark:border-gray-850">
+<div class="max-w-full shadow-lg border rounded-xl border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-sm text-gray-700 dark:text-gray-200">
   <label
-    class="block text-xs ml-1 mt-1"
+    class="block text-xs ml-1 mt-1 text-gray-500 dark:text-gray-400"
     on:click|stopPropagation
   >
     From:
   </label>
   
-  <div class="flex items-center border rounded mt-0.5 ml-1 mr-1 px-2 py-1 max-w-full text-sm"
+  <div class="flex items-center border rounded-lg mt-1 ml-1 mr-1 px-2 py-1.5 text-sm border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus-within:ring-1 focus-within:ring-sky-500 transition"
     on:click|stopPropagation>
     <input 
       type="date" 
       bind:value={customFrom}
       bind:this={fromdateInput}
-      class="flex-1 border-none outline-none bg-transparent"
+      class="flex-1 border-none outline-none bg-transparent text-gray-800 dark:text-gray-100"
     />
     <button
       type="button"
       on:click={() => fromdateInput.showPicker()}
+      class="ml-1 text-gray-500 hover:text-sky-500 transition"
     >
       <CalendarIcon/>
     </button>
@@ -100,23 +101,24 @@
   {/if}
 
   <label
-    class="block mt-2 ml-1 text-xs"
+    class="block mt-3 ml-1 text-xs text-gray-500 dark:text-gray-400"
     on:click|stopPropagation
   >
     To:
   </label>
   
-  <div class="flex items-center border rounded mt-0.5 ml-1 mr-1 px-2 py-1 max-w-full text-sm"
+  <div class="flex items-center border rounded-lg mt-1 ml-1 mr-1 px-2 py-1.5 text-sm border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus-within:ring-1 focus-within:ring-sky-500 transition"
     on:click|stopPropagation>
     <input
       type="date"
       bind:value={customTo}
       bind:this={todateInput}
-      class="flex-1 border-none outline-none bg-transparent"
+      class="flex-1 border-none outline-none bg-transparent text-gray-800 dark:text-gray-100"
     />
     <button
       type="button"
       on:click={() => todateInput.showPicker()}
+      class="ml-1 text-gray-500 hover:text-sky-500 transition"
     >
       <CalendarIcon/>
     </button>
@@ -134,16 +136,16 @@
     <p class="text-red-500 text-xs mt-1 ml-1">{futuredateError}</p>
   {/if}
 
-  <div class="flex justify-left text-sm mt-2 mb-0.5 ml-1 gap-53"
+  <div class="flex justify-end mt-4 gap-2"
     on:click|stopPropagation>
     <button
-      class="max-w-full text-sm font-small rounded px-1 py-1 hover:bg-gray-700 cursor-pointer"
+      class="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
       on:click={cancel}
     >
       Cancel
     </button>
     <button
-      class="max-w-full  text-sm font-small rounded px-1 py-1 hover:bg-gray-700 cursor-pointer"
+      class="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-sky-500 hover:bg-sky-600 transition"
       on:click={apply}
     > 
       Apply
