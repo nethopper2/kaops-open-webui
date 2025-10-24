@@ -25,6 +25,7 @@ export interface DataSourceForm {
 export interface SyncStatusForm {
 	sync_status: string;
 	last_sync?: number;
+	sync_results?: any;
 }
 
 export interface SlackAuthResponse {
@@ -503,3 +504,4 @@ export const resetEmbedding = async (token: string, userId: string, dataSource: 
 
 	return await res.json();
 };
+

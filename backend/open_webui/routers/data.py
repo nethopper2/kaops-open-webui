@@ -692,6 +692,22 @@ async def create_background_delete_task(request: Request, provider: str, user_id
                 )
                 msg = f"Deletion failed, updated {provider.title()} data source status to 'error'"
                 log.error(msg)
+                
+                # Emit WebSocket update for deletion error
+                try:
+                    from open_webui.utils.data.data_ingestion import send_user_notification
+                    await send_user_notification(
+                        user_id=user_id,
+                        event_name="data-source-updated",
+                        data={
+                            "source": data_source_name or provider.title(),
+                            "status": "error",
+                            "message": "Data source deletion failed",
+                            "timestamp": str(int(time.time()))
+                        }
+                    )
+                except Exception as e:
+                    log.warning(f"Failed to emit deletion error update: {e}")
             except Exception as e:
                 msg = f"Failed to update {provider.title()} data source status to 'error': {e}"
                 log.error(msg)
@@ -953,6 +969,7 @@ async def update_data_source_by_id(
 class SyncStatusForm(BaseModel):
     sync_status: str
     last_sync: Optional[int] = None
+    sync_results: Optional[dict] = None
 
 @router.post("/source/{id}/sync")
 async def update_sync_status(
@@ -962,8 +979,13 @@ async def update_sync_status(
     data_source = DataSources.get_data_source_by_id(id)
     if data_source and data_source.user_id == user.id:
         try:
-            updated_data_source = DataSources.update_data_source_by_id(
-                id, form_data
+            updated_data_source = DataSources.update_data_source_sync_status_by_name(
+                user_id=user.id,
+                source_name=data_source.name,
+                layer_name=data_source.layer or "",
+                sync_status=form_data.sync_status,
+                last_sync=form_data.last_sync,
+                sync_results=form_data.sync_results
             )
             if updated_data_source:
                 # Emit socket event for real-time UI update
@@ -2355,29 +2377,26 @@ async def get_embedding_status(user=Depends(get_verified_user)):
             user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
             for ds in user_data_sources:
                 if ds.sync_status == "embedding":
+                    # Log embedding timeout error instead of changing status
+                    current_sync_results = ds.sync_results or {}
+                    updated_sync_results = {
+                        **current_sync_results,
+                        "error_embedding": {
+                            "timestamp": int(time.time()),
+                            "message": "Embedding timeout - process took too long"
+                        }
+                    }
+                    
                     DataSources.update_data_source_sync_status_by_name(
                         user_id=user.id,
                         source_name=ds.name,
                         layer_name=ds.layer or "",
-                        sync_status="error",
+                        sync_status="embedding",  # Keep embedding status
                         files_total=ds.files_total,
-                        mb_total=ds.mb_total
+                        mb_total=ds.mb_total,
+                        sync_results=updated_sync_results
                     )
-                    log.info(f"Updated data source '{ds.name}' from 'embedding' to 'error' due to timeout")
-                    
-                    # Emit socket notification
-                    await send_user_notification(
-                        user_id=user.id,
-                        event_name="data-source-updated",
-                        data={
-                            "source": ds.name,
-                            "status": "error",
-                            "message": f"{ds.name} embedding failed - timeout",
-                            "timestamp": int(time.time()),
-                            "files_total": ds.files_total,
-                            "mb_total": ds.mb_total
-                        }
-                    )
+                    log.info(f"Logged embedding timeout error for data source '{ds.name}'")
         except Exception as db_error:
             log.warning(f"Failed to update embedding data sources to error status: {db_error}")
         
@@ -2407,31 +2426,57 @@ async def get_embedding_status(user=Depends(get_verified_user)):
                 user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
                 for ds in user_data_sources:
                     if ds.sync_status == "embedding":
+                        # Log embedding error instead of changing status
+                        current_sync_results = ds.sync_results or {}
+                        updated_sync_results = {
+                            **current_sync_results,
+                            "error_embedding": {
+                                "timestamp": int(time.time()),
+                                "message": f"Embedding service error: {e.response.status_code if e.response else 'unknown'}"
+                            }
+                        }
+                        
                         DataSources.update_data_source_sync_status_by_name(
                             user_id=user.id,
                             source_name=ds.name,
                             layer_name=ds.layer or "",
-                            sync_status="error",
+                            sync_status="embedding",  # Keep embedding status
                             files_total=ds.files_total,
-                            mb_total=ds.mb_total
+                            mb_total=ds.mb_total,
+                            sync_results=updated_sync_results
                         )
-                        log.info(f"Updated data source '{ds.name}' from 'embedding' to 'error' due to service error")
-                        
-                        # Emit socket notification
-                        await send_user_notification(
-                            user_id=user.id,
-                            event_name="data-source-updated",
-                            data={
-                                "source": ds.name,
-                                "status": "error",
-                                "message": f"{ds.name} embedding failed - service error",
-                                "timestamp": int(time.time()),
-                                "files_total": ds.files_total,
-                                "mb_total": ds.mb_total
-                            }
-                        )
+                        log.info(f"Logged embedding error for data source '{ds.name}' - service error")
             except Exception as db_error:
                 log.warning(f"Failed to update embedding data sources to error status: {db_error}")
+            
+            # Log embedding service error to database before returning service_error
+            try:
+                from open_webui.models.data import DataSources
+                user_data_sources = DataSources.get_data_sources_by_user_id(user.id)
+                for ds in user_data_sources:
+                    if ds.sync_status == "embedding":
+                        # Log embedding service error instead of changing status
+                        current_sync_results = ds.sync_results or {}
+                        updated_sync_results = {
+                            **current_sync_results,
+                            "error_embedding": {
+                                "timestamp": int(time.time()),
+                                "message": f"Embedding service error: {e.response.status_code if e.response else 'unknown'}"
+                            }
+                        }
+                        
+                        DataSources.update_data_source_sync_status_by_name(
+                            user_id=user.id,
+                            source_name=ds.name,
+                            layer_name=ds.layer or "",
+                            sync_status="embedding",  # Keep embedding status
+                            files_total=ds.files_total,
+                            mb_total=ds.mb_total,
+                            sync_results=updated_sync_results
+                        )
+                        log.info(f"Logged embedding service error for data source '{ds.name}'")
+            except Exception as db_error:
+                log.warning(f"Failed to update embedding data sources with service error: {db_error}")
             
             return {
                 "status": "service_error",

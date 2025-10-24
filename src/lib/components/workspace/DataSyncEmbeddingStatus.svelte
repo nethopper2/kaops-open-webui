@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { formatBytes } from '$lib/utils/format';
+	import DataSyncTimeInfo from './DataSyncTimeInfo.svelte';
 
 	export let dataSource: any; // DataSource type
 	export let embeddingStatus: any = null; // Shared embedding status from parent
+	export let syncProgress: any = {}; // Real-time sync progress data
 
 	// Exit criteria configuration
 	const EXIT_CRITERIA = {
@@ -10,12 +12,28 @@
 		MAX_WAITING: 1
 	};
 
-	// Get the matching source data from shared embedding status
-	$: matchingSource = embeddingStatus?.[0]?.sources?.find((source: any) => {
-		// Match by data_source field - format is "Google/Gmail"
-		const expectedDataSource = `${dataSource.action}/${dataSource.layer}`;
-		return source.data_source.toLowerCase() === expectedDataSource.toLowerCase();
-	});
+	// Get the matching source data from shared embedding status or sync_results
+	$: matchingSource = (() => {
+		// First try socket data
+		if (embeddingStatus?.[0]?.sources && embeddingStatus[0].sources.length > 0) {
+			const socketSource = embeddingStatus[0].sources.find((source: any) => {
+				const expectedDataSource = `${dataSource.action}/${dataSource.layer}`;
+				return source.data_source.toLowerCase() === expectedDataSource.toLowerCase();
+			});
+			if (socketSource) return socketSource;
+		}
+		
+		// Fallback to database data
+		if (dataSource.sync_results?.embedding_status?.sources) {
+			const dbSource = dataSource.sync_results.embedding_status.sources.find((source: any) => {
+				const expectedDataSource = `${dataSource.action}/${dataSource.layer}`;
+				return source.data_source.toLowerCase() === expectedDataSource.toLowerCase();
+			});
+			if (dbSource) return dbSource;
+		}
+		
+		return null;
+	})();
 	
 
 	$: sourceStatus = matchingSource ? {
@@ -27,6 +45,17 @@
 		totalSize: 0,
 		lastUpdated: new Date().toISOString()
 	};
+
+	// Get real-time sync_start_time from socket data, same as ingestion component
+	$: realTimeSyncStartTime = (() => {
+		const key = `${dataSource.action}-${dataSource.layer}`;
+		// Use the same logic as getProgressData in DataSources.svelte
+		if (syncProgress[key]?.sync_start_time) {
+			return syncProgress[key].sync_start_time;
+		}
+		// Fallback to stored sync_start_time from database, not current time
+		return dataSource.sync_start_time || 0;
+	})();
 
 	// Calculate progress percentages for each state
 	$: totalJobs = sourceStatus?.counts ? 
@@ -44,7 +73,7 @@
 	<div class="space-y-2">
 		{#if sourceStatus}
 			<!-- Segmented Progress Bar -->
-			<div class="space-y-1">
+			<div>
 				<!-- Color Legend with Numbers -->
 				<div class="flex gap-4 text-xs whitespace-nowrap w-full">
 					<span class="text-blue-600 dark:text-blue-400 whitespace-nowrap">
@@ -110,6 +139,15 @@
 
 			</div>
 
+			<!-- Time Info -->
+			<div class="mt-0">
+				<DataSyncTimeInfo 
+					sync_start_time={realTimeSyncStartTime} 
+					files_processed={sourceStatus.counts.completed || 0} 
+					files_total={totalJobs}
+				/>
+			</div>
+
 			<!-- Additional Info -->
 			{#if sourceStatus.totalSize}
 				<div class="text-xs text-gray-500 dark:text-gray-400">
@@ -117,10 +155,10 @@
 				</div>
 			{/if}
 		{:else}
-			<!-- Loading State -->
+			<!-- No embedding data available -->
 			<div class="flex items-center gap-2">
-				<div class="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
-				<span>Loading embedding status...</span>
+				<div class="w-3 h-3 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
+				<span>Waiting for embedding data...</span>
 			</div>
 		{/if}
 	</div>

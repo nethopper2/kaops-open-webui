@@ -1395,10 +1395,41 @@ async def sync_slack_to_storage(auth_token, layer=None):
         )
     
     except Exception as error:
-        await update_data_source_sync_status(USER_ID, 'slack', layer, 'error')
         print(f'Slack Sync failed: {str(error)}')
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
         print(traceback.format_exc())
+        
+        # Check if any files were processed
+        files_processed = len(uploaded_files) + len(deleted_files)
+        if files_processed == 0:
+            # Zero files processed → ERROR state
+            await update_data_source_sync_status(USER_ID, 'slack', layer, 'error')
+        else:
+            # Files were processed → log error and continue to embedding
+            sync_results = {
+                "latest_sync": {
+                    "added": len([f for f in uploaded_files if f['type'] == 'new']),
+                    "updated": len([f for f in uploaded_files if f['type'] == 'updated']),
+                    "removed": len(deleted_files),
+                    "skipped": skipped_files,
+                    "runtime_ms": total_runtime_ms,
+                    "api_calls": total_api_calls,
+                    "skip_reasons": {},
+                    "sync_timestamp": int(time.time())
+                },
+                "overall_profile": {
+                    "total_files": len(unique_conversations) + len(files),
+                    "total_size_bytes": final_mb_total,
+                    "last_updated": int(time.time()),
+                    "folders_count": 0
+                },
+                "error_ingesting": {
+                    "timestamp": int(time.time()),
+                    "message": f"Slack sync error: {str(error)}"
+                }
+            }
+            await update_data_source_sync_status(USER_ID, 'slack', layer, 'embedding', sync_results=sync_results)
+        
         raise
 
 # Main Execution Function
