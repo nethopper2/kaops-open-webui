@@ -335,6 +335,18 @@ let history = {
 
 let taskIds = null;
 
+let dateMetadata = null;
+let responsetypeMetadata = null;
+
+function handleDateSelected(e: CustomEvent<{ type: string; value: string }>){
+	dateMetadata = e.detail
+	console.log('stored date metadata', dateMetadata);
+}
+function handleResponseTypeSelected(e: CustomEvent<{ type: string; value: string }>){
+	responsetypeMetadata = e.detail;
+	console.log('stored response type metadata', responsetypeMetadata);
+}
+
 // Chat Input
 let prompt = '';
 let chatFiles = [];
@@ -2146,6 +2158,13 @@ const sendMessageSocket = async (model, _messages, _history, responseMessageId, 
 		privateAiPayload.auth = {
 			authorization: `Bearer ${localStorage.token}`
 		};
+		privateAiPayload.metadata ??= {};
+		if (dateMetadata)
+			privateAiPayload.metadata.date_selected = dateMetadata;
+		if (responsetypeMetadata)
+			privateAiPayload.metadata.response_type_selected = responsetypeMetadata;
+
+		console.log(privateAiPayload)
 	}
 
 	const toolIds = [];
@@ -2667,6 +2686,8 @@ const moveChatHandler = async (chatId, folderId) => {
 
 					<Navbar
 						bind:this={navbarElement}
+						on:dateselected={handleDateSelected}
+						on:responsetypeselected={handleResponseTypeSelected}
 						chat={{
 							id: $chatId,
 							chat: {
