@@ -16,7 +16,8 @@
 		manualDataSync,
 		markDataSourceIncomplete,
 		disconnectDataSync,
-		resetEmbedding
+		resetEmbedding,
+		updateSyncStatus
 	} from '$lib/apis/data';
 	import Atlassian from '../icons/Atlassian.svelte';
 	import Outlook from '../icons/Outlook.svelte';
@@ -53,6 +54,11 @@
 	let embeddingStatus: any = null;
 	let embeddingPollingTimer: ReturnType<typeof setInterval> | null = null;
 	let embeddingPollingAttempts = 0;
+	
+	// Toggle state for each data source (sync vs embedding view)
+	let activeView: Record<string, 'sync' | 'embedding'> = {};
+	let forceUpdate = 0; // Force re-render
+	
 
 	// Project selector state
 	let showProjectSelector = false;
@@ -147,13 +153,65 @@
 				return;
 			}
 
-			embeddingStatus = await response.json();
+			const newEmbeddingStatus = await response.json();
+			embeddingStatus = newEmbeddingStatus;
 			
 			// Log embedding status update
-			console.log('🧠 received data');
+			console.log('🧠 received data:', newEmbeddingStatus);
 			embeddingStatus = embeddingStatus; // Trigger reactivity
+			
+			// Save embedding status to database for persistence
+			await saveEmbeddingStatusToDatabase(newEmbeddingStatus);
 		} catch (error) {
 			console.error('Error fetching embedding status:', error);
+		}
+	}
+
+	async function saveEmbeddingStatusToDatabase(embeddingData: any) {
+		try {
+			// Find all data sources that have embedding data
+			if (embeddingData?.[0]?.sources) {
+				for (const source of embeddingData[0].sources) {
+					// Find matching data source by action/layer
+					const dataSource = dataSources.find(ds => {
+						const expectedDataSource = `${ds.action}/${ds.layer}`;
+						return source.data_source.toLowerCase() === expectedDataSource.toLowerCase();
+					});
+					
+					if (dataSource) {
+						// Update the data source in the database via API
+						try {
+							// Prepare sync_results with embedding status
+							const currentSyncResults = dataSource.sync_results || {};
+							const updatedSyncResults = {
+								...currentSyncResults,
+								embedding_status: {
+									last_updated: Date.now(),
+									sources: embeddingData[0].sources,
+									status: embeddingData[0].status || 'active'
+								}
+							};
+							
+							await updateSyncStatus(localStorage.token, dataSource.id, {
+								sync_status: dataSource.sync_status,
+								sync_results: updatedSyncResults
+							});
+							
+							// Update local data source with embedding status
+							dataSource.sync_results = updatedSyncResults as any;
+							
+							// Auto-switch to embedding view when embedding data becomes available during sync
+							if (dataSource && dataSource.sync_status === 'syncing' && getActiveView(dataSource) === 'sync') {
+								setActiveView(dataSource, 'embedding');
+							}
+						} catch (apiError) {
+							console.error(`Failed to update embedding status for ${dataSource.name}:`, apiError);
+						}
+					}
+				}
+			}
+		} catch (error) {
+			console.error('Error saving embedding status to database:', error);
 		}
 	}
 
@@ -165,7 +223,7 @@
 		}
 
 		// Use config value or default to 60 seconds
-		const pollingRate = $config?.private_ai?.rag_embedding_status_polling_rate || 60;
+		const pollingRate = ($config as any)?.private_ai?.rag_embedding_status_polling_rate || 60;
 		const POLLING_INTERVAL_MS = pollingRate * 1000;
 
 		embeddingPollingTimer = setInterval(async () => {
@@ -185,6 +243,7 @@
 		fetchEmbeddingStatus();
 	}
 
+
 	// Reactive statement to start/stop polling based on embedding sources
 	$: embeddingSources = dataSources.filter(ds => ds.sync_status === 'embedding');
 	$: {
@@ -197,12 +256,56 @@
 		}
 	}
 
+	// Track previous sync status to detect state transitions
+	let previousSyncStatus: Record<string, string> = {};
+	
+	// Auto-switch to embedding view when data source transitions to embedding state
+	$: {
+		dataSources.forEach(dataSource => {
+			const key = getDataSourceKey(dataSource);
+			const currentStatus = dataSource.sync_status;
+			const previousStatus = previousSyncStatus[key];
+			
+			// Only auto-switch on transition from syncing to embedding (one-time)
+			if (previousStatus === 'syncing' && currentStatus === 'embedding' && getActiveView(dataSource) === 'sync') {
+				setActiveView(dataSource, 'embedding');
+			}
+			
+			// Update previous status
+			previousSyncStatus[key] = currentStatus;
+		});
+	}
+
+
+
 	function stopEmbeddingStatusPolling() {
 		if (embeddingPollingTimer) {
 			clearInterval(embeddingPollingTimer);
 			embeddingPollingTimer = null;
 		}
 		embeddingPollingAttempts = 0;
+	}
+
+	function startEmbeddingPollingForSync(dataSource: DataSource) {
+		// Start embedding polling immediately for concurrent sync + embedding
+		console.log(`🧠 Starting embedding polling for ${dataSource.name} during sync`);
+		
+		// Use config value or default to 60 seconds
+		const pollingRate = ($config as any)?.private_ai?.rag_embedding_status_polling_rate || 60;
+		const POLLING_INTERVAL_MS = pollingRate * 1000;
+
+		// Clear any existing timer
+		if (embeddingPollingTimer) {
+			clearInterval(embeddingPollingTimer);
+		}
+
+		embeddingPollingTimer = setInterval(async () => {
+			embeddingPollingAttempts++;
+			await fetchEmbeddingStatus();
+		}, POLLING_INTERVAL_MS);
+
+		// Fetch immediately
+		fetchEmbeddingStatus();
 	}
 
 	// Start timeout checking timer
@@ -284,6 +387,29 @@
 		return `${dataSource.action}-${dataSource.layer || 'default'}`;
 	};
 
+	// Helper functions for toggle management
+	const getDataSourceKey = (dataSource: DataSource) => {
+		return `${dataSource.action}-${dataSource.layer}`;
+	};
+
+	// Make this reactive to activeView changes
+	$: getActiveView = (dataSource: DataSource) => {
+		const key = getDataSourceKey(dataSource);
+		const explicitView = activeView[key];
+		const defaultView = dataSource.sync_status === 'embedding' ? 'embedding' : 'sync';
+		const finalView = explicitView || defaultView;
+		
+		return finalView;
+	};
+
+	const setActiveView = (dataSource: DataSource, view: 'sync' | 'embedding') => {
+		const key = getDataSourceKey(dataSource);
+		activeView[key] = view;
+		forceUpdate++; // Force re-render
+	};
+
+
+
 	const handleSync = async (dataSource: DataSource) => {
 		const actionKey = getActionKey(dataSource);
 
@@ -295,16 +421,20 @@
 		processingActions = processingActions;
 
 		try {
-			// Call embedding reset endpoint before starting sync
-			if ($user?.id) {
-				const dataSourceName = `${(dataSource.action ?? '').charAt(0).toUpperCase() + (dataSource.action ?? '').slice(1)}/${(dataSource.layer ?? '').charAt(0).toUpperCase() + (dataSource.layer ?? '').slice(1)}`;
-				try {
-					await resetEmbedding(localStorage.token, $user.id, dataSourceName);
-				} catch (error) {
-					console.warn('Failed to reset embedding:', error);
-					// Continue with sync even if embedding reset fails
-				}
+		// Call embedding reset endpoint before starting sync
+		if ($user?.id) {
+			const dataSourceName = `${(dataSource.action ?? '').charAt(0).toUpperCase() + (dataSource.action ?? '').slice(1)}/${(dataSource.layer ?? '').charAt(0).toUpperCase() + (dataSource.layer ?? '').slice(1)}`;
+			try {
+				await resetEmbedding(localStorage.token, $user.id, dataSourceName);
+				// Start embedding polling immediately for concurrent sync + embedding
+				startEmbeddingPollingForSync(dataSource);
+				// Auto-switch to sync view when sync starts
+				setActiveView(dataSource, 'sync');
+			} catch (error) {
+				console.warn('Failed to reset embedding:', error);
+				// Continue with sync even if embedding reset fails
 			}
+		}
 
 			// Special handling for Mineral
 			if (dataSource.action === 'mineral') {
@@ -821,7 +951,9 @@
 	bind:show={showDeleteConfirm}
 	title={$i18n.t('Delete data source?')}
 	on:confirm={() => {
-		handleDelete(selectedDataSource);
+		if (selectedDataSource) {
+			handleDelete(selectedDataSource);
+		}
 		showDeleteConfirm = false;
 	}}
 >
@@ -997,25 +1129,44 @@
 										{/if}
 									</div>
 								</td>
-								{#if dataSource.sync_status === 'embedding'}
+								{#if dataSource.sync_status === 'syncing' || dataSource.sync_status === 'embedding'}
 									<td class="py-3 px-4 h-20" colspan="2">
-										<DataSyncEmbeddingStatus {dataSource} {embeddingStatus} />
+										<div class="flex items-center gap-3">
+											<!-- Content based on active view -->
+											<div class="flex-1">
+												{#if getActiveView(dataSource) === 'sync'}
+													<DataSyncProgressBar {...getProgressData(dataSource)} />
+												{:else}
+													<DataSyncEmbeddingStatus {dataSource} {embeddingStatus} {syncProgress} />
+												{/if}
+											</div>
+											
+											<!-- Single toggle button on the right -->
+											<button
+												class="px-3 py-1 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+												on:click={() => {
+													const currentView = getActiveView(dataSource);
+													const newView = currentView === 'sync' ? 'embedding' : 'sync';
+													setActiveView(dataSource, newView);
+												}}
+											>
+												{getActiveView(dataSource) === 'sync' ? 'Show Embedding' : 'Show Sync'}
+											</button>
+										</div>
 									</td>
 								{:else}
 									<td class="py-3 px-4 col-actions h-20">
-										{#if dataSource.sync_status === 'syncing'}
-											<DataSyncProgressBar {...getProgressData(dataSource)} />
-									{:else if dataSource.sync_status === 'synced'}
-										<DataSyncResultsSummary {dataSource} />
-									{:else if dataSource.sync_status === 'deleting'}
-										<!-- No content during deleting state -->
-									{:else if dataSource.sync_status === 'deleted'}
-										<DataSyncResultsSummary {dataSource} />
-									{:else if dataSource.sync_status === 'incomplete'}
-										<DataSyncResultsSummary {dataSource} />
-									{:else if dataSource.sync_status === 'error'}
-										<DataSyncResultsSummary {dataSource} isError={true} />
-									{/if}
+										{#if dataSource.sync_status === 'synced'}
+											<DataSyncResultsSummary {dataSource} />
+										{:else if dataSource.sync_status === 'deleting'}
+											<!-- No content during deleting state -->
+										{:else if dataSource.sync_status === 'deleted'}
+											<DataSyncResultsSummary {dataSource} />
+										{:else if dataSource.sync_status === 'incomplete'}
+											<DataSyncResultsSummary {dataSource} />
+										{:else if dataSource.sync_status === 'error'}
+											<DataSyncResultsSummary {dataSource} isError={true} />
+										{/if}
 									</td>
 									<td class="py-3 px-4">
 										<!-- Empty cell - takes remaining space -->
@@ -1096,8 +1247,23 @@
 							
 
 							<!-- State-specific information -->
-							{#if dataSource.sync_status === 'syncing'}
-								<DataSyncProgressBar {...getProgressData(dataSource)} />
+							{#if dataSource.sync_status === 'syncing' || dataSource.sync_status === 'embedding'}
+								<div class="space-y-2">
+									<!-- Content based on active view -->
+									{#if getActiveView(dataSource) === 'sync'}
+										<DataSyncProgressBar {...getProgressData(dataSource)} />
+									{:else}
+										<DataSyncEmbeddingStatus {dataSource} {embeddingStatus} {syncProgress} />
+									{/if}
+									
+									<!-- Single toggle button below content for mobile -->
+									<button
+										class="px-3 py-1 text-xs rounded {getActiveView(dataSource) === 'embedding' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}"
+										on:click={() => setActiveView(dataSource, getActiveView(dataSource) === 'sync' ? 'embedding' : 'sync')}
+									>
+										{getActiveView(dataSource) === 'sync' ? 'Show Embedding' : 'Show Sync'}
+									</button>
+								</div>
 							{:else if dataSource.sync_status === 'deleting'}
 								<!-- No content during deleting state -->
 							{:else if dataSource.sync_status === 'synced'}
@@ -1106,8 +1272,6 @@
 								<DataSyncResultsSummary {dataSource} />
 							{:else if dataSource.sync_status === 'incomplete'}
 								<DataSyncResultsSummary {dataSource} />
-							{:else if dataSource.sync_status === 'embedding'}
-								<DataSyncEmbeddingStatus {dataSource} {embeddingStatus} />
 							{:else if dataSource.sync_status === 'error'}
 								<DataSyncResultsSummary {dataSource} isError={true} />
 							{/if}
