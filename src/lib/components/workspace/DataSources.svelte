@@ -234,6 +234,18 @@
 					});
 					
 					if (dataSource) {
+						// Check if embedding is complete
+						const counts = source.counts || {};
+						const isEmbeddingComplete = (
+							(counts.waiting || 0) === 0 &&
+							(counts.active || 0) === 0 &&
+							(counts.delayed || 0) === 0 &&
+							(counts.prioritized || 0) === 0 &&
+							(counts.paused || 0) === 0 &&
+							(counts['waiting-children'] || 0) === 0 &&
+							((counts.completed || 0) >= 1 || (counts.failed || 0) >= 1)
+						);
+						
 						// Update the data source in the database via API
 						try {
 							// Prepare sync_results with embedding status
@@ -247,16 +259,25 @@
 								}
 							};
 							
+							// Determine new sync status
+							const newSyncStatus = isEmbeddingComplete ? 'synced' : dataSource.sync_status;
+							
 							await updateSyncStatus(localStorage.token, dataSource.id, {
-								sync_status: dataSource.sync_status,
+								sync_status: newSyncStatus,
 								sync_results: updatedSyncResults
 							});
 							
-							// Update local data source with embedding status
+							// Update local data source with embedding status and new sync status
 							dataSource.sync_results = updatedSyncResults as any;
+							dataSource.sync_status = newSyncStatus;
+							
+							// Log completion if embedding finished
+							if (isEmbeddingComplete) {
+								console.log(`✅ Embedding completed for ${dataSource.name} - transitioning to synced`);
+							}
 							
 							// Auto-switch to embedding view when embedding data becomes available during sync
-							if (dataSource && dataSource.sync_status === 'syncing' && getActiveView(dataSource) === 'sync') {
+							if (dataSource && (dataSource.sync_status === 'syncing' || dataSource.sync_status === 'embedding') && getActiveView(dataSource) === 'sync') {
 								setActiveView(dataSource, 'embedding');
 							}
 						} catch (apiError) {
@@ -321,9 +342,14 @@
 			const currentStatus = dataSource.sync_status;
 			const previousStatus = previousSyncStatus[key];
 			
-			// Only auto-switch on transition from syncing to embedding (one-time)
+			// Auto-switch on transition from syncing to embedding (one-time)
 			if (previousStatus === 'syncing' && currentStatus === 'embedding' && getActiveView(dataSource) === 'sync') {
 				setActiveView(dataSource, 'embedding');
+			}
+			
+			// Auto-switch back to sync view when embedding completes and transitions to synced
+			if (previousStatus === 'embedding' && currentStatus === 'synced' && getActiveView(dataSource) === 'embedding') {
+				setActiveView(dataSource, 'sync');
 			}
 			
 			// Update previous status
@@ -1088,14 +1114,14 @@
 											<div class="flex items-center gap-1 mt-1">
 												<button
 													class="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-													disabled={isProcessing(dataSource)}
+													disabled={isProcessing(dataSource) || dataSource.sync_status === 'embedding'}
 													on:click={() => handleSync(dataSource)}
 												>
 													Sync
 												</button>
 												<button
 													class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
+													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
 													on:click={() => {
 														selectedDataSource = dataSource;
 														showDeleteConfirm = true;
@@ -1282,14 +1308,14 @@
 								<div class="flex items-center gap-1 mt-1">
 									<button
 										class="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-										disabled={isProcessing(dataSource)}
+										disabled={isProcessing(dataSource) || dataSource.sync_status === 'embedding'}
 										on:click={() => handleSync(dataSource)}
 									>
 										Sync
 									</button>
 									<button
 										class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
+										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
 										on:click={() => {
 											selectedDataSource = dataSource;
 											showDeleteConfirm = true;
@@ -1387,14 +1413,14 @@
 						<div class="flex gap-2 mt-3">
 							<button
 								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource)}
+								disabled={isProcessing(dataSource) || dataSource.sync_status === 'embedding'}
 								on:click={() => handleSync(dataSource)}
 							>
 								{isProcessing(dataSource) ? 'Processing...' : 'Sync'}
 							</button>
 							<button
 								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
+								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
 								on:click={() => {
 									selectedDataSource = dataSource;
 									showDeleteConfirm = true;
