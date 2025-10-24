@@ -504,7 +504,41 @@
 		try {
 		// Call embedding reset endpoint before starting sync
 		if ($user?.id) {
-			const dataSourceName = `${(dataSource.action ?? '').charAt(0).toUpperCase() + (dataSource.action ?? '').slice(1)}/${(dataSource.layer ?? '').charAt(0).toUpperCase() + (dataSource.layer ?? '').slice(1)}`;
+			// Proper capitalization for dataSource names
+			const formatDataSourceName = (action: string, layer: string) => {
+				// Action capitalization
+				const actionMap: Record<string, string> = {
+					'google': 'Google',
+					'microsoft': 'Microsoft',
+					'slack': 'Slack',
+					'atlassian': 'Atlassian',
+					'mineral': 'Mineral'
+				};
+				
+				// Layer capitalization with special cases
+				const layerMap: Record<string, string> = {
+					'google_drive': 'Google Drive',
+					'gmail': 'Gmail',
+					'onedrive': 'OneDrive',
+					'sharepoint': 'SharePoint',
+					'onenote': 'OneNote',
+					'outlook': 'Outlook',
+					'direct_messages': 'Direct Messages',
+					'channels': 'Channels',
+					'group_chats': 'Group Messages',
+					'files': 'Files',
+					'jira': 'Jira',
+					'confluence': 'Confluence',
+					'handbooks': 'Handbooks'
+				};
+				
+				const formattedAction = actionMap[action] || action.charAt(0).toUpperCase() + action.slice(1);
+				const formattedLayer = layerMap[layer] || layer.charAt(0).toUpperCase() + layer.slice(1);
+				
+				return `${formattedAction}/${formattedLayer}`;
+			};
+			
+			const dataSourceName = formatDataSourceName(dataSource.action ?? '', dataSource.layer ?? '');
 			try {
 				await resetEmbedding(localStorage.token, $user.id, dataSourceName);
 				// Start embedding polling immediately for concurrent sync + embedding
