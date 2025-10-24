@@ -579,11 +579,38 @@ async def sync_mineral_to_storage(auth_token, base_url):
     except Exception as error:
         print(f"Mineral HR sync failed: {str(error)}")
         log.error("Mineral HR sync failed:", exc_info=True)
-        # Update status to error for consistency
-        try:
+        
+        # Check if any files were processed
+        files_processed = len(uploaded_files)
+        if files_processed == 0:
+            # Zero files processed → ERROR state
             await update_data_source_sync_status(USER_ID, 'mineral', 'handbooks', 'error')
-        except Exception:
-            pass
+        else:
+            # Files were processed → log error and continue to embedding
+            sync_results = {
+                "latest_sync": {
+                    "added": len(uploaded_files),
+                    "updated": 0,
+                    "removed": 0,
+                    "skipped": skipped_files,
+                    "runtime_ms": total_runtime_ms,
+                    "api_calls": total_api_calls,
+                    "skip_reasons": {},
+                    "sync_timestamp": int(time.time())
+                },
+                "overall_profile": {
+                    "total_files": files_total,
+                    "total_size_bytes": max(mb_total or 0, mb_processed or 0),
+                    "last_updated": int(time.time()),
+                    "folders_count": 0
+                },
+                "error_ingesting": {
+                    "timestamp": int(time.time()),
+                    "message": f"Mineral HR sync error: {str(error)}"
+                }
+            }
+            await update_data_source_sync_status(USER_ID, 'mineral', 'handbooks', 'embedding', sync_results=sync_results)
+        
         raise error
 
 async def initiate_mineral_sync(

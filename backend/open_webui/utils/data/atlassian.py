@@ -2046,8 +2046,39 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
         await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'embedding', sync_results=sync_results)
     
     except Exception as error:
-        await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
         log.error(f"[{datetime.now().isoformat()}] Atlassian Sync failed critically: {str(error)}", exc_info=True)
+        
+        # Check if any files were processed
+        files_processed = len(uploaded_items) + len(deleted_items)
+        if files_processed == 0:
+            # Zero files processed → ERROR state
+            await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
+        else:
+            # Files were processed → log error and continue to embedding
+            sync_results = {
+                "latest_sync": {
+                    "added": len([f for f in uploaded_items if f['type'] == 'new']),
+                    "updated": len([f for f in uploaded_items if f['type'] == 'updated']),
+                    "removed": len(deleted_items),
+                    "skipped": skipped_items,
+                    "runtime_ms": total_runtime_ms,
+                    "api_calls": total_api_calls,
+                    "skip_reasons": {},
+                    "sync_timestamp": int(time.time())
+                },
+                "overall_profile": {
+                    "total_files": len(all_atlassian_items),
+                    "total_size_bytes": max(mb_total or 0, mb_processed or 0),
+                    "last_updated": int(time.time()),
+                    "folders_count": 0
+                },
+                "error_ingesting": {
+                    "timestamp": int(time.time()),
+                    "message": f"Atlassian sync error: {str(error)}"
+                }
+            }
+            await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'embedding', sync_results=sync_results)
+        
         raise error
 
 

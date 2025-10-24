@@ -59,6 +59,55 @@
 	let activeView: Record<string, 'sync' | 'embedding'> = {};
 	let forceUpdate = 0; // Force re-render
 	
+	// Helper functions for sync error display
+	const hasSyncErrors = (dataSource: DataSource) => {
+		const isActive = dataSource.sync_status === 'syncing' || dataSource.sync_status === 'embedding';
+		const syncResults = dataSource.sync_results as any;
+		const hasErrors = isActive && (syncResults?.error_ingesting || syncResults?.error_embedding);
+		
+		
+		return hasErrors;
+	};
+	
+	const getSyncError = (dataSource: DataSource, type: 'ingesting' | 'embedding') => {
+		const syncResults = dataSource.sync_results as any;
+		return syncResults?.[`error_${type}`];
+	};
+	
+	const formatErrorTimestamp = (timestamp: number) => {
+		return new Date(timestamp * 1000).toLocaleString();
+	};
+	
+	// Save embedding service errors to database
+	async function saveEmbeddingServiceError(errorResponse: any) {
+		try {
+			// Find all embedding data sources and update them with the error
+			const embeddingSources = dataSources.filter(ds => ds.sync_status === 'embedding');
+			
+			for (const dataSource of embeddingSources) {
+				const currentSyncResults = dataSource.sync_results || {};
+				const updatedSyncResults = {
+					...currentSyncResults,
+					error_embedding: {
+						timestamp: Math.floor(Date.now() / 1000),
+						message: errorResponse.message || 'Embedding service error'
+					}
+				};
+				
+				await updateSyncStatus(localStorage.token, dataSource.id, {
+					sync_status: dataSource.sync_status,
+					sync_results: updatedSyncResults
+				});
+				
+				// Update local data source
+				dataSource.sync_results = updatedSyncResults as any;
+				
+				console.log(`💾 Saved embedding service error for ${dataSource.name}`);
+			}
+		} catch (error) {
+			console.error('Error saving embedding service error:', error);
+		}
+	}
 
 	// Project selector state
 	let showProjectSelector = false;
@@ -158,6 +207,12 @@
 			
 			// Log embedding status update
 			console.log('🧠 received data:', newEmbeddingStatus);
+			
+			// Handle service errors by refreshing data sources to get updated sync_results
+			if (newEmbeddingStatus.status === 'service_error') {
+				dataSources = await getDataSources(localStorage.token);
+			}
+			
 			embeddingStatus = embeddingStatus; // Trigger reactivity
 			
 			// Save embedding status to database for persistence
@@ -1076,6 +1131,32 @@
 											{#if dataSource.sync_status === 'syncing' || dataSource.sync_status === 'embedding'}
 												<PulsingDots />
 											{/if}
+											
+											<!-- Warning icon for sync/embedding errors -->
+											{#if hasSyncErrors(dataSource)}
+												<div class="relative group">
+													<svg class="w-4 h-4 text-yellow-500 dark:text-yellow-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+														<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+													</svg>
+													<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
+														{#if getSyncError(dataSource, 'ingesting')}
+															<div class="text-xs font-medium mb-1 text-yellow-300">Ingestion Issues:</div>
+															{@const ingestingError = getSyncError(dataSource, 'ingesting')}
+															<div class="text-xs text-gray-300 mb-1">{ingestingError.message}</div>
+															<div class="text-xs text-gray-400">{formatErrorTimestamp(ingestingError.timestamp)}</div>
+														{/if}
+														{#if getSyncError(dataSource, 'embedding')}
+															{#if getSyncError(dataSource, 'ingesting')}
+																<div class="border-t border-gray-600 my-2"></div>
+															{/if}
+															<div class="text-xs font-medium mb-1 text-yellow-300">Embedding Issues:</div>
+															{@const embeddingError = getSyncError(dataSource, 'embedding')}
+															<div class="text-xs text-gray-300 mb-1">{embeddingError.message}</div>
+															<div class="text-xs text-gray-400">{formatErrorTimestamp(embeddingError.timestamp)}</div>
+														{/if}
+													</div>
+												</div>
+											{/if}
 										</div>
 										
 										<!-- Phase Description for syncing -->
@@ -1242,6 +1323,32 @@
 								</span>
 								{#if dataSource.sync_status === 'syncing'}
 									<PulsingDots />
+								{/if}
+								
+								<!-- Warning icon for sync/embedding errors -->
+								{#if hasSyncErrors(dataSource)}
+									<div class="relative group">
+										<svg class="w-4 h-4 text-yellow-500 dark:text-yellow-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+											<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+										</svg>
+										<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
+											{#if getSyncError(dataSource, 'ingesting')}
+												<div class="text-xs font-medium mb-1 text-yellow-300">Ingestion Issues:</div>
+												{@const ingestingError = getSyncError(dataSource, 'ingesting')}
+												<div class="text-xs text-gray-300 mb-1">{ingestingError.message}</div>
+												<div class="text-xs text-gray-400">{formatErrorTimestamp(ingestingError.timestamp)}</div>
+											{/if}
+											{#if getSyncError(dataSource, 'embedding')}
+												{#if getSyncError(dataSource, 'ingesting')}
+													<div class="border-t border-gray-600 my-2"></div>
+												{/if}
+												<div class="text-xs font-medium mb-1 text-yellow-300">Embedding Issues:</div>
+												{@const embeddingError = getSyncError(dataSource, 'embedding')}
+												<div class="text-xs text-gray-300 mb-1">{embeddingError.message}</div>
+												<div class="text-xs text-gray-400">{formatErrorTimestamp(embeddingError.timestamp)}</div>
+											{/if}
+										</div>
+									</div>
 								{/if}
 							</div>
 							

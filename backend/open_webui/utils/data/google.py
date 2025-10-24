@@ -617,6 +617,38 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
     except Exception as error:
         print(f"Gmail sync failed: {str(error)}")
         log.error(f"Gmail sync failed:", exc_info=True)
+        
+        # Check if any files were processed
+        files_processed = len(uploaded_files)
+        if files_processed == 0:
+            # Zero files processed → ERROR state
+            await update_data_source_sync_status(USER_ID, 'google', 'gmail', 'error')
+        else:
+            # Files were processed → log error and continue to embedding
+            sync_results = {
+                "latest_sync": {
+                    "added": len(uploaded_files),
+                    "updated": 0,
+                    "removed": 0,
+                    "skipped": total_skipped,
+                    "runtime_ms": int((time.time() - script_start_time) * 1000),
+                    "api_calls": total_api_calls,
+                    "skip_reasons": {},
+                    "sync_timestamp": int(time.time())
+                },
+                "overall_profile": {
+                    "total_files": len(messages),
+                    "total_size_bytes": total_size,
+                    "last_updated": int(time.time()),
+                    "folders_count": 0
+                },
+                "error_ingesting": {
+                    "timestamp": int(time.time()),
+                    "message": f"Gmail sync error: {str(error)}"
+                }
+            }
+            await update_data_source_sync_status(USER_ID, 'google', 'gmail', 'embedding', sync_results=sync_results)
+        
         raise error
 
 def download_and_upload_email(message_id, email_path, auth_token):
@@ -1588,6 +1620,38 @@ async def sync_drive_to_storage(auth_token, user_id):
     except Exception as error:
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
         print(traceback.format_exc())
+        
+        # Check if any files were processed
+        files_processed = len(uploaded_files) + len(deleted_files)
+        if files_processed == 0:
+            # Zero files processed → ERROR state
+            await update_data_source_sync_status(USER_ID, 'google', 'google_drive', 'error')
+        else:
+            # Files were processed → log error and continue to embedding
+            sync_results = {
+                "latest_sync": {
+                    "added": len([f for f in uploaded_files if f['type'] == 'new']),
+                    "updated": len([f for f in uploaded_files if f['type'] == 'updated']),
+                    "removed": len(deleted_files),
+                    "skipped": sum(skipped_reasons.values()),
+                    "runtime_ms": int((time.time() - script_start_time) * 1000),
+                    "api_calls": total_api_calls,
+                    "skip_reasons": skipped_reasons,
+                    "sync_timestamp": int(time.time())
+                },
+                "overall_profile": {
+                    "total_files": len(all_files),
+                    "total_size_bytes": max(mb_total or 0, mb_processed or 0),
+                    "last_updated": int(time.time()),
+                    "folders_count": folders_found
+                },
+                "error_ingesting": {
+                    "timestamp": int(time.time()),
+                    "message": f"Google Drive sync error: {str(error)}"
+                }
+            }
+            await update_data_source_sync_status(USER_ID, 'google', 'google_drive', 'embedding', sync_results=sync_results)
+        
         raise error
 
 def download_and_upload_file(file, auth_token, exists, reason, skipped_reasons):
