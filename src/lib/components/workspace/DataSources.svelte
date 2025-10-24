@@ -47,7 +47,7 @@
 	// Socket inactivity tracking for INCOMPLETE state
 	let lastSocketActivity: number = 0; // Single timestamp for all sources
 	let incompleteMarked: Set<string> = new Set(); // Track which sources we've already marked as incomplete
-	const SOCKET_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes for production
+	const SOCKET_TIMEOUT_MS = 4 * 60 * 1000; // 4 minutes for production
 	let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Shared embedding status polling
@@ -371,7 +371,7 @@
 
 	// Start timeout checking timer
 	onMount(() => {
-		timeoutCheckInterval = setInterval(checkSocketTimeout, 10000); // Check every 10 seconds
+		timeoutCheckInterval = setInterval(checkSocketTimeout, 15000); // Check every 15 seconds
 	});
 
 	const formatDate = (dateString: string) => {

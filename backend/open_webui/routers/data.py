@@ -2580,12 +2580,25 @@ async def mark_data_source_incomplete(source_id: str, user=Depends(get_verified_
             log.warning(f"Attempted to mark {data_source.sync_status} data source as incomplete - ignoring")
             return {"success": False, "message": f"Data source is {data_source.sync_status}, not syncing"}
         
+        # Check if files were processed during ingestion
+        files_processed = data_source.files_processed or 0
+        
+        # Determine next state based on file processing
+        if files_processed > 0:
+            # Files were processed - go to embedding state (normal flow)
+            next_status = "embedding"
+            status_message = f"{data_source.name} sync completed ingestion, starting embedding"
+        else:
+            # No files processed - go to incomplete state (recovery needed)
+            next_status = "incomplete"
+            status_message = f"{data_source.name} sync marked as incomplete due to timeout"
+        
         # Update the status
         updated_ds = DataSources.update_data_source_sync_status_by_name(
             user_id=user.id,
             source_name=data_source.name,
             layer_name=data_source.layer or "",
-            sync_status="incomplete",
+            sync_status=next_status,
             last_sync=int(time.time())
         )
         
@@ -2597,14 +2610,14 @@ async def mark_data_source_incomplete(source_id: str, user=Depends(get_verified_
                 event_name="data-source-updated",
                 data={
                     "source": data_source.name,
-                    "status": "incomplete",
-                    "message": f"{data_source.name} sync marked as incomplete due to timeout",
+                    "status": next_status,
+                    "message": status_message,
                     "timestamp": int(time.time())
                 }
             )
             
-            log.info(f"Marked data source '{data_source.name}' as incomplete due to socket timeout")
-            return {"success": True, "message": "Data source marked as incomplete"}
+            log.info(f"Socket timeout for '{data_source.name}': {status_message}")
+            return {"success": True, "message": status_message}
         else:
             raise HTTPException(status_code=500, detail="Failed to update data source status")
             
