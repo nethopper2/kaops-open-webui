@@ -55,6 +55,7 @@
 	let embeddingPollingTimer: ReturnType<typeof setInterval> | null = null;
 	let embeddingPollingAttempts = 0;
 	let isFetchingEmbeddingStatus = false;
+	let consecutiveEmptyResponses = 0; // Track consecutive empty embedding responses
 	
 	// Toggle state for each data source (sync vs embedding view)
 	let activeView: Record<string, 'sync' | 'embedding'> = {};
@@ -215,6 +216,43 @@
 			
 			// Log embedding status update
 			console.log('🧠 received data:', newEmbeddingStatus);
+			
+			// Check for consecutive empty responses to transition to synced state
+			// Only care about empty responses when we have data sources in embedding state
+			const hasEmbeddingSources = dataSources.some(ds => ds.sync_status === 'embedding');
+			const isEmptyResponse = newEmbeddingStatus && 
+				Array.isArray(newEmbeddingStatus) && 
+				newEmbeddingStatus.length === 0;
+			
+			if (hasEmbeddingSources && isEmptyResponse) {
+				consecutiveEmptyResponses++;
+				console.log(`🧠 Empty embedding response ${consecutiveEmptyResponses}/4 (${dataSources.filter(ds => ds.sync_status === 'embedding').length} sources embedding)`);
+				
+				// Transition to synced state after 4 consecutive empty responses
+				if (consecutiveEmptyResponses >= 4) {
+					console.log('🧠 4 consecutive empty responses - transitioning to synced state');
+					
+					// Update all embedding sources to synced state
+					const embeddingSources = dataSources.filter(ds => ds.sync_status === 'embedding');
+					for (const dataSource of embeddingSources) {
+						console.log(`🧠 Transitioning ${dataSource.name} from embedding to synced`);
+						await updateSyncStatus(localStorage.token, dataSource.id, {
+							sync_status: 'synced',
+							last_sync: Math.floor(Date.now() / 1000)
+						});
+					}
+					
+					// Refresh data sources to get latest state
+					dataSources = await getDataSources(localStorage.token);
+					consecutiveEmptyResponses = 0; // Reset counter
+				}
+			} else if (!hasEmbeddingSources) {
+				// Reset counter when no sources are in embedding state
+				consecutiveEmptyResponses = 0;
+			} else {
+				// Reset counter on non-empty response
+				consecutiveEmptyResponses = 0;
+			}
 			
 			// Handle service errors by refreshing data sources to get updated sync_results
 			if (newEmbeddingStatus.status === 'service_error') {
