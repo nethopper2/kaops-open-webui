@@ -4,6 +4,7 @@
 	export let sync_start_time: number = 0;
 	export let files_processed: number = 0;
 	export let files_total: number = 0;
+	export let show_eta: boolean = true;
 
 	// Configuration - centralized ETA update throttling
 	const ETA_UPDATE_INTERVAL_MS = 5000; // 5 seconds
@@ -55,8 +56,8 @@
 		}
 	}
 
-	// Use throttled ETA values
-	$: eta_formatted = files_processed > 0 && throttled_eta_seconds > 0 ? throttled_eta_formatted : '--:--';
+	// Use throttled ETA values - always show --:-- if show_eta is false
+	$: eta_formatted = show_eta && files_processed > 0 && throttled_eta_seconds > 0 ? throttled_eta_formatted : '--:--';
 </script>
 
 <!-- Time Info -->

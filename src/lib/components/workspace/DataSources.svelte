@@ -54,6 +54,7 @@
 	let embeddingStatus: any = null;
 	let embeddingPollingTimer: ReturnType<typeof setInterval> | null = null;
 	let embeddingPollingAttempts = 0;
+	let isFetchingEmbeddingStatus = false;
 	
 	// Toggle state for each data source (sync vs embedding view)
 	let activeView: Record<string, 'sync' | 'embedding'> = {};
@@ -188,6 +189,13 @@
 
 	// Shared embedding status polling functions
 	async function fetchEmbeddingStatus() {
+		// Prevent concurrent calls
+		if (isFetchingEmbeddingStatus) {
+			console.log('🧠 Embedding status fetch already in progress, skipping');
+			return;
+		}
+		
+		isFetchingEmbeddingStatus = true;
 		try {
 			const response = await fetch(`${WEBUI_BASE_URL}/api/v1/data/embedding/status`, {
 				method: 'GET',
@@ -219,6 +227,8 @@
 			await saveEmbeddingStatusToDatabase(newEmbeddingStatus);
 		} catch (error) {
 			console.error('Error fetching embedding status:', error);
+		} finally {
+			isFetchingEmbeddingStatus = false;
 		}
 	}
 
@@ -291,27 +301,22 @@
 		}
 	}
 
-	function startEmbeddingStatusPolling() {
-		// Check if there are any embedding sources
-		const embeddingSources = dataSources.filter(ds => ds.sync_status === 'embedding');
-		if (embeddingSources.length === 0) {
-			return; // No embedding sources, don't start polling
+	function startEmbeddingPolling() {
+		// Don't start if already running
+		if (embeddingPollingTimer) {
+			console.log('🧠 Embedding polling already active');
+			return;
 		}
 
+		console.log('🧠 Starting continuous embedding polling');
+		
 		// Use config value or default to 60 seconds
 		const pollingRate = ($config as any)?.private_ai?.rag_embedding_status_polling_rate || 60;
 		const POLLING_INTERVAL_MS = pollingRate * 1000;
 
 		embeddingPollingTimer = setInterval(async () => {
+			console.log('🧠 Polling embedding status...');
 			embeddingPollingAttempts++;
-			
-			// Check if we should stop polling
-			const currentEmbeddingSources = dataSources.filter(ds => ds.sync_status === 'embedding');
-			if (currentEmbeddingSources.length === 0) {
-				stopEmbeddingStatusPolling();
-				return;
-			}
-
 			await fetchEmbeddingStatus();
 		}, POLLING_INTERVAL_MS);
 
@@ -320,15 +325,10 @@
 	}
 
 
-	// Reactive statement to start/stop polling based on embedding sources
-	$: embeddingSources = dataSources.filter(ds => ds.sync_status === 'embedding');
+	// Start continuous embedding polling on component mount
 	$: {
-		if (embeddingSources.length > 0 && !embeddingPollingTimer) {
-			console.log(`🧠 ${embeddingSources.length} sources embedding`);
-			startEmbeddingStatusPolling();
-		} else if (embeddingSources.length === 0 && embeddingPollingTimer) {
-			console.log('🧠 polling stopped');
-			stopEmbeddingStatusPolling();
+		if (!embeddingPollingTimer) {
+			startEmbeddingPolling();
 		}
 	}
 
@@ -359,35 +359,15 @@
 
 
 
-	function stopEmbeddingStatusPolling() {
+	function stopEmbeddingPolling() {
 		if (embeddingPollingTimer) {
+			console.log('🧠 Stopping embedding polling');
 			clearInterval(embeddingPollingTimer);
 			embeddingPollingTimer = null;
 		}
 		embeddingPollingAttempts = 0;
 	}
 
-	function startEmbeddingPollingForSync(dataSource: DataSource) {
-		// Start embedding polling immediately for concurrent sync + embedding
-		console.log(`🧠 Starting embedding polling for ${dataSource.name} during sync`);
-		
-		// Use config value or default to 60 seconds
-		const pollingRate = ($config as any)?.private_ai?.rag_embedding_status_polling_rate || 60;
-		const POLLING_INTERVAL_MS = pollingRate * 1000;
-
-		// Clear any existing timer
-		if (embeddingPollingTimer) {
-			clearInterval(embeddingPollingTimer);
-		}
-
-		embeddingPollingTimer = setInterval(async () => {
-			embeddingPollingAttempts++;
-			await fetchEmbeddingStatus();
-		}, POLLING_INTERVAL_MS);
-
-		// Fetch immediately
-		fetchEmbeddingStatus();
-	}
 
 	// Start timeout checking timer
 	onMount(() => {
@@ -541,8 +521,7 @@
 			const dataSourceName = formatDataSourceName(dataSource.action ?? '', dataSource.layer ?? '');
 			try {
 				await resetEmbedding(localStorage.token, $user.id, dataSourceName);
-				// Start embedding polling immediately for concurrent sync + embedding
-				startEmbeddingPollingForSync(dataSource);
+				// Embedding polling is already running continuously
 				// Auto-switch to sync view when sync starts
 				setActiveView(dataSource, 'sync');
 			} catch (error) {
@@ -999,7 +978,10 @@
 		if (timeoutCheckInterval) {
 			clearInterval(timeoutCheckInterval);
 		}
-		stopEmbeddingStatusPolling();
+		if (embeddingPollingTimer) {
+			console.log('🧠 Cleaning up embedding polling timer');
+			clearInterval(embeddingPollingTimer);
+		}
 	});
 </script>
 
@@ -1283,14 +1265,14 @@
 												
 												<!-- Single toggle button right next to content -->
 												<button
-													class="px-3 py-1 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+													class="px-3 py-1 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 whitespace-nowrap"
 													on:click={() => {
 														const currentView = getActiveView(dataSource);
 														const newView = currentView === 'sync' ? 'embedding' : 'sync';
 														setActiveView(dataSource, newView);
 													}}
 												>
-													{getActiveView(dataSource) === 'sync' ? 'Show Embedding' : 'Show Sync'}
+													{getActiveView(dataSource) === 'sync' ? 'Show Embedding' : 'Show Ingestion'}
 												</button>
 											</div>
 										</div>
@@ -1425,10 +1407,10 @@
 									
 									<!-- Single toggle button below content for mobile -->
 									<button
-										class="px-3 py-1 text-xs rounded {getActiveView(dataSource) === 'embedding' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}"
+										class="px-3 py-1 text-xs rounded whitespace-nowrap {getActiveView(dataSource) === 'embedding' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}"
 										on:click={() => setActiveView(dataSource, getActiveView(dataSource) === 'sync' ? 'embedding' : 'sync')}
 									>
-										{getActiveView(dataSource) === 'sync' ? 'Show Embedding' : 'Show Sync'}
+										{getActiveView(dataSource) === 'sync' ? 'Show Embedding' : 'Show Ingestion'}
 									</button>
 								</div>
 							{:else if dataSource.sync_status === 'deleting'}

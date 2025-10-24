@@ -2356,6 +2356,8 @@ async def get_embedding_status(user=Depends(get_verified_user)):
         
         result = response.json()
         log.info(f"🧠 Backend embedding status response: {result}")
+        # ADD DEBUG: Log what we're about to return
+        log.info(f"🧠 About to return to frontend: {result}")
         return result
         
     except ConnectionError as e:
@@ -2478,6 +2480,8 @@ async def get_embedding_status(user=Depends(get_verified_user)):
             except Exception as db_error:
                 log.warning(f"Failed to update embedding data sources with service error: {db_error}")
             
+            # ADD DEBUG: Log when this path is taken
+            log.error(f"🧠 HTTPError - returning service_error to frontend: {e}")
             return {
                 "status": "service_error",
                 "message": f"Embedding service returned error: {e.response.status_code if e.response else 'unknown'}",
@@ -2485,6 +2489,8 @@ async def get_embedding_status(user=Depends(get_verified_user)):
             }
     except Exception as e:
         log.exception(f"Unexpected error getting embedding status: {e}")
+        # ADD DEBUG: Log what we return for unexpected errors
+        log.error(f"🧠 Unexpected error - returning error status: {e}")
         return {
             "status": "error",
             "message": "An unexpected error occurred while checking embedding status",
