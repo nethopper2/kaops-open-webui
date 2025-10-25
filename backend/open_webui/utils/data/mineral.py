@@ -562,8 +562,9 @@ async def sync_mineral_to_storage(auth_token, base_url):
         print("----------------------------------------------------------------------")
         print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
         print("----------------------------------------------------------------------")
+        # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
         await update_data_source_sync_status(
-            USER_ID, 'mineral', 'handbooks', 'embedding',
+            USER_ID, 'mineral', 'handbooks', 'synced',
             files_total=sync_results['overall_profile']['total_files'],
             mb_total=sync_results['overall_profile']['total_size_bytes'],
             sync_results=sync_results
@@ -609,7 +610,8 @@ async def sync_mineral_to_storage(auth_token, base_url):
                     "message": f"Mineral HR sync error: {str(error)}"
                 }
             }
-            await update_data_source_sync_status(USER_ID, 'mineral', 'handbooks', 'embedding', sync_results=sync_results)
+            # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+            await update_data_source_sync_status(USER_ID, 'mineral', 'handbooks', 'synced', sync_results=sync_results)
         
         raise error
 

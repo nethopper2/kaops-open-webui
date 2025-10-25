@@ -1022,7 +1022,8 @@ async def sync_atlassian_selected_projects(username: str, token: str, project_ke
         print("----------------------------------------------------------------------")
         print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
         print("----------------------------------------------------------------------")
-        await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'embedding', sync_results=sync_results)
+        # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'synced', sync_results=sync_results)
     
     except Exception as error:
         await update_data_source_sync_status(USER_ID, 'atlassian', layer, 'error')
@@ -2043,7 +2044,8 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
         }
         
         # Final state: Embedding (to match Google)
-        await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'embedding', sync_results=sync_results)
+        # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'synced', sync_results=sync_results)
     
     except Exception as error:
         log.error(f"[{datetime.now().isoformat()}] Atlassian Sync failed critically: {str(error)}", exc_info=True)
@@ -2077,7 +2079,8 @@ async def sync_atlassian_to_storage(username: str, token: str, layer=None,
                     "message": f"Atlassian sync error: {str(error)}"
                 }
             }
-            await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'embedding', sync_results=sync_results)
+            # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+        await update_data_source_sync_status(USER_ID, 'atlassian', layer or 'jira', 'synced', sync_results=sync_results)
         
         raise error
 

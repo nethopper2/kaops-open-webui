@@ -2585,11 +2585,11 @@ async def mark_data_source_incomplete(source_id: str, user=Depends(get_verified_
         
         # Determine next state based on file processing
         if files_processed > 0:
-            # Files were processed - go to embedding state (normal flow)
-            next_status = "embedding"
-            status_message = f"{data_source.name} sync completed ingestion, starting embedding"
+            # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+            next_status = "incomplete"
+            status_message = f"{data_source.name} sync marked as incomplete due to timeout"
         else:
-            # No files processed - go to incomplete state (recovery needed)
+            # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
             next_status = "incomplete"
             status_message = f"{data_source.name} sync marked as incomplete due to timeout"
         
