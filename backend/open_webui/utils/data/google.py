@@ -600,8 +600,9 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
         print("🧠 Phase 5: Embedding - Vectorizing data for AI processing...")
         print("----------------------------------------------------------------------")
         
+        # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
         await update_data_source_sync_status(
-            user_id, 'google', 'gmail', 'embedding', 
+            user_id, 'google', 'gmail', 'synced', 
             files_total=sync_results['overall_profile']['total_files'],
             mb_total=sync_results['overall_profile']['total_size_bytes'],
             sync_results=sync_results
@@ -647,7 +648,7 @@ async def sync_gmail_to_storage(auth_token, query='', max_emails=None, user_id=N
                     "message": f"Gmail sync error: {str(error)}"
                 }
             }
-            await update_data_source_sync_status(USER_ID, 'google', 'gmail', 'embedding', sync_results=sync_results)
+            await update_data_source_sync_status(USER_ID, 'google', 'gmail', 'synced', sync_results=sync_results)
         
         raise error
 
@@ -1594,9 +1595,10 @@ async def sync_drive_to_storage(auth_token, user_id):
         print("🧠 Phase 5: Embedding - Vectorizing data for AI processing...")
         print("----------------------------------------------------------------------")
         
-        # Final progress update
+        # Final progress update - TEMPORARILY HIDING EMBEDDING PHASE
+        # TODO: May restore embedding phase in future, keeping 'synced' for now
         await update_data_source_sync_status(
-            user_id, 'google', 'google_drive', 'embedding',
+            user_id, 'google', 'google_drive', 'synced',
             files_processed=files_processed,
             files_total=sync_results['overall_profile']['total_files'],
             mb_processed=mb_processed,
@@ -1650,7 +1652,8 @@ async def sync_drive_to_storage(auth_token, user_id):
                     "message": f"Google Drive sync error: {str(error)}"
                 }
             }
-            await update_data_source_sync_status(USER_ID, 'google', 'google_drive', 'embedding', sync_results=sync_results)
+            # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+            await update_data_source_sync_status(USER_ID, 'google', 'google_drive', 'synced', sync_results=sync_results)
         
         raise error
 

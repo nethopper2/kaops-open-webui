@@ -442,7 +442,8 @@ async def sync_onenote_to_storage(auth_token):
             }
         }
 
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'onenote', 'embedding', sync_results=sync_results)
+        # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'onenote', 'synced', sync_results=sync_results)
         
         return {
             'uploaded': len(uploaded_files),
@@ -773,7 +774,8 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
         print("----------------------------------------------------------------------")
         print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
         print("----------------------------------------------------------------------")
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'embedding', sync_results=sync_results)
+        # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'outlook', 'synced', sync_results=sync_results)
         
         return {
             'uploaded': len(uploaded_files),
@@ -1145,7 +1147,8 @@ async def sync_onedrive_to_storage(auth_token):
         print("----------------------------------------------------------------------")
         print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
         print("----------------------------------------------------------------------")
-        await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'embedding', sync_results=sync_results)
+        # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+        await update_data_source_sync_status(USER_ID, 'microsoft', 'onedrive', 'synced', sync_results=sync_results)
               
         return {
             'uploaded': len(uploaded_files),
@@ -1599,8 +1602,9 @@ async def sync_sharepoint_to_storage(auth_token):
         print("----------------------------------------------------------------------")
         print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
         print("----------------------------------------------------------------------")
+        # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
         await update_data_source_sync_status(
-            USER_ID, 'microsoft', 'sharepoint', 'embedding', 
+            USER_ID, 'microsoft', 'sharepoint', 'synced', 
             files_total=sync_results['overall_profile']['total_files'],
             mb_total=sync_results['overall_profile']['total_size_bytes'],
             sync_results=sync_results

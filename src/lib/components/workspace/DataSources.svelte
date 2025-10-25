@@ -1301,9 +1301,11 @@
 													<DataSyncEmbeddingStatus {dataSource} {embeddingStatus} {syncProgress} />
 												{/if}
 												
-												<!-- Single toggle button right next to content -->
+												<!-- TEMPORARILY HIDDEN: Toggle button for embedding phase -->
+												<!-- TODO: May restore embedding phase in future - keep all state management intact -->
 												<button
 													class="px-3 py-1 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 whitespace-nowrap"
+													style="display: none;"
 													on:click={() => {
 														const currentView = getActiveView(dataSource);
 														const newView = currentView === 'sync' ? 'embedding' : 'sync';
@@ -1443,9 +1445,11 @@
 										<DataSyncEmbeddingStatus {dataSource} {embeddingStatus} {syncProgress} />
 									{/if}
 									
-									<!-- Single toggle button below content for mobile -->
+									<!-- TEMPORARILY HIDDEN: Toggle button for embedding phase (mobile) -->
+									<!-- TODO: May restore embedding phase in future - keep all state management intact -->
 									<button
 										class="px-3 py-1 text-xs rounded whitespace-nowrap {getActiveView(dataSource) === 'embedding' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}"
+										style="display: none;"
 										on:click={() => setActiveView(dataSource, getActiveView(dataSource) === 'sync' ? 'embedding' : 'sync')}
 									>
 										{getActiveView(dataSource) === 'sync' ? 'Show Embedding' : 'Show Ingestion'}

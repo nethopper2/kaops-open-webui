@@ -1382,13 +1382,13 @@ async def sync_slack_to_storage(auth_token, layer=None):
             }
         }
 
-        # Final state: Embedding (to match Google)
-        # Phase 5: Embedding
+        # Final state: Synced (TEMPORARILY HIDING EMBEDDING PHASE)
+        # Phase 5: Embedding - TODO: May restore embedding phase in future
         print("----------------------------------------------------------------------")
         print("🧠 Phase 5: Embedding - vectorizing data for AI processing...")
         print("----------------------------------------------------------------------")
         await update_data_source_sync_status(
-            USER_ID, 'slack', layer, 'embedding',
+            USER_ID, 'slack', layer, 'synced',
             files_total=sync_results['overall_profile']['total_files'],
             mb_total=sync_results['overall_profile']['total_size_bytes'],
             sync_results=sync_results
@@ -1428,7 +1428,8 @@ async def sync_slack_to_storage(auth_token, layer=None):
                     "message": f"Slack sync error: {str(error)}"
                 }
             }
-            await update_data_source_sync_status(USER_ID, 'slack', layer, 'embedding', sync_results=sync_results)
+            # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
+            await update_data_source_sync_status(USER_ID, 'slack', layer, 'synced', sync_results=sync_results)
         
         raise
 
