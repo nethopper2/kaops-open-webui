@@ -1168,14 +1168,14 @@
 											<div class="flex items-center gap-1 mt-1">
 												<button
 													class="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-													disabled={isProcessing(dataSource) || dataSource.sync_status === 'embedding'}
+													disabled={isProcessing(dataSource)}
 													on:click={() => handleSync(dataSource)}
 												>
 													Sync
 												</button>
 												<button
 													class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
+													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding')}
 													on:click={() => {
 														selectedDataSource = dataSource;
 														showDeleteConfirm = true;
@@ -1364,14 +1364,14 @@
 								<div class="flex items-center gap-1 mt-1">
 									<button
 										class="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-										disabled={isProcessing(dataSource) || dataSource.sync_status === 'embedding'}
+										disabled={isProcessing(dataSource)}
 										on:click={() => handleSync(dataSource)}
 									>
 										Sync
 									</button>
 									<button
 										class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
+										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding')}
 										on:click={() => {
 											selectedDataSource = dataSource;
 											showDeleteConfirm = true;
@@ -1471,14 +1471,14 @@
 						<div class="flex gap-2 mt-3">
 							<button
 								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource) || dataSource.sync_status === 'embedding'}
+								disabled={isProcessing(dataSource)}
 								on:click={() => handleSync(dataSource)}
 							>
 								{isProcessing(dataSource) ? 'Processing...' : 'Sync'}
 							</button>
 							<button
 								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete')}
+								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding')}
 								on:click={() => {
 									selectedDataSource = dataSource;
 									showDeleteConfirm = true;
