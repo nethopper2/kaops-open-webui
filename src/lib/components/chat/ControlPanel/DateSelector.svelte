@@ -2,21 +2,20 @@
 import { computePosition, offset, flip, shift, autoPlacement } from '@floating-ui/dom';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import CalendarIcon from '$lib/components/icons/CalendarSolid.svelte';
-import { createEventDispatcher, getContext } from 'svelte';
+import { createEventDispatcher, getContext, onMount, onDestroy } from 'svelte';
 import { settings } from '$lib/stores';
 import CustomDateMenu from '$lib/components/chat/ControlPanel/CustomDateMenu.svelte';
 
 const i18n = getContext('i18n');
-
 const dispatch = createEventDispatcher();
+const DateOptions = ['All','Last 7 days', 'Last 30 days','Last year', 'Custom'];
 
 let DateSelectorEnabled = false;
 let SelectedDate = 'All';
-const DateOptions = ['All','Last 7 days', 'Last 30 days','Last year', 'Custom'];
-
 let DateButtonRef;
 let DateDropdownRef;
 let DateDropdownStyle = '';
+let ShowCustomMenu = false;
 
 async function DateDropdownPosition() {
     if (DateButtonRef && DateDropdownRef) {
@@ -24,9 +23,11 @@ async function DateDropdownPosition() {
             placement: 'bottom-start',
             strategy: 'absolute',
         });
-        DateDropdownStyle = `position: absolute; top: ${y}px; right: ${x}px; z-index: 50;`;
+        
+        DateDropdownStyle = `position: absolute; top: ${y}px; left: ${x}px; z-index: 50;`;
     }
 }
+
 function DateToggleDropdown() {
     DateSelectorEnabled = !DateSelectorEnabled;
     if (DateSelectorEnabled && DateButtonRef) {
@@ -46,8 +47,6 @@ function handlePresetDate(option) {
     }
 }
 
-let ShowCustomMenu = false;
-
 function handleCustomapply(e) {
     const { from, to } = e.detail;
     const reformatDate = (isoString) => {
@@ -66,11 +65,26 @@ function handleCustomcancel(e) {
     DateSelectorEnabled = false;
     SelectedDate = 'All';
 }
+
+function handleClickOutside(event: MouseEvent) {
+  if (DateSelectorEnabled && DateDropdownRef && !DateDropdownRef.contains(event.target) && !DateButtonRef.contains(event.target)) {
+    DateSelectorEnabled = false;
+  }
+}
+
+onMount(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onDestroy(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
+
 </script>
 
 <div class='relative inline-block text-left'>
     <Tooltip
-        content={$i18n.t('Select time range')}
+        content={$i18n.t('Select date range')}
         placement="top"
     >
         <button

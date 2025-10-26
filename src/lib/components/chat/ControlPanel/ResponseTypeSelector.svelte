@@ -2,18 +2,16 @@
 import { computePosition, offset, flip, shift, autoPlacement } from '@floating-ui/dom';
 import Tooltip from '$lib/components/common/Tooltip.svelte';
 import FaceIcon from '$lib/components/icons/FaceSmile.svelte'
-import { createEventDispatcher, getContext } from 'svelte';
+import { createEventDispatcher, getContext, onMount, onDestroy } from 'svelte';
 import { settings } from '$lib/stores';
 import { Button } from 'bits-ui';
 
 const i18n = getContext('i18n');
-
 const dispatch = createEventDispatcher();
+const ResponseOptions=['Default','Professional', 'Creative','Constructive'];
 
 let ResponseTypeSelectorEnabled = false;
 let ResponseType = 'Default';
-const ResponseOptions=['Default','Professional', 'Creative','Constructive'];
-
 let ResponseButtonRef;
 let ResponseDropdownRef;
 let ResponseDropdownStyle = '';
@@ -24,7 +22,7 @@ async function ResponseDropdownPosition() {
             placement: 'bottom-start',
             strategy: 'absolute',
         });
-        ResponseDropdownStyle = `position: absolute; top: ${y}px; left: ${x}px; z-index: 50;`;
+        ResponseDropdownStyle = `position: absolute; top: ${y}px; right: ${x}px; z-index: 50;`;
     }
 }
 function ResponseToggleDropdown() {
@@ -39,6 +37,21 @@ function handleResponseType(option) {
     ResponseTypeSelectorEnabled = false;
     dispatch('responsetypeselected', { type: 'tone_of_voice', value: option });
 }
+
+function handleClickOutside(event: MouseEvent) {
+  if (ResponseTypeSelectorEnabled && ResponseDropdownRef && !ResponseDropdownRef.contains(event.target) && !ResponseButtonRef.contains(event.target)) {
+    ResponseTypeSelectorEnabled = false;
+  }
+}
+
+onMount(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onDestroy(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
+
 </script>
 
 <div class="relative inline-block text-left">

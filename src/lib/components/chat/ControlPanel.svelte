@@ -1,10 +1,8 @@
 <script lang="ts">
 import { createEventDispatcher } from 'svelte';
-
 import DateSelector from '$lib/components/chat/ControlPanel/DateSelector.svelte';
 import ResponseTypeSelector from '$lib/components/chat/ControlPanel/ResponseTypeSelector.svelte';
 import WebToggle from '$lib/components/chat/ControlPanel/WebToggle.svelte';
-
 
 export let showDateSelector = true;
 export let showResponseTypeSelector = true;
@@ -13,11 +11,16 @@ export let showWebToggle = true;
 const dispatch = createEventDispatcher();
 
 function handleDateSelected(e) {
+    const {type, value} = e.detail;
+    if (value === 'All') return;
     dispatch('dateselected', e.detail);
+    
     console.log('date selection handled in control panel', e.detail)
 }
 
 function handleResponseTypeSelected(e) {
+    const {type, value} = e.detail;
+    if (value === 'Default') return;
     dispatch('responsetypeselected', e.detail);
     console.log('response type selection handled in control panel', e.detail)
 }
