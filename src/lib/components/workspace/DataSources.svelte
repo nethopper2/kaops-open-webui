@@ -362,14 +362,6 @@
 		fetchEmbeddingStatus();
 	}
 
-
-	// Start continuous embedding polling on component mount
-	$: {
-		if (!embeddingPollingTimer) {
-			startEmbeddingPolling();
-		}
-	}
-
 	// Track previous sync status to detect state transitions
 	let previousSyncStatus: Record<string, string> = {};
 	
@@ -395,8 +387,6 @@
 		});
 	}
 
-
-
 	function stopEmbeddingPolling() {
 		if (embeddingPollingTimer) {
 			console.log('🧠 Stopping embedding polling');
@@ -410,6 +400,7 @@
 	// Start timeout checking timer
 	onMount(() => {
 		timeoutCheckInterval = setInterval(checkSocketTimeout, 15000); // Check every 15 seconds
+		// startEmbeddingPolling();
 	});
 
 	const formatDate = (dateString: string) => {
