@@ -2310,7 +2310,7 @@ async def disconnect_provider_layer(provider: str, user_id: str, layer: str, tea
 # Create All Provider Endpoints
 ############################
 
-@router.get("/embedding/status")
+@router.get("/embedding/embeddingStatus")
 async def get_embedding_status(user=Depends(get_verified_user)):
     """Get embedding job status from the 4500 server"""
     try:

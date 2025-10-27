@@ -198,7 +198,7 @@
 		
 		isFetchingEmbeddingStatus = true;
 		try {
-			const response = await fetch(`${WEBUI_BASE_URL}/api/v1/data/embedding/status`, {
+			const response = await fetch(`${WEBUI_BASE_URL}/api/v1/data/embedding/embeddingStatus`, {
 				method: 'GET',
 				headers: {
 					'Content-Type': 'application/json'
@@ -215,7 +215,7 @@
 			embeddingStatus = newEmbeddingStatus;
 			
 			// Log embedding status update
-			console.log('🧠 received data:', newEmbeddingStatus);
+			console.log('🧠 received data:', embeddingStatus);
 			
 			// Check for consecutive empty responses to transition to synced state
 			// Only care about empty responses when we have data sources in embedding state
@@ -255,9 +255,7 @@
 			}
 			
 			// Handle service errors by refreshing data sources to get updated sync_results
-			if (newEmbeddingStatus.status === 'service_error') {
-				dataSources = await getDataSources(localStorage.token);
-			}
+			// REMOVED: Don't call getDataSources() on service_error - let backend handle error logging
 			
 			embeddingStatus = embeddingStatus; // Trigger reactivity
 			
