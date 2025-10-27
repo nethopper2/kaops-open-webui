@@ -763,7 +763,7 @@ def generate_reauth_url(provider: str, user_id: str, layer: str = None) -> str:
 # Data Source CRUD Operations (Original)
 ############################
 
-@router.get("/source/", response_model=list[DataSourceResponse])
+@router.get("/data-sources/", response_model=list[DataSourceResponse])
 async def get_data_sources(user=Depends(get_verified_user)):
     """Get all data sources for the authenticated user"""
     try:
@@ -799,7 +799,7 @@ async def get_data_sources(user=Depends(get_verified_user)):
             detail=ERROR_MESSAGES.DEFAULT("Error getting data sources"),
         )
 
-@router.post("/source/")
+@router.post("/data-sources/")
 def create_data_source(form_data: DataSourceForm, user=Depends(get_verified_user)):
     """Create a new data source for the authenticated user"""
     try:
@@ -874,7 +874,7 @@ def initialize_default_data_sources(user=Depends(get_verified_user)):
             detail=ERROR_MESSAGES.DEFAULT("Error initializing data sources"),
         )
 
-@router.get("/source/{id}", response_model=Optional[DataSourceResponse])
+@router.get("/data-sources/{id}", response_model=Optional[DataSourceResponse])
 async def get_data_source_by_id(id: str, user=Depends(get_verified_user)):
     """Get a specific data source by ID"""
     data_source = DataSources.get_data_source_by_id(id)
@@ -902,7 +902,7 @@ async def get_data_source_by_id(id: str, user=Depends(get_verified_user)):
             detail=ERROR_MESSAGES.NOT_FOUND,
         )
 
-@router.post("/source/{id}/update")
+@router.post("/data-sources/{id}/update")
 async def update_data_source_by_id(
     id: str, form_data: DataSourceForm, user=Depends(get_verified_user)
 ):
@@ -949,7 +949,7 @@ class SyncStatusForm(BaseModel):
     last_sync: Optional[int] = None
     sync_results: Optional[dict] = None
 
-@router.post("/source/{id}/sync")
+@router.post("/data-sources/{id}/sync")
 async def update_sync_status(
     id: str, form_data: SyncStatusForm, user=Depends(get_verified_user)
 ):
@@ -1016,7 +1016,7 @@ async def update_sync_status(
             detail=ERROR_MESSAGES.NOT_FOUND,
         )
 
-@router.delete("/source/{id}")
+@router.delete("/data-sources/{id}")
 async def delete_data_source_by_id(
     request: Request, id: str, user=Depends(get_verified_user)
 ):
@@ -2536,7 +2536,7 @@ async def reset_embedding(user=Depends(get_verified_user), request: Request = No
             "error": "unexpected_error"
         }
 
-@router.post("/source/{source_id}/incomplete")
+@router.post("/data-sources/{source_id}/incomplete")
 async def mark_data_source_incomplete(source_id: str, user=Depends(get_verified_user)):
     """Mark a data source as incomplete due to socket timeout"""
     try:
