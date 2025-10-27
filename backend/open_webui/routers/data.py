@@ -603,8 +603,9 @@ async def create_background_delete_task(request: Request, provider: str, user_id
             lambda: asyncio.run(delete_folder_unified(folder_path, user_id))  # Using unified delete
         )
         
-        # Update status to 'deleted' when deletion completes
-        if result:
+        # result is now a dict with delete details
+        # Always go to DELETED state, regardless of success/failure
+        if True:  # Always execute this path
             try:
                 # Get current file summary to confirm 0 files after deletion
                 from open_webui.utils.data.data_ingestion import get_files_summary, generate_pai_service_token
@@ -629,7 +630,7 @@ async def create_background_delete_task(request: Request, provider: str, user_id
                     "latest_sync": {
                         "added": 0,
                         "updated": 0,
-                        "removed": historical_files,  # Show how many files were deleted
+                        "removed": result["successful_deletes"],  # Use actual deleted count
                         "skipped": 0,
                         "runtime_ms": 0,
                         "api_calls": 0,
@@ -641,6 +642,13 @@ async def create_background_delete_task(request: Request, provider: str, user_id
                         "total_size_bytes": summary.get('totalSize', 0),
                         "last_updated": int(time.time()),
                         "folders_count": 0
+                    },
+                    "delete_results": {
+                        "total_files_to_delete": result["total_files_to_delete"],
+                        "successful_deletes": result["successful_deletes"],
+                        "failed_deletes": result["failed_deletes"],
+                        "error_message": result["error_message"],
+                        "timestamp": int(time.time())
                     }
                 }
                 
@@ -680,36 +688,6 @@ async def create_background_delete_task(request: Request, provider: str, user_id
                     log.warning(f"Failed to emit delete completion update: {e}")
             except Exception as e:
                 msg = f"Failed to update {provider.title()} data source status to 'deleted': {e}"
-                log.error(msg)
-        else:
-            try:
-                DataSources.update_data_source_sync_status_by_name(
-                    user_id=user_id,
-                    source_name=data_source_name or provider.title(),
-                    layer_name=layer or "",
-                    sync_status="error",
-                    last_sync=int(time.time())
-                )
-                msg = f"Deletion failed, updated {provider.title()} data source status to 'error'"
-                log.error(msg)
-                
-                # Emit WebSocket update for deletion error
-                try:
-                    from open_webui.utils.data.data_ingestion import send_user_notification
-                    await send_user_notification(
-                        user_id=user_id,
-                        event_name="data-source-updated",
-                        data={
-                            "source": data_source_name or provider.title(),
-                            "status": "error",
-                            "message": "Data source deletion failed",
-                            "timestamp": str(int(time.time()))
-                        }
-                    )
-                except Exception as e:
-                    log.warning(f"Failed to emit deletion error update: {e}")
-            except Exception as e:
-                msg = f"Failed to update {provider.title()} data source status to 'error': {e}"
                 log.error(msg)
         
         return result
@@ -2356,8 +2334,6 @@ async def get_embedding_status(user=Depends(get_verified_user)):
         
         result = response.json()
         log.info(f"🧠 Backend embedding status response: {result}")
-        # ADD DEBUG: Log what we're about to return
-        log.info(f"🧠 About to return to frontend: {result}")
         return result
         
     except ConnectionError as e:
@@ -2480,8 +2456,6 @@ async def get_embedding_status(user=Depends(get_verified_user)):
             except Exception as db_error:
                 log.warning(f"Failed to update embedding data sources with service error: {db_error}")
             
-            # ADD DEBUG: Log when this path is taken
-            log.error(f"🧠 HTTPError - returning service_error to frontend: {e}")
             return {
                 "status": "service_error",
                 "message": f"Embedding service returned error: {e.response.status_code if e.response else 'unknown'}",
@@ -2489,8 +2463,6 @@ async def get_embedding_status(user=Depends(get_verified_user)):
             }
     except Exception as e:
         log.exception(f"Unexpected error getting embedding status: {e}")
-        # ADD DEBUG: Log what we return for unexpected errors
-        log.error(f"🧠 Unexpected error - returning error status: {e}")
         return {
             "status": "error",
             "message": "An unexpected error occurred while checking embedding status",
@@ -2580,25 +2552,12 @@ async def mark_data_source_incomplete(source_id: str, user=Depends(get_verified_
             log.warning(f"Attempted to mark {data_source.sync_status} data source as incomplete - ignoring")
             return {"success": False, "message": f"Data source is {data_source.sync_status}, not syncing"}
         
-        # Check if files were processed during ingestion
-        files_processed = data_source.files_processed or 0
-        
-        # Determine next state based on file processing
-        if files_processed > 0:
-            # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
-            next_status = "incomplete"
-            status_message = f"{data_source.name} sync marked as incomplete due to timeout"
-        else:
-            # TEMPORARILY HIDING EMBEDDING PHASE - TODO: May restore in future
-            next_status = "incomplete"
-            status_message = f"{data_source.name} sync marked as incomplete due to timeout"
-        
         # Update the status
         updated_ds = DataSources.update_data_source_sync_status_by_name(
             user_id=user.id,
             source_name=data_source.name,
             layer_name=data_source.layer or "",
-            sync_status=next_status,
+            sync_status="incomplete",
             last_sync=int(time.time())
         )
         
@@ -2610,14 +2569,14 @@ async def mark_data_source_incomplete(source_id: str, user=Depends(get_verified_
                 event_name="data-source-updated",
                 data={
                     "source": data_source.name,
-                    "status": next_status,
-                    "message": status_message,
+                    "status": "incomplete",
+                    "message": f"{data_source.name} sync marked as incomplete due to timeout",
                     "timestamp": int(time.time())
                 }
             )
             
-            log.info(f"Socket timeout for '{data_source.name}': {status_message}")
-            return {"success": True, "message": status_message}
+            log.info(f"Marked data source '{data_source.name}' as incomplete due to socket timeout")
+            return {"success": True, "message": "Data source marked as incomplete"}
         else:
             raise HTTPException(status_code=500, detail="Failed to update data source status")
             

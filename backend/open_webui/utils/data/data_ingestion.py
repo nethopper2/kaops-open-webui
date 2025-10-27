@@ -649,7 +649,7 @@ def delete_pai_file(file_path: str, auth_token: str = None) -> bool:
         print(f"PAI Data Service delete failed for {file_path}: {str(error)}")
         return False
 
-async def delete_pai_folder(folder_path: str, auth_token: str = None) -> bool:
+async def delete_pai_folder(folder_path: str, auth_token: str = None) -> dict:
     """Delete folder using pai-data-service API"""
     try:
         if not folder_path.endswith('/'):
@@ -661,11 +661,27 @@ async def delete_pai_folder(folder_path: str, auth_token: str = None) -> bool:
             response = await client.delete(url, headers=get_api_headers(auth_token))
             response.raise_for_status()
             
-        return True
+            # Parse response to get deleted objects count
+            response_data = response.json()
+            deleted_objects = response_data.get('deletedObjects', 0)
+            
+            return {
+                "success": True,
+                "total_files_to_delete": deleted_objects,  # PAI returns count of deleted files
+                "successful_deletes": deleted_objects,
+                "failed_deletes": 0,
+                "error_message": "success"
+            }
         
     except Exception as error:
         print(f"PAI Data Service folder deletion failed for '{folder_path}': {str(error)}")
-        return False
+        return {
+            "success": False,
+            "total_files_to_delete": 0,  # Unknown - folder delete failed
+            "successful_deletes": 0,
+            "failed_deletes": 1,  # The entire folder deletion failed
+            "error_message": str(error)
+        }
 
 # ============================================================================
 # UNIFIED STORAGE INTERFACE
