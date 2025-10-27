@@ -512,7 +512,7 @@
 		processingActions = processingActions;
 
 		try {
-		// Call embedding reset endpoint before starting sync
+		// Call embedding reset endpoint before starting sync (non-blocking)
 		if ($user?.id) {
 			// Proper capitalization for dataSource names
 			const formatDataSourceName = (action: string, layer: string) => {
@@ -524,7 +524,7 @@
 					'atlassian': 'Atlassian',
 					'mineral': 'Mineral'
 				};
-				
+
 				// Layer capitalization with special cases
 				const layerMap: Record<string, string> = {
 					'google_drive': 'Google Drive',
@@ -541,23 +541,21 @@
 					'confluence': 'Confluence',
 					'handbooks': 'Handbooks'
 				};
-				
+
 				const formattedAction = actionMap[action] || action.charAt(0).toUpperCase() + action.slice(1);
 				const formattedLayer = layerMap[layer] || layer.charAt(0).toUpperCase() + layer.slice(1);
-				
+
 				return `${formattedAction}/${formattedLayer}`;
 			};
-			
+
 			const dataSourceName = formatDataSourceName(dataSource.action ?? '', dataSource.layer ?? '');
-			try {
-				await resetEmbedding(localStorage.token, $user.id, dataSourceName);
-				// Embedding polling is already running continuously
-				// Auto-switch to sync view when sync starts
-				setActiveView(dataSource, 'sync');
-			} catch (error) {
-				console.warn('Failed to reset embedding:', error);
-				// Continue with sync even if embedding reset fails
-			}
+			// Fire-and-forget: don't await to avoid blocking the sync flow
+			// resetEmbedding(localStorage.token, $user.id, dataSourceName).catch(error => {
+			// 	console.warn('Failed to reset embedding (non-blocking):', error);
+			// });
+
+			// Auto-switch to sync view when sync starts
+			setActiveView(dataSource, 'sync');
 		}
 
 			// Special handling for Mineral
