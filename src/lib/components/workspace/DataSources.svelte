@@ -584,10 +584,16 @@
 					break;
 				case 'unsynced':
 					await initializeSync(dataSource.action as string, dataSource.layer as string);
-					break;
+					// Clear processing state immediately for auth flows
+					processingActions.delete(actionKey);
+					processingActions = processingActions;
+					return; // Skip finally block
 				case 'deleted':
 					await initializeSync(dataSource.action as string, dataSource.layer as string);
-					break;
+					// Clear processing state immediately for auth flows
+					processingActions.delete(actionKey);
+					processingActions = processingActions;
+					return; // Skip finally block
 				case 'embedding':
 					await updateSync(dataSource.action as string, dataSource.layer as string);
 					break;
@@ -616,6 +622,17 @@
 
 			if (syncDetails.url) {
 				const authWindow = window.open(syncDetails.url, '_blank', 'width=600,height=700');
+
+				// Check if popup was blocked
+				if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
+					console.warn('Popup blocked for Jira auth - showing fallback message');
+					alert(
+						'Please allow popups for this site to authorize Jira.\n\n' +
+						'Click OK, then click the Sync button again.\n\n' +
+						`Or manually open this URL:\n${syncDetails.url}`
+					);
+					return;
+				}
 
 				const messageHandler = async (event: MessageEvent) => {
 					if (event.data?.type === 'atlassian_connected' && event.data?.layer === 'jira') {
@@ -770,14 +787,35 @@
 	};
 
 	const initializeSync = async (action: string, layer: string) => {
+		console.log(`🔐 Requesting authorization URL for ${action}/${layer}...`);
 
 		let syncDetails = await initializeDataSync(localStorage.token, action, layer);
 
+		console.log(`🔐 Authorization URL received:`, syncDetails?.url ? 'Yes' : 'No');
+
 		if (syncDetails.url) {
-			window.open(syncDetails.url, '_blank');
+			console.log(`🪟 Opening auth window for ${action}/${layer}`);
+			const authWindow = window.open(syncDetails.url, '_blank', 'width=600,height=700');
+
+			// Check if popup was blocked
+			if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
+				console.warn('Popup blocked - showing fallback message');
+				alert(
+					`Please allow popups for this site to authorize ${action}.\n\n` +
+					`Click OK, then click the Sync button again.\n\n` +
+					`Or manually open this URL:\n${syncDetails.url}`
+				);
+			} else {
+				console.log(`✅ Auth window opened successfully for ${action}/${layer}`);
+			}
+		} else {
+			console.error('No authorization URL returned from backend');
+			alert(`Failed to get authorization URL for ${action}. Please try again.`);
 		}
 
-		dataSources = await getDataSources(localStorage.token);
+		// Refresh and force reactivity update
+		const newDataSources = await getDataSources(localStorage.token);
+		dataSources = [...newDataSources]; // Force new array reference for reactivity
 	};
 
 	const updateSync = async (action: string, layer: string) => {
@@ -812,7 +850,19 @@
 					return;
 				}
 
-				return window.open(syncDetails.detail.reauth_url, '_blank');
+				const authWindow = window.open(syncDetails.detail.reauth_url, '_blank', 'width=600,height=700');
+
+				// Check if popup was blocked
+				if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
+					console.warn('Popup blocked for reauth - showing fallback message');
+					alert(
+						`Please allow popups for this site to re-authorize ${action}.\n\n` +
+						`Click OK, then click the Sync button again.\n\n` +
+						`Or manually open this URL:\n${syncDetails.detail.reauth_url}`
+					);
+				}
+
+				return;
 			}
 
 			dataSources = await getDataSources(localStorage.token);
