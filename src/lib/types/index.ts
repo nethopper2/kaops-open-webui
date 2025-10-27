@@ -19,7 +19,7 @@ export type DataSource = {
 	name: string;
 	context: string;
 	permission?: string;
-	sync_status: 'synced' | 'syncing' | 'error' | 'embedding' | 'embedded' | 'unsynced' | 'deleting' | 'deleted' | 'incomplete';
+	sync_status: 'synced' | 'syncing' | 'error' | 'embedding' | 'embedded' | 'unsynced' | 'deleting' | 'deleted' | 'incomplete' | 'ingesting';
 	last_sync: string | null; // ISO date string
 	// Progress tracking fields
 	files_processed?: number;
@@ -43,6 +43,13 @@ export type DataSource = {
 			total_size_bytes: number;
 			last_updated: number;
 			folders_count: number;
+		};
+		delete_results?: {
+			total_files_to_delete: number;
+			successful_deletes: number;
+			failed_deletes: number;
+			error_message: string;
+			timestamp: number;
 		};
 	};
 	icon: string; // Icon name or component

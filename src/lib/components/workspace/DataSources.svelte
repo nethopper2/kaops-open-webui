@@ -1175,7 +1175,7 @@
 												</button>
 												<button
 													class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding')}
+													disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'deleted')}
 													on:click={() => {
 														selectedDataSource = dataSource;
 														showDeleteConfirm = true;
@@ -1210,6 +1210,32 @@
 											</span>
 											{#if dataSource.sync_status === 'syncing' || dataSource.sync_status === 'embedding'}
 												<PulsingDots />
+											{/if}
+											
+											<!-- Delete info icon for DELETED and SYNCED states -->
+											{#if (dataSource.sync_status === 'deleted' || dataSource.sync_status === 'synced') && dataSource.sync_results?.delete_results}
+												{@const deleteResults = dataSource.sync_results.delete_results}
+												{@const hasDeleteErrors = deleteResults.failed_deletes > 0}
+												<div class="relative group ml-1">
+													<svg class="w-3 h-3 {hasDeleteErrors ? 'text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300' : 'text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300'} cursor-help" fill="currentColor" viewBox="0 0 20 20">
+														<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+													</svg>
+													<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+														<div class="font-medium mb-1">Delete Results</div>
+														<div class="space-y-1">
+															<div>📁 {deleteResults.total_files_to_delete} files attempted</div>
+															<div>✅ {deleteResults.successful_deletes} files deleted</div>
+															{#if deleteResults.failed_deletes > 0}
+																<div>❌ {deleteResults.failed_deletes} files failed</div>
+																<div class="mt-2 pt-2 border-t border-gray-600">
+																	<div class="font-medium">Error:</div>
+																	<div class="text-red-300">{deleteResults.error_message}</div>
+																</div>
+															{/if}
+														</div>
+														<div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+													</div>
+												</div>
 											{/if}
 											
 											<!-- Warning icon for sync/embedding errors -->
@@ -1274,7 +1300,9 @@
 											</div>
 										{:else if dataSource.sync_status === 'error'}
 											<div class="text-xs text-red-500 dark:text-red-400">
-												{#if dataSource.sync_results?.latest_sync}
+												{#if dataSource.sync_results?.delete_results}
+													delete phase
+												{:else if dataSource.sync_results?.latest_sync}
 													embedding phase
 												{:else}
 													sync phase
@@ -1371,7 +1399,7 @@
 									</button>
 									<button
 										class="px-1.5 py-0.5 text-xs font-medium rounded bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding')}
+										disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'deleted')}
 										on:click={() => {
 											selectedDataSource = dataSource;
 											showDeleteConfirm = true;
@@ -1405,6 +1433,32 @@
 								</span>
 								{#if dataSource.sync_status === 'syncing'}
 									<PulsingDots />
+								{/if}
+								
+								<!-- Delete info icon for DELETED and SYNCED states (mobile) -->
+								{#if (dataSource.sync_status === 'deleted' || dataSource.sync_status === 'synced') && dataSource.sync_results?.delete_results}
+									{@const deleteResults = dataSource.sync_results.delete_results}
+									{@const hasDeleteErrors = deleteResults.failed_deletes > 0}
+									<div class="relative group ml-1">
+										<svg class="w-3 h-3 {hasDeleteErrors ? 'text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300' : 'text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300'} cursor-help" fill="currentColor" viewBox="0 0 20 20">
+											<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+										</svg>
+										<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+											<div class="font-medium mb-1">Delete Results</div>
+											<div class="space-y-1">
+												<div>📁 {deleteResults.total_files_to_delete} files attempted</div>
+												<div>✅ {deleteResults.successful_deletes} files deleted</div>
+												{#if deleteResults.failed_deletes > 0}
+													<div>❌ {deleteResults.failed_deletes} files failed</div>
+													<div class="mt-2 pt-2 border-t border-gray-600">
+														<div class="font-medium">Error:</div>
+														<div class="text-red-300">{deleteResults.error_message}</div>
+													</div>
+												{/if}
+											</div>
+											<div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+										</div>
+									</div>
 								{/if}
 								
 								<!-- Warning icon for sync/embedding errors -->
@@ -1478,7 +1532,7 @@
 							</button>
 							<button
 								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding')}
+								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'deleted')}
 								on:click={() => {
 									selectedDataSource = dataSource;
 									showDeleteConfirm = true;
