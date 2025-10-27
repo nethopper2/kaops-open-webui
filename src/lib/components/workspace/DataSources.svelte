@@ -40,6 +40,7 @@
 
 	let dataSources: Array<DataSource> = [];
 	let processingActions = new Set<string>();
+	let authCheckInProgress = new Set<string>(); // Track auth checks separately
 	
 	// Progress tracking
 	let syncProgress: Record<string, any> = {};
@@ -789,31 +790,41 @@
 		delete syncProgress[key];
 		syncProgress = syncProgress; // Trigger reactivity
 
-		// Use the manual sync endpoint that actually triggers the sync process
-		let syncDetails = await manualDataSync(localStorage.token, action, layer);
+		// Mark auth check as in progress
+		authCheckInProgress.add(key);
+		authCheckInProgress = authCheckInProgress;
 
-		// Handle case where syncDetails is null (error occurred)
-		if (!syncDetails) {
-			console.error('Sync failed - no details returned. This usually means the sync is already in progress or there was an authentication error.');
-			return;
-		}
+		try {
+			// Use the manual sync endpoint that actually triggers the sync process
+			let syncDetails = await manualDataSync(localStorage.token, action, layer);
 
-		// Handle case where backend returns a message instead of sync details (e.g., "sync already in progress")
-		if (syncDetails.message && !syncDetails.url) {
-			console.warn('Sync not started:', syncDetails.message);
-			return;
-		}
-
-		if (syncDetails.detail?.reauth_url) {
-			if (action === 'mineral') {
-				await showMineralAuthPopup();
+			// Handle case where syncDetails is null (error occurred)
+			if (!syncDetails) {
+				console.error('Sync failed - no details returned. This usually means the sync is already in progress or there was an authentication error.');
 				return;
 			}
 
-			return window.open(syncDetails.detail.reauth_url, '_blank');
-		}
+			// Handle case where backend returns a message instead of sync details (e.g., "sync already in progress")
+			if (syncDetails.message && !syncDetails.url) {
+				console.warn('Sync not started:', syncDetails.message);
+				return;
+			}
 
-		dataSources = await getDataSources(localStorage.token);
+			if (syncDetails.detail?.reauth_url) {
+				if (action === 'mineral') {
+					await showMineralAuthPopup();
+					return;
+				}
+
+				return window.open(syncDetails.detail.reauth_url, '_blank');
+			}
+
+			dataSources = await getDataSources(localStorage.token);
+		} finally {
+			// Clear auth check state
+			authCheckInProgress.delete(key);
+			authCheckInProgress = authCheckInProgress;
+		}
 	};
 
 	const handleDelete = async (dataSource: DataSource) => {
@@ -889,7 +900,7 @@
 
 	const isProcessing = (dataSource: DataSource) => {
 		const actionKey = getActionKey(dataSource);
-		return processingActions.has(actionKey) || dataSource.sync_status === 'syncing' || dataSource.sync_status === 'deleting';
+		return processingActions.has(actionKey) || authCheckInProgress.has(actionKey) || dataSource.sync_status === 'syncing' || dataSource.sync_status === 'deleting';
 	};
 
 	$: getProgressData = (dataSource: DataSource) => {
