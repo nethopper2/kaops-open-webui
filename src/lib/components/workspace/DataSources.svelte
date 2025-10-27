@@ -866,6 +866,14 @@
 			}
 
 			dataSources = await getDataSources(localStorage.token);
+		} catch (error: any) {
+			// Handle timeout errors from backend
+			if (error?.response?.status === 408) {
+				console.error('OAuth provider timeout:', error);
+				alert(`The  service is taking too long to respond. Please try again in a moment.`);
+			} else {
+				console.error('Sync error:', error);
+			}
 		} finally {
 			// Clear auth check state
 			authCheckInProgress.delete(key);
@@ -946,6 +954,8 @@
 
 	const isProcessing = (dataSource: DataSource) => {
 		const actionKey = getActionKey(dataSource);
+		// Returns true during: initial sync, auth checks, actual syncing, or deletion
+		// This disables the button and shows "Processing..." text
 		return processingActions.has(actionKey) || authCheckInProgress.has(actionKey) || dataSource.sync_status === 'syncing' || dataSource.sync_status === 'deleting';
 	};
 

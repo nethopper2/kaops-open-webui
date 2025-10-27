@@ -447,9 +447,17 @@ def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str):
     log.info(f"Request headers: {headers}")
     log.info(f"Request data: {data}")
     
-    response = requests.post(config['token_url'], data=data, headers=headers)
-    response.raise_for_status()
-    return response.json()
+    # Set 10-second timeout to prevent hanging on slow OAuth providers
+    try:
+        response = requests.post(config['token_url'], data=data, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout:
+        log.error(f"Timeout exchanging {provider} auth code after 10 seconds")
+        raise HTTPException(
+            status_code=408,
+            detail=f"{provider.title()} authentication timed out. Please try again."
+        )
 
 def refresh_access_token(provider: str, refresh_token: str) -> Dict[str, Any]:
     """Refresh access token using refresh token."""
@@ -466,9 +474,17 @@ def refresh_access_token(provider: str, refresh_token: str) -> Dict[str, Any]:
     if provider == 'slack':
         headers['Content-Type'] = 'application/x-www-form-urlencoded'
     
-    response = requests.post(config['token_url'], data=data, headers=headers)
-    response.raise_for_status()
-    return response.json()
+    # Set 10-second timeout to prevent hanging on slow OAuth providers
+    try:
+        response = requests.post(config['token_url'], data=data, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout:
+        log.error(f"Timeout refreshing {provider} token after 10 seconds")
+        raise HTTPException(
+            status_code=408,
+            detail=f"{provider.title()} token refresh timed out. Please try again."
+        )
 
 def extract_user_id_from_token(provider: str, token_data: Dict[str, Any]) -> Optional[str]:
     """Extract provider-specific user ID from token response."""
