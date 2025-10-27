@@ -74,7 +74,6 @@ def set_socketio_instance(socketio_instance):
 # Global variables
 existing_files_cache = set()
 total_api_calls = 0
-script_start_time = time.time()
 USER_ID = ""
 
 # Configuration from environment
@@ -262,6 +261,7 @@ async def sync_onenote_to_storage(auth_token):
     print('Starting OneNote sync process...')
 
     # Initialize progress tracking
+    script_start_time = time.time()
     sync_start_time = int(time.time())
     # Phase 1: Starting
     print("----------------------------------------------------------------------")
@@ -599,6 +599,7 @@ async def sync_outlook_to_storage(auth_token, folder='inbox', query='', max_emai
     print(f'Starting Outlook sync process for folder: {folder}...')
 
     # Initialize progress tracking
+    script_start_time = time.time()
     sync_start_time = int(time.time())
     # Phase 1: Starting
     print("----------------------------------------------------------------------")
@@ -938,6 +939,7 @@ async def sync_onedrive_to_storage(auth_token):
     print('Starting OneDrive sync process...')
 
     # Initialize progress tracking
+    script_start_time = time.time()
     sync_start_time = int(time.time())
     # Phase 1: Starting
     print("----------------------------------------------------------------------")
@@ -1365,6 +1367,7 @@ async def sync_sharepoint_to_storage(auth_token):
     print('Starting SharePoint sync process...')
 
     # Initialize progress tracking
+    script_start_time = time.time()
     sync_start_time = int(time.time())
     # Phase 1: Starting
     print("----------------------------------------------------------------------")

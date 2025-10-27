@@ -35,7 +35,7 @@
 	<div class="grid grid-cols-2 gap-2">
 		<!-- Left Column: Last Ingest -->
 		<div>
-			<div class="font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1">
+			<div class="font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1 whitespace-nowrap">
 				Last Ingest
 				{#if dataSource.sync_results?.latest_sync?.runtime_ms}
 					<span class="text-xs text-gray-500 dark:text-gray-400 ml-1 font-normal">
@@ -85,7 +85,7 @@
 		</div>
 
 		<!-- Right Column: Source Summary -->
-		<div>
+		<div class="pl-2">
 			<div class="font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1">
 				Source Summary
 				{#if getMetadata(dataSource.sync_results, 'metadata')}
