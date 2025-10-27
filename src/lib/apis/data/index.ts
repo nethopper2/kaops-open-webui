@@ -60,7 +60,7 @@ export interface SlackSyncResponse {
 export const getDataSources = async (token: string): Promise<DataSourceResponse[]> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/source/`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/data-sources/`, {
 		method: 'GET',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
@@ -87,7 +87,7 @@ export const createDataSource = async (
 ): Promise<DataSourceResponse> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/source/`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/data-sources/`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(payload)
@@ -141,7 +141,7 @@ export const getDataSourceById = async (
 ): Promise<DataSourceResponse | null> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/source/${id}`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/data-sources/${id}`, {
 		method: 'GET',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
@@ -169,7 +169,7 @@ export const updateDataSource = async (
 ): Promise<DataSourceResponse> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/source/${id}/update`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/data-sources/${id}/update`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(payload)
@@ -198,7 +198,7 @@ export const updateSyncStatus = async (
 ): Promise<DataSourceResponse> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/source/${id}/sync`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/data-sources/${id}/sync`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(payload)
@@ -226,7 +226,7 @@ export const deleteDataSource = async (
 ): Promise<{ success: boolean; message: string }> => {
 	let error = null;
 
-	const res = await fetch(`${DATA_API_BASE_URL}/source/${id}`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/data-sources/${id}`, {
 		method: 'DELETE',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 	})
@@ -468,7 +468,7 @@ export const atlassianSelfHostedAuth = async (pat: string, layer: string = 'jira
 };
 
 export const markDataSourceIncomplete = async (token: string, sourceId: string) => {
-	const res = await fetch(`${DATA_API_BASE_URL}/source/${sourceId}/incomplete`, {
+	const res = await fetch(`${DATA_API_BASE_URL}/data-sources/${sourceId}/incomplete`, {
 		method: "POST",
 		headers: {
 			"Authorization": `Bearer ${token}`,

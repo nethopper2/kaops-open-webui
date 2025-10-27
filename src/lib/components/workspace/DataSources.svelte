@@ -199,7 +199,7 @@
 		
 		isFetchingEmbeddingStatus = true;
 		try {
-			const response = await fetch(`${WEBUI_BASE_URL}/api/v1/data/embedding/status`, {
+			const response = await fetch(`${WEBUI_BASE_URL}/api/v1/data/embedding/embeddingStatus`, {
 				method: 'GET',
 				headers: {
 					'Content-Type': 'application/json'
@@ -216,7 +216,7 @@
 			embeddingStatus = newEmbeddingStatus;
 			
 			// Log embedding status update
-			console.log('🧠 received data:', newEmbeddingStatus);
+			console.log('🧠 received data:', embeddingStatus);
 			
 			// Check for consecutive empty responses to transition to synced state
 			// Only care about empty responses when we have data sources in embedding state
@@ -256,9 +256,7 @@
 			}
 			
 			// Handle service errors by refreshing data sources to get updated sync_results
-			if (newEmbeddingStatus.status === 'service_error') {
-				dataSources = await getDataSources(localStorage.token);
-			}
+			// REMOVED: Don't call getDataSources() on service_error - let backend handle error logging
 			
 			embeddingStatus = embeddingStatus; // Trigger reactivity
 			
@@ -1231,6 +1229,11 @@
 																	<div class="font-medium">Error:</div>
 																	<div class="text-red-300">{deleteResults.error_message}</div>
 																</div>
+															{:else if deleteResults.error_message === "success - no files to delete"}
+																<div class="mt-2 pt-2 border-t border-gray-600">
+																	<div class="font-medium">Status:</div>
+																	<div class="text-green-300">{deleteResults.error_message}</div>
+																</div>
 															{/if}
 														</div>
 														<div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
@@ -1453,6 +1456,11 @@
 													<div class="mt-2 pt-2 border-t border-gray-600">
 														<div class="font-medium">Error:</div>
 														<div class="text-red-300">{deleteResults.error_message}</div>
+													</div>
+												{:else if deleteResults.error_message === "success - no files to delete"}
+													<div class="mt-2 pt-2 border-t border-gray-600">
+														<div class="font-medium">Status:</div>
+														<div class="text-green-300">{deleteResults.error_message}</div>
 													</div>
 												{/if}
 											</div>
