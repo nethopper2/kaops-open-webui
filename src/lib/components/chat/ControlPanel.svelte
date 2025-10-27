@@ -28,26 +28,27 @@ function handleResponseTypeSelected(e) {
 </script>
 
 <div
-	class="flex items-center gap-2 px-2 py-1 rounded-3xl border border-gray-50 dark:border-gray-850 
-	       bg-white/90 dark:bg-gray-400/5 dark:text-gray-100 shadow-sm 
-	       hover:border-gray-100 focus-within:border-gray-100 
-	       hover:dark:border-gray-800 focus-within:dark:border-gray-800 
-	       transition-all duration-200"
+	class="flex flex-wrap items-center justify-center gap-3 px-2 py-1 rounded-3xl border border-gray-200/60 dark:border-gray-800/70 
+	       bg-white/80 dark:bg-gray-900/50 dark:text-gray-100 backdrop-blur-md shadow-md 
+	       focus-within:border-gray-100 
+	       focus-within:dark:border-gray-800 
+	       transition-all duration-300 ease-in-out 
+		   divide-x-1 divide-gray-200/60 dark:divide-gray-700/60"
 >
 	{#if showDateSelector}
-		<div class="relative">
+		<div class="relative px-1">
 			<DateSelector on:dateselected={handleDateSelected}/>
 		</div>
 	{/if}
 
 	{#if showResponseTypeSelector}
-		<div class="relative">
+		<div class="relative px-1">
 			<ResponseTypeSelector on:responsetypeselected={handleResponseTypeSelected}/>
 		</div>
 	{/if}
 
 	{#if showWebToggle}
-		<div class="relative">
+		<div class="relative px-1">
 			<WebToggle/>
 		</div>
 	{/if}
