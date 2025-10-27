@@ -40,6 +40,7 @@
 
 	let dataSources: Array<DataSource> = [];
 	let processingActions = new Set<string>();
+	let authCheckInProgress = new Set<string>(); // Track auth checks separately
 	
 	// Progress tracking
 	let syncProgress: Record<string, any> = {};
@@ -360,14 +361,6 @@
 		fetchEmbeddingStatus();
 	}
 
-
-	// Start continuous embedding polling on component mount
-	$: {
-		if (!embeddingPollingTimer) {
-			startEmbeddingPolling();
-		}
-	}
-
 	// Track previous sync status to detect state transitions
 	let previousSyncStatus: Record<string, string> = {};
 	
@@ -393,8 +386,6 @@
 		});
 	}
 
-
-
 	function stopEmbeddingPolling() {
 		if (embeddingPollingTimer) {
 			console.log('🧠 Stopping embedding polling');
@@ -408,6 +399,7 @@
 	// Start timeout checking timer
 	onMount(() => {
 		timeoutCheckInterval = setInterval(checkSocketTimeout, 15000); // Check every 15 seconds
+		// startEmbeddingPolling();
 	});
 
 	const formatDate = (dateString: string) => {
@@ -518,7 +510,7 @@
 		processingActions = processingActions;
 
 		try {
-		// Call embedding reset endpoint before starting sync
+		// Call embedding reset endpoint before starting sync (non-blocking)
 		if ($user?.id) {
 			// Proper capitalization for dataSource names
 			const formatDataSourceName = (action: string, layer: string) => {
@@ -530,7 +522,7 @@
 					'atlassian': 'Atlassian',
 					'mineral': 'Mineral'
 				};
-				
+
 				// Layer capitalization with special cases
 				const layerMap: Record<string, string> = {
 					'google_drive': 'Google Drive',
@@ -547,23 +539,21 @@
 					'confluence': 'Confluence',
 					'handbooks': 'Handbooks'
 				};
-				
+
 				const formattedAction = actionMap[action] || action.charAt(0).toUpperCase() + action.slice(1);
 				const formattedLayer = layerMap[layer] || layer.charAt(0).toUpperCase() + layer.slice(1);
-				
+
 				return `${formattedAction}/${formattedLayer}`;
 			};
-			
+
 			const dataSourceName = formatDataSourceName(dataSource.action ?? '', dataSource.layer ?? '');
-			try {
-				await resetEmbedding(localStorage.token, $user.id, dataSourceName);
-				// Embedding polling is already running continuously
-				// Auto-switch to sync view when sync starts
-				setActiveView(dataSource, 'sync');
-			} catch (error) {
-				console.warn('Failed to reset embedding:', error);
-				// Continue with sync even if embedding reset fails
-			}
+			// Fire-and-forget: don't await to avoid blocking the sync flow
+			// resetEmbedding(localStorage.token, $user.id, dataSourceName).catch(error => {
+			// 	console.warn('Failed to reset embedding (non-blocking):', error);
+			// });
+
+			// Auto-switch to sync view when sync starts
+			setActiveView(dataSource, 'sync');
 		}
 
 			// Special handling for Mineral
@@ -594,10 +584,16 @@
 					break;
 				case 'unsynced':
 					await initializeSync(dataSource.action as string, dataSource.layer as string);
-					break;
+					// Clear processing state immediately for auth flows
+					processingActions.delete(actionKey);
+					processingActions = processingActions;
+					return; // Skip finally block
 				case 'deleted':
 					await initializeSync(dataSource.action as string, dataSource.layer as string);
-					break;
+					// Clear processing state immediately for auth flows
+					processingActions.delete(actionKey);
+					processingActions = processingActions;
+					return; // Skip finally block
 				case 'embedding':
 					await updateSync(dataSource.action as string, dataSource.layer as string);
 					break;
@@ -626,6 +622,17 @@
 
 			if (syncDetails.url) {
 				const authWindow = window.open(syncDetails.url, '_blank', 'width=600,height=700');
+
+				// Check if popup was blocked
+				if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
+					console.warn('Popup blocked for Jira auth - showing fallback message');
+					alert(
+						'Please allow popups for this site to authorize Jira.\n\n' +
+						'Click OK, then click the Sync button again.\n\n' +
+						`Or manually open this URL:\n${syncDetails.url}`
+					);
+					return;
+				}
 
 				const messageHandler = async (event: MessageEvent) => {
 					if (event.data?.type === 'atlassian_connected' && event.data?.layer === 'jira') {
@@ -780,14 +787,35 @@
 	};
 
 	const initializeSync = async (action: string, layer: string) => {
+		console.log(`🔐 Requesting authorization URL for ${action}/${layer}...`);
 
 		let syncDetails = await initializeDataSync(localStorage.token, action, layer);
 
+		console.log(`🔐 Authorization URL received:`, syncDetails?.url ? 'Yes' : 'No');
+
 		if (syncDetails.url) {
-			window.open(syncDetails.url, '_blank');
+			console.log(`🪟 Opening auth window for ${action}/${layer}`);
+			const authWindow = window.open(syncDetails.url, '_blank', 'width=600,height=700');
+
+			// Check if popup was blocked
+			if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
+				console.warn('Popup blocked - showing fallback message');
+				alert(
+					`Please allow popups for this site to authorize ${action}.\n\n` +
+					`Click OK, then click the Sync button again.\n\n` +
+					`Or manually open this URL:\n${syncDetails.url}`
+				);
+			} else {
+				console.log(`✅ Auth window opened successfully for ${action}/${layer}`);
+			}
+		} else {
+			console.error('No authorization URL returned from backend');
+			alert(`Failed to get authorization URL for ${action}. Please try again.`);
 		}
 
-		dataSources = await getDataSources(localStorage.token);
+		// Refresh and force reactivity update
+		const newDataSources = await getDataSources(localStorage.token);
+		dataSources = [...newDataSources]; // Force new array reference for reactivity
 	};
 
 	const updateSync = async (action: string, layer: string) => {
@@ -796,31 +824,61 @@
 		delete syncProgress[key];
 		syncProgress = syncProgress; // Trigger reactivity
 
-		// Use the manual sync endpoint that actually triggers the sync process
-		let syncDetails = await manualDataSync(localStorage.token, action, layer);
+		// Mark auth check as in progress
+		authCheckInProgress.add(key);
+		authCheckInProgress = authCheckInProgress;
 
-		// Handle case where syncDetails is null (error occurred)
-		if (!syncDetails) {
-			console.error('Sync failed - no details returned. This usually means the sync is already in progress or there was an authentication error.');
-			return;
-		}
+		try {
+			// Use the manual sync endpoint that actually triggers the sync process
+			let syncDetails = await manualDataSync(localStorage.token, action, layer);
 
-		// Handle case where backend returns a message instead of sync details (e.g., "sync already in progress")
-		if (syncDetails.message && !syncDetails.url) {
-			console.warn('Sync not started:', syncDetails.message);
-			return;
-		}
-
-		if (syncDetails.detail?.reauth_url) {
-			if (action === 'mineral') {
-				await showMineralAuthPopup();
+			// Handle case where syncDetails is null (error occurred)
+			if (!syncDetails) {
+				console.error('Sync failed - no details returned. This usually means the sync is already in progress or there was an authentication error.');
 				return;
 			}
 
-			return window.open(syncDetails.detail.reauth_url, '_blank');
-		}
+			// Handle case where backend returns a message instead of sync details (e.g., "sync already in progress")
+			if (syncDetails.message && !syncDetails.url) {
+				console.warn('Sync not started:', syncDetails.message);
+				return;
+			}
 
-		dataSources = await getDataSources(localStorage.token);
+			if (syncDetails.detail?.reauth_url) {
+				if (action === 'mineral') {
+					await showMineralAuthPopup();
+					return;
+				}
+
+				const authWindow = window.open(syncDetails.detail.reauth_url, '_blank', 'width=600,height=700');
+
+				// Check if popup was blocked
+				if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
+					console.warn('Popup blocked for reauth - showing fallback message');
+					alert(
+						`Please allow popups for this site to re-authorize ${action}.\n\n` +
+						`Click OK, then click the Sync button again.\n\n` +
+						`Or manually open this URL:\n${syncDetails.detail.reauth_url}`
+					);
+				}
+
+				return;
+			}
+
+			dataSources = await getDataSources(localStorage.token);
+		} catch (error: any) {
+			// Handle timeout errors from backend
+			if (error?.response?.status === 408) {
+				console.error('OAuth provider timeout:', error);
+				alert(`The  service is taking too long to respond. Please try again in a moment.`);
+			} else {
+				console.error('Sync error:', error);
+			}
+		} finally {
+			// Clear auth check state
+			authCheckInProgress.delete(key);
+			authCheckInProgress = authCheckInProgress;
+		}
 	};
 
 	const handleDelete = async (dataSource: DataSource) => {
@@ -896,7 +954,9 @@
 
 	const isProcessing = (dataSource: DataSource) => {
 		const actionKey = getActionKey(dataSource);
-		return processingActions.has(actionKey) || dataSource.sync_status === 'syncing' || dataSource.sync_status === 'deleting';
+		// Returns true during: initial sync, auth checks, actual syncing, or deletion
+		// This disables the button and shows "Processing..." text
+		return processingActions.has(actionKey) || authCheckInProgress.has(actionKey) || dataSource.sync_status === 'syncing' || dataSource.sync_status === 'deleting';
 	};
 
 	$: getProgressData = (dataSource: DataSource) => {

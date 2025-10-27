@@ -447,9 +447,17 @@ def exchange_code_for_tokens(provider: str, code: str, redirect_uri: str):
     log.info(f"Request headers: {headers}")
     log.info(f"Request data: {data}")
     
-    response = requests.post(config['token_url'], data=data, headers=headers)
-    response.raise_for_status()
-    return response.json()
+    # Set 10-second timeout to prevent hanging on slow OAuth providers
+    try:
+        response = requests.post(config['token_url'], data=data, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout:
+        log.error(f"Timeout exchanging {provider} auth code after 10 seconds")
+        raise HTTPException(
+            status_code=408,
+            detail=f"{provider.title()} authentication timed out. Please try again."
+        )
 
 def refresh_access_token(provider: str, refresh_token: str) -> Dict[str, Any]:
     """Refresh access token using refresh token."""
@@ -466,9 +474,17 @@ def refresh_access_token(provider: str, refresh_token: str) -> Dict[str, Any]:
     if provider == 'slack':
         headers['Content-Type'] = 'application/x-www-form-urlencoded'
     
-    response = requests.post(config['token_url'], data=data, headers=headers)
-    response.raise_for_status()
-    return response.json()
+    # Set 10-second timeout to prevent hanging on slow OAuth providers
+    try:
+        response = requests.post(config['token_url'], data=data, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout:
+        log.error(f"Timeout refreshing {provider} token after 10 seconds")
+        raise HTTPException(
+            status_code=408,
+            detail=f"{provider.title()} token refresh timed out. Please try again."
+        )
 
 def extract_user_id_from_token(provider: str, token_data: Dict[str, Any]) -> Optional[str]:
     """Extract provider-specific user ID from token response."""
@@ -1928,29 +1944,58 @@ def create_universal_sync_endpoint(provider: str):
                 log.error(f"Atlassian sync failed: {str(e)}")
                 raise HTTPException(status_code=500, detail=str(e))
         else:
-            # Handle token refresh if needed
-            try:
-                access_token, needs_reauth = handle_token_refresh(provider, token_entry, user.id)
-                
-                if needs_reauth:
-                    reauth_url = generate_reauth_url(provider, user.id, layer)
-                    raise HTTPException(
-                        status_code=201,
-                        detail={
-                            "error": "token_expired_no_refresh",
-                            "message": f"{provider.title()} token is expired and requires re-authorization.",
-                            "reauth_url": reauth_url,
-                            "action_required": f"redirect_to_{provider}_auth",
-                            "user_id": str(user.id),
-                            "provider": provider
-                        }
-                    )
+            # Fast-path: Check token expiration locally first
+            current_time = int(time.time())
+            token_expired = False
 
-            except HTTPException:
-                raise
-            except Exception as e:
-                log.error(f"Token refresh failed for {provider} user {user.id}: {str(e)}")
-                raise HTTPException(status_code=500, detail=f"Failed to refresh {provider.title()} token.")
+            if token_entry.access_token_expires_at:
+                # Check if token is expired or will expire in next 5 minutes
+                if token_entry.access_token_expires_at <= (current_time + 5 * 60):
+                    token_expired = True
+
+                    # If no refresh token available, return reauth URL immediately
+                    decrypted_access_token, decrypted_refresh_token = decrypt_tokens(token_entry)
+                    if not decrypted_refresh_token:
+                        log.info(f"Token expired for {provider} user {user.id}, no refresh token - returning reauth URL")
+                        reauth_url = generate_reauth_url(provider, user.id, layer)
+                        raise HTTPException(
+                            status_code=201,
+                            detail={
+                                "error": "token_expired_no_refresh",
+                                "message": f"{provider.title()} token is expired and requires re-authorization.",
+                                "reauth_url": reauth_url,
+                                "action_required": f"redirect_to_{provider}_auth",
+                                "user_id": str(user.id),
+                                "provider": provider
+                            }
+                        )
+
+            # If token needs refresh (has refresh token), attempt it
+            if token_expired:
+                try:
+                    access_token, needs_reauth = handle_token_refresh(provider, token_entry, user.id)
+
+                    if needs_reauth:
+                        reauth_url = generate_reauth_url(provider, user.id, layer)
+                        raise HTTPException(
+                            status_code=201,
+                            detail={
+                                "error": "token_refresh_failed",
+                                "message": f"{provider.title()} token refresh failed - re-authorization required.",
+                                "reauth_url": reauth_url,
+                                "action_required": f"redirect_to_{provider}_auth",
+                                "user_id": str(user.id),
+                                "provider": provider
+                            }
+                        )
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    log.error(f"Token refresh failed for {provider} user {user.id}: {str(e)}")
+                    raise HTTPException(status_code=500, detail=f"Failed to refresh {provider.title()} token.")
+            else:
+                # Token is still valid, decrypt and use it
+                access_token, _ = decrypt_tokens(token_entry)
         
             log.info(f"""Manually trigger {provider.title()} sync for the authenticated user.""")
 
