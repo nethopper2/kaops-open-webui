@@ -597,11 +597,37 @@ async def create_background_delete_task(request: Request, provider: str, user_id
         folder_path = f"userResources/{user_id}/{folder_map.get(provider, provider.title())}/"
     
     async def delete_sync():
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: asyncio.run(delete_folder_unified(folder_path, user_id))  # Using unified delete
-        )
+        # Check file summary BEFORE deletion to handle 0 files case
+        from open_webui.utils.data.data_ingestion import get_files_summary, generate_pai_service_token
+        
+        # Use proper layer folder mapping like the folder path construction
+        config = PROVIDER_CONFIGS[provider]
+        if layer and layer in config['layer_folders']:
+            folder_name = config['layer_folders'][layer]
+            user_prefix = f"userResources/{user_id}/{provider.title()}/{folder_name}"
+        else:
+            user_prefix = f"userResources/{user_id}/{provider.title()}/{layer or ''}"
+        
+        auth_token = generate_pai_service_token(user_id)
+        pre_delete_summary = get_files_summary(prefix=user_prefix, auth_token=auth_token)
+        
+        # Log the files/summary response
+        log.info(f"📊 Files/summary response for {provider.title()}/{layer}: {pre_delete_summary}")
+        
+        files_before_delete = pre_delete_summary.get('totalFiles', 0)
+        
+        # If no files to delete, return success without calling delete API
+        if files_before_delete == 0:
+            result = {
+                "success": True,
+                "total_files_to_delete": 0,
+                "successful_deletes": 0,
+                "failed_deletes": 0,
+                "error_message": "success - no files to delete"
+            }
+        else:
+            # Call delete API only if there are files to delete
+            result = await delete_folder_unified(folder_path, user_id)  # Using unified delete
         
         # result is now a dict with delete details
         # Always go to DELETED state, regardless of success/failure
@@ -609,7 +635,15 @@ async def create_background_delete_task(request: Request, provider: str, user_id
             try:
                 # Get current file summary to confirm 0 files after deletion
                 from open_webui.utils.data.data_ingestion import get_files_summary, generate_pai_service_token
-                user_prefix = f"userResources/{user_id}/{provider.title()}/{layer or ''}/"
+                
+                # Use proper layer folder mapping (same as pre-deletion check)
+                config = PROVIDER_CONFIGS[provider]
+                if layer and layer in config['layer_folders']:
+                    folder_name = config['layer_folders'][layer]
+                    user_prefix = f"userResources/{user_id}/{provider.title()}/{folder_name}"
+                else:
+                    user_prefix = f"userResources/{user_id}/{provider.title()}/{layer or ''}"
+                
                 auth_token = generate_pai_service_token(user_id)
                 summary = get_files_summary(prefix=user_prefix, auth_token=auth_token)
                 

@@ -1229,6 +1229,11 @@
 																	<div class="font-medium">Error:</div>
 																	<div class="text-red-300">{deleteResults.error_message}</div>
 																</div>
+															{:else if deleteResults.error_message === "success - no files to delete"}
+																<div class="mt-2 pt-2 border-t border-gray-600">
+																	<div class="font-medium">Status:</div>
+																	<div class="text-green-300">{deleteResults.error_message}</div>
+																</div>
 															{/if}
 														</div>
 														<div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
@@ -1451,6 +1456,11 @@
 													<div class="mt-2 pt-2 border-t border-gray-600">
 														<div class="font-medium">Error:</div>
 														<div class="text-red-300">{deleteResults.error_message}</div>
+													</div>
+												{:else if deleteResults.error_message === "success - no files to delete"}
+													<div class="mt-2 pt-2 border-t border-gray-600">
+														<div class="font-medium">Status:</div>
+														<div class="text-green-300">{deleteResults.error_message}</div>
 													</div>
 												{/if}
 											</div>
