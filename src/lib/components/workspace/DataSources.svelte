@@ -122,6 +122,25 @@
 	let showDeleteConfirm = false;
 	let selectedDataSource: DataSource | null = null;
 
+	// Global message handler for Jira OAuth callbacks
+	const handleJiraOAuthMessage = async (event: MessageEvent) => {
+		console.log('🔔 Message received:', event.data);
+		if (event.data?.type === 'atlassian_connected' && event.data?.layer === 'jira') {
+			console.log('✅ Jira OAuth callback received - showing project selector');
+			dataSources = await getDataSources(localStorage.token);
+
+			// Find the Jira data source
+			const jiraDataSource = dataSources.find(ds => ds.action === 'atlassian' && ds.layer === 'jira');
+			if (jiraDataSource) {
+				projectSelectorDataSource = jiraDataSource;
+				showProjectSelector = true;
+				console.log('📋 Project selector shown for:', jiraDataSource.name);
+			} else {
+				console.error('❌ Jira data source not found after OAuth');
+			}
+		}
+	};
+
     // Stable sort: by action, then by layer, then by name/id (no status)
     $: sortedDataSources = [...dataSources].sort((a, b) => {
         const actionCmp = (a.action || '').localeCompare(b.action || '');
@@ -635,14 +654,20 @@
 				}
 
 				const messageHandler = async (event: MessageEvent) => {
+					console.log('Message received:', event.data);
 					if (event.data?.type === 'atlassian_connected' && event.data?.layer === 'jira') {
+						console.log('✅ Jira OAuth callback received - showing project selector');
 						window.removeEventListener('message', messageHandler);
 						dataSources = await getDataSources(localStorage.token);
 						projectSelectorDataSource = dataSource;
 						showProjectSelector = true;
+						console.log('Project selector state:', { showProjectSelector, projectSelectorDataSource });
+					} else {
+						console.log('Message ignored - type:', event.data?.type, 'layer:', event.data?.layer);
 					}
 				};
 
+				console.log('Setting up message listener for Jira OAuth callback');
 				window.addEventListener('message', messageHandler);
 
 				const checkWindowClosed = setInterval(() => {
@@ -1010,6 +1035,25 @@
 
 		// Refresh data sources
 		dataSources = await getDataSources(localStorage.token);
+
+		// Initiate sync for selected projects
+		const { projectKeys, dataSource } = event.detail;
+		if (projectKeys && projectKeys.length > 0 && dataSource) {
+			try {
+				const actionKey = getActionKey(dataSource);
+				processingActions.add(actionKey);
+				processingActions = processingActions;
+
+				await updateSync(dataSource.action as string, dataSource.layer as string);
+
+				processingActions.delete(actionKey);
+				processingActions = processingActions;
+			} catch (error) {
+				console.error('Failed to initiate sync after project selection:', error);
+				processingActions.delete(getActionKey(dataSource));
+				processingActions = processingActions;
+			}
+		}
 	};
 
 	const handleProjectSelectorClose = () => {
@@ -1054,6 +1098,10 @@
 			lastSocketActivity = Date.now(); // Start the timer
 		}
 		
+		// Register global Jira OAuth message handler
+		console.log('📡 Registering global Jira OAuth message handler');
+		window.addEventListener('message', handleJiraOAuthMessage);
+
 		$socket?.on('data-source-updated', async (data) => {
 			updateDataSourceSyncStatus(data);
 		});
@@ -1078,6 +1126,10 @@
 			console.log('🧠 Cleaning up embedding polling timer');
 			clearInterval(embeddingPollingTimer);
 		}
+
+		// Clean up global Jira OAuth message handler
+		console.log('🧹 Removing global Jira OAuth message handler');
+		window.removeEventListener('message', handleJiraOAuthMessage);
 	});
 </script>
 

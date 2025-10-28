@@ -1683,6 +1683,15 @@ def create_universal_callback_endpoint(provider: str):
                                 <div class="countdown">This window will close in <span id="countdown">3</span> seconds</div>
                             </div>
                             <script>
+                                // Send message immediately when page loads
+                                if (window.opener && !window.opener.closed) {{
+                                    window.opener.postMessage({{
+                                        type: 'atlassian_connected',
+                                        layer: 'jira'
+                                    }}, '*');
+                                }}
+
+                                // Close window after 3 seconds
                                 let countdown = 3;
                                 const countdownElement = document.getElementById('countdown');
                                 const timer = setInterval(() => {{
@@ -1690,13 +1699,6 @@ def create_universal_callback_endpoint(provider: str):
                                     countdownElement.textContent = countdown;
                                     if (countdown <= 0) {{
                                         clearInterval(timer);
-                                        // Signal parent window to show project selection
-                                        if (window.opener) {{
-                                            window.opener.postMessage({{
-                                                type: 'atlassian_connected',
-                                                layer: 'jira'
-                                            }}, '*');
-                                        }}
                                         window.close();
                                     }}
                                 }}, 1000);
