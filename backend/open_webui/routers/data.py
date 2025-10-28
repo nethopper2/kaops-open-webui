@@ -1672,12 +1672,6 @@ def create_universal_callback_endpoint(provider: str):
                                     margin-top: 10px; 
                                     font-weight: 500;
                                 }}
-                                .debug {{ 
-                                    font-size: 12px; 
-                                    color: #999; 
-                                    margin-top: 10px; 
-                                    font-family: monospace;
-                                }}
                             </style>
                         </head>
                         <body>
@@ -1686,42 +1680,25 @@ def create_universal_callback_endpoint(provider: str):
                                 <h2 class="success">Atlassian Connected Successfully!</h2>
                                 <p>Your Atlassian{layer_text} integration has been set up.</p>
                                 <div class="instruction">Please select which projects to sync on the next screen.</div>
-                                <div class="countdown">This window will close in <span id="countdown">5</span> seconds</div>
-                                <div class="debug" id="debug">Sending message...</div>
+                                <div class="countdown">This window will close in <span id="countdown">3</span> seconds</div>
                             </div>
                             <script>
                                 // Send message immediately when page loads
-                                console.log('Jira OAuth callback - sending atlassian_connected message');
-                                const debugElement = document.getElementById('debug');
-
-                                try {{
-                                    if (window.opener && !window.opener.closed) {{
-                                        const message = {{
-                                            type: 'atlassian_connected',
-                                            layer: 'jira'
-                                        }};
-                                        console.log('Posting message to opener:', message);
-                                        window.opener.postMessage(message, '*');
-                                        debugElement.textContent = 'Message sent! Waiting to close...';
-                                        console.log('Message posted successfully');
-                                    }} else {{
-                                        console.error('window.opener not available or closed');
-                                        debugElement.textContent = 'Error: Parent window not found';
-                                    }}
-                                }} catch (error) {{
-                                    console.error('Failed to post message:', error);
-                                    debugElement.textContent = 'Error: ' + error.message;
+                                if (window.opener && !window.opener.closed) {{
+                                    window.opener.postMessage({{
+                                        type: 'atlassian_connected',
+                                        layer: 'jira'
+                                    }}, '*');
                                 }}
 
-                                // Close window after 5 seconds
-                                let countdown = 5;
+                                // Close window after 3 seconds
+                                let countdown = 3;
                                 const countdownElement = document.getElementById('countdown');
                                 const timer = setInterval(() => {{
                                     countdown--;
                                     countdownElement.textContent = countdown;
                                     if (countdown <= 0) {{
                                         clearInterval(timer);
-                                        console.log('Closing OAuth popup window');
                                         window.close();
                                     }}
                                 }}, 1000);
