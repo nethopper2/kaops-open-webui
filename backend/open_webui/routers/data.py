@@ -688,8 +688,8 @@ async def create_background_delete_task(request: Request, provider: str, user_id
                         "sync_timestamp": int(time.time())
                     },
                     "overall_profile": {
-                        "total_files": summary.get('totalFiles', 0),
-                        "total_size_bytes": summary.get('totalSize', 0),
+                        "total_files": (0 if result.get("success") else summary.get('totalFiles', 0)),
+                        "total_size_bytes": (0 if result.get("success") else summary.get('totalSize', 0)),
                         "last_updated": int(time.time()),
                         "folders_count": 0
                     },
@@ -708,8 +708,8 @@ async def create_background_delete_task(request: Request, provider: str, user_id
                     layer_name=layer or "",
                     sync_status="deleted",
                     last_sync=int(time.time()),
-                    files_total=summary.get('totalFiles', 0),
-                    mb_total=summary.get('totalSize', 0),
+                    files_total=(0 if result.get("success") else summary.get('totalFiles', 0)),
+                    mb_total=(0 if result.get("success") else summary.get('totalSize', 0)),
                     sync_results=sync_results
                 )
                 print(f'----------------------------------------------------------------------')
