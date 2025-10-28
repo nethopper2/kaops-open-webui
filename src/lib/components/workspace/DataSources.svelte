@@ -1641,26 +1641,6 @@
 								<DataSyncResultsSummary {dataSource} isError={true} />
 							{/if}
 						</div>
-
-						<div class="flex gap-2 mt-3">
-							<button
-								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource)}
-								on:click={() => handleSync(dataSource)}
-							>
-								{isProcessing(dataSource) ? 'Processing...' : 'Sync'}
-							</button>
-							<button
-								class="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								disabled={isProcessing(dataSource) || (dataSource.sync_status !== 'synced' && dataSource.sync_status !== 'error' && dataSource.sync_status !== 'incomplete' && dataSource.sync_status !== 'ingesting' && dataSource.sync_status !== 'embedding' && dataSource.sync_status !== 'deleted')}
-								on:click={() => {
-									selectedDataSource = dataSource;
-									showDeleteConfirm = true;
-								}}
-							>
-								{isProcessing(dataSource) ? 'Processing...' : 'Delete'}
-							</button>
-						</div>
 					</div>
 				{/each}
 			</div>
