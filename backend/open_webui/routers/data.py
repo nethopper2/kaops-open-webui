@@ -1975,6 +1975,20 @@ def create_universal_sync_endpoint(provider: str):
             # If token needs refresh (has refresh token), attempt it
             if token_expired:
                 try:
+                    #Mineral has no token refresh functionality, instead we will reauth
+                    if provider.lower() == 'mineral':
+                        raise HTTPException(
+                            status_code=201,
+                            detail={
+                                "error": "token_refresh_failed",
+                                "message": f"{provider.title()} token refresh failed - re-authorization required.",
+                                "reauth_url": reauth_url,
+                                "action_required": f"redirect_to_{provider}_auth",
+                                "user_id": str(user.id),
+                                "provider": provider
+                            }
+                        )
+
                     access_token, needs_reauth = handle_token_refresh(provider, token_entry, user.id)
 
                     if needs_reauth:
