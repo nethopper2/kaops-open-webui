@@ -3,6 +3,7 @@ import time
 import concurrent.futures
 import io
 import traceback
+import json
 import logging
 from datetime import datetime
 
@@ -1200,6 +1201,195 @@ def get_sharepoint_sites(auth_token):
         log.error("Error getting SharePoint sites:", exc_info=True)
         return []
 
+def get_site_drives(site_id, auth_token):
+    """Get all document libraries (drives) in a site"""
+    try:
+        url = f"{GRAPH_API_BASE}/sites/{site_id}/drives"
+        params = {'$select': 'id,name,driveType,webUrl'}
+        results = make_request(url, params=params, auth_token=auth_token)
+        return results.get('value', [])
+    except Exception as e:
+        print(f"Error listing drives for site {site_id}: {str(e)}")
+        log.error(f"Error listing drives:", exc_info=True)
+        return []
+
+def list_site_pages(site_id, auth_token, site_name=''):
+    """List and download SharePoint site pages"""
+    pages_content = []
+    
+    try:
+        url = f"{GRAPH_API_BASE}/sites/{site_id}/pages"
+        params = {
+            '$select': 'id,name,title,webUrl,createdDateTime,lastModifiedDateTime',
+            '$top': 1000
+        }
+        
+        page_token = None
+        
+        while True:
+            if page_token:
+                params['$skiptoken'] = page_token
+            
+            results = make_request(url, params=params, auth_token=auth_token)
+            pages = results.get('value', [])
+            
+            for page in pages:
+                try:
+                    # Get full page content
+                    page_url = f"{GRAPH_API_BASE}/sites/{site_id}/pages/{page['id']}"
+                    page_details = make_request(page_url, auth_token=auth_token)
+                    
+                    page_name = page.get('name', page.get('title', page['id']))
+                    if not page_name.endswith('.aspx'):
+                        page_name = f"{page_name}.aspx"
+                    
+                    page_info = {
+                        'id': page['id'],
+                        'name': page_name,
+                        'title': page.get('title', ''),
+                        'webUrl': page.get('webUrl', ''),
+                        'fullPath': construct_file_path("SharePoint", site_name, "SitePages/", page_name),
+                        'contentType': 'sitePage',
+                        'lastModifiedDateTime': page.get('lastModifiedDateTime'),
+                        'createdDateTime': page.get('createdDateTime'),
+                        'size': len(json.dumps(page_details).encode('utf-8')),
+                        'content': page_details,
+                        'parentReference': {
+                            'siteId': site_id
+                        }
+                    }
+                    pages_content.append(page_info)
+                except Exception as e:
+                    print(f"Error processing page {page.get('id')}: {str(e)}")
+                    log.error(f"Error processing page:", exc_info=True)
+            
+            if '@odata.nextLink' in results:
+                next_link = results['@odata.nextLink']
+                if '$skiptoken=' in next_link:
+                    page_token = next_link.split('$skiptoken=')[1]
+                else:
+                    break
+            else:
+                break
+            
+    except Exception as e:
+        print(f"Error listing pages for site {site_id}: {str(e)}")
+        log.error(f"Error listing pages:", exc_info=True)
+    
+    return pages_content
+
+def get_list_items(site_id, list_id, auth_token):
+    """Get all items from a SharePoint list"""
+    items = []
+    
+    try:
+        url = f"{GRAPH_API_BASE}/sites/{site_id}/lists/{list_id}/items"
+        params = {
+            '$expand': 'fields',
+            '$top': 1000
+        }
+        
+        page_token = None
+        
+        while True:
+            if page_token:
+                params['$skiptoken'] = page_token
+            
+            results = make_request(url, params=params, auth_token=auth_token)
+            items.extend(results.get('value', []))
+            
+            if '@odata.nextLink' in results:
+                next_link = results['@odata.nextLink']
+                if '$skiptoken=' in next_link:
+                    page_token = next_link.split('$skiptoken=')[1]
+                else:
+                    break
+            else:
+                break
+                
+    except Exception as e:
+        print(f"Error getting list items for list {list_id}: {str(e)}")
+        log.error(f"Error getting list items:", exc_info=True)
+    
+    return items
+
+def list_site_lists(site_id, auth_token, site_name=''):
+    """List SharePoint lists and their items"""
+    lists_content = []
+    
+    try:
+        url = f"{GRAPH_API_BASE}/sites/{site_id}/lists"
+        params = {
+            '$select': 'id,displayName,name,list,webUrl,createdDateTime,lastModifiedDateTime',
+            '$expand': 'columns',
+            '$top': 1000
+        }
+        
+        page_token = None
+        
+        while True:
+            if page_token:
+                params['$skiptoken'] = page_token
+            
+            results = make_request(url, params=params, auth_token=auth_token)
+            lists = results.get('value', [])
+            
+            for list_item in lists:
+                try:
+                    # Skip hidden/system lists
+                    if list_item.get('list', {}).get('hidden', False):
+                        continue
+                    
+                    list_name = list_item.get('displayName', list_item.get('name', ''))
+                    
+                    # Get list items
+                    items = get_list_items(site_id, list_item['id'], auth_token)
+                    
+                    list_data = {
+                        'name': list_name,
+                        'webUrl': list_item.get('webUrl', ''),
+                        'columns': list_item.get('columns', []),
+                        'items': items,
+                        'createdDateTime': list_item.get('createdDateTime'),
+                        'lastModifiedDateTime': list_item.get('lastModifiedDateTime')
+                    }
+                    
+                    list_json = json.dumps(list_data, indent=2, default=str)
+                    
+                    list_info = {
+                        'id': list_item['id'],
+                        'name': f"{list_name}.json",
+                        'fullPath': construct_file_path("SharePoint", site_name, "Lists/", f"{list_name}.json"),
+                        'contentType': 'list',
+                        'webUrl': list_item.get('webUrl', ''),
+                        'lastModifiedDateTime': list_item.get('lastModifiedDateTime'),
+                        'createdDateTime': list_item.get('createdDateTime'),
+                        'size': len(list_json.encode('utf-8')),
+                        'content': list_data,
+                        'parentReference': {
+                            'siteId': site_id
+                        }
+                    }
+                    lists_content.append(list_info)
+                except Exception as e:
+                    print(f"Error processing list {list_item.get('id')}: {str(e)}")
+                    log.error(f"Error processing list:", exc_info=True)
+            
+            if '@odata.nextLink' in results:
+                next_link = results['@odata.nextLink']
+                if '$skiptoken=' in next_link:
+                    page_token = next_link.split('$skiptoken=')[1]
+                else:
+                    break
+            else:
+                break
+            
+    except Exception as e:
+        print(f"Error listing lists for site {site_id}: {str(e)}")
+        log.error(f"Error listing lists:", exc_info=True)
+    
+    return lists_content
+
 def list_sharepoint_files_recursively(site_id, drive_id, folder_id, auth_token, current_path='', all_files=None, site_name=''):
     """Recursive file listing with path construction for SharePoint"""
     if all_files is None:
@@ -1267,6 +1457,7 @@ def list_sharepoint_files_recursively(site_id, drive_id, folder_id, auth_token, 
                 
                 file_info = file.copy()
                 file_info['fullPath'] = construct_file_path("SharePoint", site_name, current_path, file['name'])
+                file_info['contentType'] = 'file'
                 
                 # Add site_id and drive_id to parentReference for later use
                 if 'parentReference' not in file_info:
@@ -1311,29 +1502,50 @@ def download_sharepoint_file(site_id, drive_id, file_id, auth_token):
         log.error(f"SharePoint download failed for {file_id}:", exc_info=True)
         raise
 
-def download_and_upload_sharepoint_file(file, auth_token, exists, reason):
-    """Helper function to download a SharePoint file and upload using unified storage interface"""
+def download_and_upload_sharepoint_content(content, auth_token, exists, reason):
+    """Download and upload any type of SharePoint content (files, pages, lists)"""
     start_time = time.time()
 
-    if file_exists_in_storage(file['fullPath']):
-        print(f"Skipping existing file: {file['fullPath']}")
+    if file_exists_in_storage(content['fullPath']):
+        print(f"Skipping existing content: {content['fullPath']}")
         return None
     
     try:
-        parent_ref = file.get('parentReference', {})
-        site_id = parent_ref.get('siteId')
-        drive_id = parent_ref.get('driveId')
+        content_type_str = content.get('contentType', 'file')
         
-        if not site_id or not drive_id:
-            raise ValueError(f"Missing site_id or drive_id in file reference for {file['fullPath']}")
-        
-        file_content = download_sharepoint_file(site_id, drive_id, file['id'], auth_token)
-        content_type = file.get('file', {}).get('mimeType')
+        if content_type_str == 'file':
+            # Handle regular files
+            parent_ref = content.get('parentReference', {})
+            site_id = parent_ref.get('siteId')
+            drive_id = parent_ref.get('driveId')
+            
+            if not site_id or not drive_id:
+                raise ValueError(f"Missing site_id or drive_id in file reference for {content['fullPath']}")
+            
+            file_content = download_sharepoint_file(site_id, drive_id, content['id'], auth_token)
+            mime_type = content.get('file', {}).get('mimeType')
+            content_bytes = file_content.getvalue()
+            
+        elif content_type_str == 'sitePage':
+            # Handle site pages as JSON
+            page_content = json.dumps(content['content'], indent=2, default=str)
+            content_bytes = page_content.encode('utf-8')
+            mime_type = 'application/json'
+            
+        elif content_type_str == 'list':
+            # Handle lists as JSON
+            list_content = json.dumps(content['content'], indent=2, default=str)
+            content_bytes = list_content.encode('utf-8')
+            mime_type = 'application/json'
+            
+        else:
+            print(f"Unknown content type: {content_type_str}")
+            return None
         
         success = upload_file_unified(
-            file_content.getvalue(),
-            file['fullPath'],
-            content_type,
+            content_bytes,
+            content['fullPath'],
+            mime_type,
             USER_ID
         )
         
@@ -1341,24 +1553,30 @@ def download_and_upload_sharepoint_file(file, auth_token, exists, reason):
             return None
         
         upload_result = {
-            'path': file['fullPath'],
+            'path': content['fullPath'],
             'type': 'updated' if exists else 'new',
-            'size': file.get('size', 0),
-            'driveModified': file.get('lastModifiedDateTime'),
+            'size': content.get('size', 0),
+            'driveModified': content.get('lastModifiedDateTime'),
             'durationMs': int((time.time() - start_time) * 1000),
             'reason': reason,
-            'backend': get_current_backend()
+            'backend': get_current_backend(),
+            'contentType': content_type_str
         }
 
-        existing_files_cache.add(file['fullPath'])
+        existing_files_cache.add(content['fullPath'])
         
-        print(f"[{datetime.now().isoformat()}] {'Updated' if exists else 'Uploaded'} {file['fullPath']}")
+        print(f"[{datetime.now().isoformat()}] {'Updated' if exists else 'Uploaded'} [{content_type_str}] {content['fullPath']}")
         return upload_result
         
     except Exception as e:
-        print(f"Error processing SharePoint file {file['fullPath']}: {str(e)}")
-        log.error(f"Error processing SharePoint file {file['fullPath']}:", exc_info=True)
+        print(f"Error processing SharePoint content {content['fullPath']}: {str(e)}")
+        log.error(f"Error processing SharePoint content {content['fullPath']}:", exc_info=True)
         return None
+
+def download_and_upload_sharepoint_file(file, auth_token, exists, reason):
+    """Helper function to download a SharePoint file and upload using unified storage interface"""
+    # Delegate to the unified content handler
+    return download_and_upload_sharepoint_content(file, auth_token, exists, reason)
 
 async def sync_sharepoint_to_storage(auth_token):
     """Main function to sync SharePoint to storage"""
@@ -1390,7 +1608,7 @@ async def sync_sharepoint_to_storage(auth_token):
     uploaded_files = []
     deleted_files = []
     skipped_files = 0
-    all_files = []
+    all_content = []  # Changed from all_files to all_content
     
     try:
         sites = get_sharepoint_sites(auth_token)
@@ -1401,9 +1619,8 @@ async def sync_sharepoint_to_storage(auth_token):
             site_name = site['displayName']
             print(f"Processing site: {site_name} (ID: {site_id})")
             
-            drives_url = f"{GRAPH_API_BASE}/sites/{site_id}/drives"
-            drives_response = make_request(drives_url, auth_token=auth_token)
-            drives = drives_response.get('value', [])
+            # Get all drives (document libraries)
+            drives = get_site_drives(site_id, auth_token)
             print(f"Found {len(drives)} drives in site {site_name}")
             
             for drive in drives:
@@ -1421,13 +1638,28 @@ async def sync_sharepoint_to_storage(auth_token):
                     f"{site_name}/{drive_name}"
                 )
                 
-                all_files.extend(site_files)
+                all_content.extend(site_files)
+            
+            # Get site pages
+            print(f"Processing site pages for {site_name}")
+            pages = list_site_pages(site_id, auth_token, site_name)
+            print(f"Found {len(pages)} pages in site {site_name}")
+            all_content.extend(pages)
+            
+            # Get lists
+            print(f"Processing lists for {site_name}")
+            lists = list_site_lists(site_id, auth_token, site_name)
+            print(f"Found {len(lists)} lists in site {site_name}")
+            all_content.extend(lists)
         
-        print(f"Found {len(all_files)} files across all SharePoint sites (after size filtering)")
+        print(f"Found {len(all_content)} total items across all SharePoint sites")
+        print(f"  - Files: {len([c for c in all_content if c.get('contentType') == 'file'])}")
+        print(f"  - Pages: {len([c for c in all_content if c.get('contentType') == 'sitePage'])}")
+        print(f"  - Lists: {len([c for c in all_content if c.get('contentType') == 'list'])}")
 
         # Discovery complete - set totals
-        files_total = len(all_files)
-        mb_total = sum(int(f.get('size', 0)) for f in all_files)
+        files_total = len(all_content)
+        mb_total = sum(int(f.get('size', 0)) for f in all_content)
         await update_data_source_sync_status(
             USER_ID, 'microsoft', 'sharepoint', 'syncing',
             files_total=files_total,
@@ -1457,11 +1689,11 @@ async def sync_sharepoint_to_storage(auth_token):
             if file_name:
                 storage_file_map[file_name] = file
         
-        sharepoint_file_paths = {file['fullPath'] for file in all_files}
+        sharepoint_content_paths = {content['fullPath'] for content in all_content}
         
         # Delete orphaned files
         for storage_name, storage_file in storage_file_map.items():
-            if storage_name.startswith(user_prefix) and storage_name not in sharepoint_file_paths:
+            if storage_name.startswith(user_prefix) and storage_name not in sharepoint_content_paths:
                 delete_file_unified(storage_name, USER_ID)
                 
                 deleted_files.append({
@@ -1471,38 +1703,38 @@ async def sync_sharepoint_to_storage(auth_token):
                 })
                 print(f"[{datetime.now().isoformat()}] Deleted orphan: {storage_name}")
         
-        # Process files for upload
+        # Process content for upload
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = []
             
-            for file in all_files:
-                storage_file = storage_file_map.get(file['fullPath'])
+            for content in all_content:
+                storage_file = storage_file_map.get(content['fullPath'])
                 
                 needs_upload = False
                 reason = ''
                 
                 if not storage_file:
                     needs_upload = True
-                    reason = 'New file'
+                    reason = 'New content'
                 else:
                     storage_updated = parse_date(storage_file.get('updated'))
-                    sp_modified = parse_date(file.get('lastModifiedDateTime'))
+                    sp_modified = parse_date(content.get('lastModifiedDateTime'))
                     
                     if sp_modified and storage_updated and sp_modified > storage_updated:
                         needs_upload = True
-                        reason = f"SharePoint version newer ({file['lastModifiedDateTime']} > {storage_file.get('updated')})"
+                        reason = f"SharePoint version newer ({content['lastModifiedDateTime']} > {storage_file.get('updated')})"
                 
                 if needs_upload:
                     futures.append(
                         (
                             executor.submit(
-                                download_and_upload_sharepoint_file,
-                                file,
+                                download_and_upload_sharepoint_content,
+                                content,
                                 auth_token,
                                 bool(storage_file),
                                 reason
                             ),
-                            file
+                            content
                         )
                     )
                 else:
@@ -1512,9 +1744,9 @@ async def sync_sharepoint_to_storage(auth_token):
             mb_processed = 0
             # Phase 3: Processing
             print("----------------------------------------------------------------------")
-            print("⚙️  Phase 3: Processing - synchronizing files to storage...")
+            print("⚙️  Phase 3: Processing - synchronizing content to storage...")
             print("----------------------------------------------------------------------")
-            for future, file in futures:
+            for future, content in futures:
                 try:
                     result = future.result()
                     if result:
@@ -1527,7 +1759,7 @@ async def sync_sharepoint_to_storage(auth_token):
                         await emit_sync_progress(USER_ID, 'microsoft', 'sharepoint', {
                             'phase': 'processing',
                             'phase_name': 'Phase 3: Processing',
-                            'phase_description': 'synchronizing files to storage',
+                            'phase_description': 'synchronizing content to storage',
                             'files_processed': files_processed,
                             'files_total': files_total,
                             'mb_processed': mb_processed,
@@ -1535,8 +1767,8 @@ async def sync_sharepoint_to_storage(auth_token):
                             'sync_start_time': sync_start_time
                         })
                 except Exception as e:
-                    print(f"Error uploading {file['fullPath']}: {str(e)}")
-                    log.error(f"Error uploading {file['fullPath']}:", exc_info=True)
+                    print(f"Error uploading {content['fullPath']}: {str(e)}")
+                    log.error(f"Error uploading {content['fullPath']}:", exc_info=True)
         
         # Phase 4: Summarizing
         print("----------------------------------------------------------------------")
@@ -1556,7 +1788,8 @@ async def sync_sharepoint_to_storage(auth_token):
         print('\nSharePoint Sync Summary:')
         for file in uploaded_files:
             symbol = '+' if file['type'] == 'new' else '^'
-            print(f" {symbol} {file['path']} | {format_bytes(file['size'])} | {file['durationMs']}ms | {file['reason']}")
+            content_type_label = f"[{file.get('contentType', 'file')}]"
+            print(f" {symbol} {content_type_label} {file['path']} | {format_bytes(file['size'])} | {file['durationMs']}ms | {file['reason']}")
         
         for file in deleted_files:
             print(f" - {file['name']} | {format_bytes(file['size'])} | Created: {file['timeCreated']}")
@@ -1574,9 +1807,9 @@ async def sync_sharepoint_to_storage(auth_token):
         print("\nAccounting Metrics:")
         print(f"⏱️  Total Runtime: {(total_seconds/60):.1f} minutes ({hours:02d}:{minutes:02d}:{seconds:02d})")
         print(f"📊 Billable API Calls: {total_api_calls}")
-        print(f"📦 Files Processed: {len(all_files)}")
-        print(f"➕ Files Added: {files_added}")
-        print(f"🔄 Files Updated: {files_updated}")
+        print(f"📦 Content Processed: {len(all_content)}")
+        print(f"➕ Items Added: {files_added}")
+        print(f"🔄 Items Updated: {files_updated}")
         print(f"🗑️  Orphans Removed: {len(deleted_files)}")
         
         print(f"\nTotal: +{files_added} added, ^{files_updated} updated, -{len(deleted_files)} removed, {skipped_files} skipped")
@@ -1594,8 +1827,8 @@ async def sync_sharepoint_to_storage(auth_token):
                 "sync_timestamp": int(time.time())
             },
             "overall_profile": {
-                "total_files": len(all_files),
-                "total_size_bytes": sum(int(f.get('size', 0) or 0) for f in all_files),
+                "total_files": len(all_content),
+                "total_size_bytes": sum(int(f.get('size', 0) or 0) for f in all_content),
                 "last_updated": int(time.time()),
                 "folders_count": 0
             }
@@ -1617,7 +1850,7 @@ async def sync_sharepoint_to_storage(auth_token):
             'uploaded': len(uploaded_files),
             'deleted': len(deleted_files),
             'skipped': skipped_files,
-            'total_processed': len(all_files)
+            'total_processed': len(all_content)
         }
     
     except Exception as error:
@@ -1625,7 +1858,7 @@ async def sync_sharepoint_to_storage(auth_token):
         print(f"[{datetime.now().isoformat()}] Sync failed critically: {str(error)}")
         log.error("SharePoint sync failed:", exc_info=True)
         raise error
-
+    
 # Main execution function 
 async def initiate_microsoft_sync(
     user_id, 
