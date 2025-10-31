@@ -1562,7 +1562,6 @@ async def process_chat_response(
                                 user_message = user_message[:100] + "..."
 
                             if tasks[TASKS.TITLE_GENERATION]:
-
                                 res = await generate_title(
                                     request,
                                     {
@@ -1615,17 +1614,16 @@ async def process_chat_response(
                                             "data": title,
                                         }
                                     )
-                        elif len(messages) == 2:
-                            title = messages[0].get("content", user_message)
+                            elif len(messages) == 2:
+                                title = messages[0].get("content", user_message)
+                                Chats.update_chat_title_by_id(metadata["chat_id"], title)
 
-                            Chats.update_chat_title_by_id(metadata["chat_id"], title)
-
-                            await event_emitter(
-                                {
-                                    "type": "chat:title",
-                                    "data": message.get("content", user_message),
-                                }
-                            )
+                                await event_emitter(
+                                    {
+                                        "type": "chat:title",
+                                        "data": message.get("content", user_message),
+                                    }
+                                )
 
                     if TASKS.TAGS_GENERATION in tasks and tasks[TASKS.TAGS_GENERATION]:
                         res = await generate_chat_tags(
